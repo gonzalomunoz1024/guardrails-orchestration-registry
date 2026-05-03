@@ -21,14 +21,14 @@ import {
   Box,
   Layers,
   Shield,
-  Zap,
 } from 'lucide-react';
 import { useUIStore, usePolicyStore, useEvaluationStore } from '@/store';
 import { useRegistryStore } from '@/store/registryStore';
 import { useEvaluate } from '@/hooks';
 import { initializeMonaco, defaultEditorOptions } from '@/monaco/config';
 import { cn } from '@/utils';
-import type { ResourceType, EnforcementType, GuardrailKind } from '@/types';
+import type { ResourceType } from '@/types/registry.types';
+import type { EnforcementType, GuardrailKind } from '@/types/guardrail.types';
 
 type Step = 'metadata' | 'code' | 'scope' | 'review';
 
@@ -42,10 +42,8 @@ const enforcementTypes: { value: EnforcementType; label: string; description: st
   { value: 'OPTIONAL', label: 'Optional', description: 'Policy is advisory, failures are logged but allowed' },
 ];
 
-const guardrailKinds: { value: GuardrailKind; label: string; description: string }[] = [
-  { value: 'PRECHECK', label: 'Pre-check', description: 'Evaluated before the action is executed' },
-  { value: 'POSTCHECK', label: 'Post-check', description: 'Evaluated after the action completes' },
-];
+// Guardrail kind is always PRECHECK for now
+const DEFAULT_GUARDRAIL_KIND: GuardrailKind = 'PRECHECK';
 
 const steps: { id: Step; label: string; number: number }[] = [
   { id: 'metadata', label: 'Metadata', number: 1 },
@@ -143,7 +141,6 @@ export function CreatePolicy() {
   const [resourceType, setResourceType] = useState<ResourceType>('lightspeed');
   const [resourceKind, setResourceKind] = useState('');
   const [enforcementType, setEnforcementType] = useState<EnforcementType>('MANDATORY');
-  const [guardrailKind, setGuardrailKind] = useState<GuardrailKind>('PRECHECK');
   const [tags, setTags] = useState<string[]>([]);
   const [tagInput, setTagInput] = useState('');
 
@@ -204,11 +201,12 @@ export function CreatePolicy() {
     }
   };
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     // Map frontend resourceType to backend format (uppercase)
     const backendResourceType = resourceType.toUpperCase() as 'LIGHTSPEED' | 'VMFORGE';
 
-    // Prepare the backend payload
+    // Prepare the guardrail definition payload
+    // POST /api/v1/registry/guardrails
     const createGuardrailPayload = {
       id: policyId,
       name: metadata.name,
@@ -216,26 +214,54 @@ export function CreatePolicy() {
       version: '1.0.0', // Implicit: always start with 1.0.0
       status: 'DRAFT' as const, // Implicit: new policies start as draft
       enforcementType: enforcementType,
-      kind: guardrailKind,
+      kind: DEFAULT_GUARDRAIL_KIND,
       resourceType: backendResourceType,
       resourceKind: resourceKind,
       owner: metadata.author || 'current-user', // TODO: Get from auth context
       // createdAt and updatedAt are set by the backend
     };
 
-    // Log the payload for now (replace with actual API call)
     console.log('Creating guardrail with payload:', createGuardrailPayload);
+    console.log('POST /api/v1/registry/guardrails');
 
-    // Configuration payload (separate endpoint)
-    const configPayload = {
-      global: JSON.parse(configJson || '{}'),
-      lobOverrides: {},
-    };
-    console.log('Configuration payload:', configPayload);
+    // TODO: Implement actual API call
+    // const guardrailResponse = await fetch('/api/v1/registry/guardrails', {
+    //   method: 'POST',
+    //   headers: { 'Content-Type': 'application/json' },
+    //   body: JSON.stringify(createGuardrailPayload),
+    // });
 
-    // TODO: Call actual API endpoints:
-    // 1. POST /api/v1/registry/guardrails - Create guardrail definition
-    // 2. PUT /api/v1/registry/configurations/{guardrailId} - Set configuration
+    // Configuration is optional - only save if provided
+    const hasConfiguration = configJson && configJson.trim() !== '' && configJson.trim() !== '{}';
+
+    if (hasConfiguration) {
+      // Parse and prepare configuration payload
+      let parsedConfig = {};
+      try {
+        parsedConfig = JSON.parse(configJson);
+      } catch (e) {
+        console.error('Invalid configuration JSON:', e);
+      }
+
+      // PUT /api/v1/registry/configurations/{guardrailId} - For new configurations
+      // PATCH /api/v1/registry/configurations/{guardrailId} - For partial updates (edits)
+      const configPayload = {
+        global: parsedConfig,
+        lobOverrides: {},
+      };
+
+      console.log('Saving configuration:', configPayload);
+      console.log(`PUT /api/v1/registry/configurations/${policyId}`);
+
+      // TODO: Implement actual API call
+      // const configResponse = await fetch(`/api/v1/registry/configurations/${policyId}`, {
+      //   method: 'PUT', // Use PATCH for partial updates during edits
+      //   headers: { 'Content-Type': 'application/json' },
+      //   body: JSON.stringify(configPayload),
+      // });
+    } else {
+      console.log('No configuration provided - skipping configuration save');
+    }
 
     alert('Policy submitted for review!');
     setView('policies');
@@ -520,60 +546,6 @@ export function CreatePolicy() {
                           </span>
                           <span className="text-sm text-[var(--color-text-secondary)]">
                             {et.description}
-                          </span>
-                        </div>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              </div>
-
-              {/* Guardrail Kind Card */}
-              <div className="rounded-[var(--radius-xl)] bg-[var(--color-surface)] shadow-[var(--shadow-card)] border border-[var(--color-border-light)] overflow-hidden">
-                <div className="px-6 py-4 border-b border-[var(--color-border-light)] bg-[var(--color-surface-secondary)]/50">
-                  <div className="flex items-center gap-3">
-                    <div className="p-2 rounded-[var(--radius-md)] bg-[var(--color-info-bg)]">
-                      <Zap className="w-5 h-5 text-[var(--color-info)]" />
-                    </div>
-                    <div>
-                      <h3 className="font-semibold text-[var(--color-text-primary)]">Evaluation Timing</h3>
-                      <p className="text-sm text-[var(--color-text-secondary)]">When should this policy be evaluated?</p>
-                    </div>
-                  </div>
-                </div>
-                <div className="p-6">
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    {guardrailKinds.map((gk) => (
-                      <button
-                        key={gk.value}
-                        onClick={() => setGuardrailKind(gk.value)}
-                        className={cn(
-                          'flex items-start gap-4 p-4 rounded-[var(--radius-lg)]',
-                          'border-2 transition-all duration-200 text-left',
-                          guardrailKind === gk.value
-                            ? 'border-[var(--color-info)] bg-[var(--color-info-bg)]'
-                            : 'border-[var(--color-border-light)] bg-[var(--color-surface-secondary)] hover:border-[var(--color-border)]'
-                        )}
-                      >
-                        <div className={cn(
-                          'p-3 rounded-[var(--radius-md)]',
-                          guardrailKind === gk.value
-                            ? 'bg-[var(--color-info)] text-white'
-                            : 'bg-[var(--color-surface)] text-[var(--color-text-secondary)]'
-                        )}>
-                          <Zap className="w-5 h-5" />
-                        </div>
-                        <div>
-                          <span className={cn(
-                            'block text-base font-semibold',
-                            guardrailKind === gk.value
-                              ? 'text-[var(--color-info)]'
-                              : 'text-[var(--color-text-primary)]'
-                          )}>
-                            {gk.label}
-                          </span>
-                          <span className="text-sm text-[var(--color-text-secondary)]">
-                            {gk.description}
                           </span>
                         </div>
                       </button>
@@ -1108,7 +1080,7 @@ export function CreatePolicy() {
                         <dt className="text-[var(--color-text-secondary)]">Timing</dt>
                         <dd>
                           <span className="px-2.5 py-1 rounded-full text-xs font-medium bg-[var(--color-info-bg)] text-[var(--color-info)]">
-                            {guardrailKind === 'PRECHECK' ? 'Pre-check' : 'Post-check'}
+                            Pre-check
                           </span>
                         </dd>
                       </div>
@@ -1163,6 +1135,27 @@ export function CreatePolicy() {
                     <pre className="p-4 rounded-[var(--radius-lg)] bg-[var(--color-surface-secondary)] text-sm font-mono text-[var(--color-text-primary)] overflow-auto max-h-64">
                       {regoCode || 'No code written'}
                     </pre>
+                  </div>
+                </div>
+
+                {/* Configuration Card */}
+                <div className="md:col-span-2 rounded-[var(--radius-xl)] bg-[var(--color-surface)] shadow-[var(--shadow-card)] border border-[var(--color-border-light)] overflow-hidden">
+                  <div className="px-6 py-4 border-b border-[var(--color-border-light)] bg-[var(--color-surface-secondary)]/50 flex items-center justify-between">
+                    <h3 className="font-semibold text-[var(--color-text-primary)]">Configuration</h3>
+                    <span className="text-sm text-[var(--color-text-tertiary)]">
+                      {configJson && configJson !== '{}' ? 'Provided' : 'Optional - Not provided'}
+                    </span>
+                  </div>
+                  <div className="p-6">
+                    {configJson && configJson !== '{}' ? (
+                      <pre className="p-4 rounded-[var(--radius-lg)] bg-[var(--color-surface-secondary)] text-sm font-mono text-[var(--color-text-primary)] overflow-auto max-h-48">
+                        {configJson}
+                      </pre>
+                    ) : (
+                      <p className="text-[var(--color-text-tertiary)] text-sm">
+                        No configuration provided. You can add configuration data in the Policy Code step.
+                      </p>
+                    )}
                   </div>
                 </div>
               </div>
