@@ -1,7 +1,7 @@
-import { Search, Bell, Moon, Sun } from 'lucide-react';
+import { Search, Bell, Moon, Sun, LogOut } from 'lucide-react';
 import { useTheme } from '@/hooks';
 import { useRegistryStore } from '@/store/registryStore';
-import { currentUser } from '@/data/mockData';
+import { useAuthStore } from '@/store/authStore';
 import { cn } from '@/utils';
 
 const viewTitles: Record<string, string> = {
@@ -15,6 +15,7 @@ const viewTitles: Record<string, string> = {
 export function TopBar() {
   const { currentView, searchQuery, setSearchQuery } = useRegistryStore();
   const { resolvedTheme, setTheme } = useTheme();
+  const { user, logout } = useAuthStore();
 
   const handleThemeToggle = () => {
     setTheme(resolvedTheme === 'dark' ? 'light' : 'dark');
@@ -82,21 +83,34 @@ export function TopBar() {
         <div className="w-px h-6 bg-[var(--color-border-light)]" />
 
         {/* User */}
-        <div className="flex items-center gap-3">
-          <div className="text-right">
-            <p className="text-sm font-medium text-[var(--color-text-primary)]">
-              {currentUser.name}
-            </p>
-            <p className="text-xs text-[var(--color-text-tertiary)] capitalize">
-              {currentUser.role}
-            </p>
+        {user && (
+          <div className="flex items-center gap-3">
+            <div className="text-right">
+              <p className="text-sm font-medium text-[var(--color-text-primary)]">
+                {user.name || user.login}
+              </p>
+              <p className="text-xs text-[var(--color-text-tertiary)]">
+                @{user.login}
+              </p>
+            </div>
+            <img
+              src={user.avatar_url}
+              alt={user.login}
+              className="w-9 h-9 rounded-full object-cover border-2 border-[var(--color-border-light)]"
+            />
+            <button
+              onClick={logout}
+              className={cn(
+                'p-2 rounded-[var(--radius-md)] transition-all',
+                'text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]',
+                'hover:bg-[var(--color-surface-secondary)]'
+              )}
+              title="Sign out"
+            >
+              <LogOut className="w-4 h-4" />
+            </button>
           </div>
-          <img
-            src={currentUser.avatar}
-            alt={currentUser.name}
-            className="w-9 h-9 rounded-full object-cover border-2 border-[var(--color-border-light)]"
-          />
-        </div>
+        )}
       </div>
     </header>
   );
