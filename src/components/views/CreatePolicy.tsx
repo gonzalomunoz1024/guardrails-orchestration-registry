@@ -10,6 +10,12 @@ import {
   Plus,
   Trash2,
   ChevronRight,
+  FileText,
+  Tag,
+  Shield,
+  Zap,
+  Folder,
+  Info,
 } from 'lucide-react';
 import { useUIStore, usePolicyStore, useEvaluationStore } from '@/store';
 import { useRegistryStore } from '@/store/registryStore';
@@ -20,19 +26,19 @@ import type { PolicyCategory, PolicySeverity } from '@/types';
 
 type Step = 'metadata' | 'code' | 'tests' | 'review';
 
-const categories: { value: PolicyCategory; label: string }[] = [
-  { value: 'access-control', label: 'Access Control' },
-  { value: 'compliance', label: 'Compliance' },
-  { value: 'security', label: 'Security' },
-  { value: 'cost', label: 'Cost Management' },
-  { value: 'operational', label: 'Operational' },
+const categories: { value: PolicyCategory; label: string; icon: React.ReactNode }[] = [
+  { value: 'access-control', label: 'Access Control', icon: <Shield className="w-4 h-4" /> },
+  { value: 'compliance', label: 'Compliance', icon: <CheckCircle className="w-4 h-4" /> },
+  { value: 'security', label: 'Security', icon: <Shield className="w-4 h-4" /> },
+  { value: 'cost', label: 'Cost', icon: <Zap className="w-4 h-4" /> },
+  { value: 'operational', label: 'Operational', icon: <Folder className="w-4 h-4" /> },
 ];
 
-const severities: { value: PolicySeverity; label: string; description: string }[] = [
-  { value: 'critical', label: 'Critical', description: 'Core security or compliance policy' },
-  { value: 'high', label: 'High', description: 'Important business rule' },
-  { value: 'medium', label: 'Medium', description: 'Standard operational policy' },
-  { value: 'low', label: 'Low', description: 'Advisory or informational' },
+const severities: { value: PolicySeverity; label: string; color: string }[] = [
+  { value: 'critical', label: 'Critical', color: 'var(--color-error)' },
+  { value: 'high', label: 'High', color: 'var(--color-warning)' },
+  { value: 'medium', label: 'Medium', color: 'var(--color-info)' },
+  { value: 'low', label: 'Low', color: 'var(--color-text-tertiary)' },
 ];
 
 const steps: { id: Step; label: string; number: number }[] = [
@@ -103,7 +109,7 @@ export function CreatePolicy() {
       case 'code':
         return regoCode.trim().length > 0;
       case 'tests':
-        return true; // Tests are optional
+        return true;
       case 'review':
         return true;
       default:
@@ -112,13 +118,12 @@ export function CreatePolicy() {
   };
 
   const handleSubmit = () => {
-    // In a real app, this would submit to the backend
     alert('Policy submitted for review!');
     setView('policies');
   };
 
   return (
-    <div className="h-full flex flex-col">
+    <div className="h-full flex flex-col bg-[var(--color-surface-tertiary)]">
       {/* Progress Steps */}
       <div className="p-6 border-b border-[var(--color-border-light)] bg-[var(--color-surface)]">
         <div className="flex items-center justify-between max-w-3xl mx-auto">
@@ -165,138 +170,220 @@ export function CreatePolicy() {
 
       {/* Content */}
       <div className="flex-1 overflow-auto p-6">
-        <div className={cn(currentStep === 'code' ? 'max-w-none' : 'max-w-4xl mx-auto')}>
+        <div className={cn(currentStep === 'code' ? 'max-w-none' : 'max-w-3xl mx-auto')}>
           {/* Step 1: Metadata */}
           {currentStep === 'metadata' && (
             <div className="space-y-6">
+              {/* Page Header */}
               <div>
-                <h2 className="text-xl font-semibold text-[var(--color-text-primary)] mb-1">
-                  Policy Information
+                <h2 className="text-2xl font-semibold text-[var(--color-text-primary)] mb-2">
+                  Create New Policy
                 </h2>
                 <p className="text-[var(--color-text-secondary)]">
-                  Provide basic information about your policy
+                  Define your policy's metadata and configuration
                 </p>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="md:col-span-2">
-                  <label className="block text-sm font-medium text-[var(--color-text-primary)] mb-2">
-                    Policy Name *
-                  </label>
-                  <input
-                    type="text"
-                    value={metadata.name}
-                    onChange={(e) => updateMetadata({ name: e.target.value })}
-                    placeholder="e.g., Admin Access Control"
-                    className={cn(
-                      'w-full px-4 py-3 rounded-[var(--radius-md)]',
-                      'bg-[var(--color-surface-secondary)] text-[var(--color-text-primary)]',
-                      'border border-transparent focus:border-[var(--color-info)] focus:outline-none',
-                      'placeholder:text-[var(--color-text-tertiary)]'
-                    )}
-                  />
+              {/* Basic Information Card */}
+              <div className="rounded-[var(--radius-xl)] bg-[var(--color-surface)] shadow-[var(--shadow-card)] border border-[var(--color-border-light)] overflow-hidden">
+                <div className="px-6 py-4 border-b border-[var(--color-border-light)] bg-[var(--color-surface-secondary)]/50">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 rounded-[var(--radius-md)] bg-[var(--color-info-bg)]">
+                      <FileText className="w-5 h-5 text-[var(--color-info)]" />
+                    </div>
+                    <div>
+                      <h3 className="font-semibold text-[var(--color-text-primary)]">Basic Information</h3>
+                      <p className="text-sm text-[var(--color-text-secondary)]">Name and describe your policy</p>
+                    </div>
+                  </div>
                 </div>
+                <div className="p-6 space-y-5">
+                  <div>
+                    <label className="block text-sm font-medium text-[var(--color-text-primary)] mb-2">
+                      Policy Name
+                    </label>
+                    <input
+                      type="text"
+                      value={metadata.name}
+                      onChange={(e) => updateMetadata({ name: e.target.value })}
+                      placeholder="e.g., Admin Access Control Policy"
+                      className={cn(
+                        'w-full px-4 py-3 rounded-[var(--radius-lg)]',
+                        'bg-[var(--color-surface-secondary)] text-[var(--color-text-primary)]',
+                        'border border-[var(--color-border-light)]',
+                        'focus:border-[var(--color-info)] focus:ring-4 focus:ring-[var(--color-info)]/10 focus:outline-none',
+                        'placeholder:text-[var(--color-text-tertiary)]',
+                        'transition-all duration-200'
+                      )}
+                    />
+                  </div>
 
-                <div className="md:col-span-2">
-                  <label className="block text-sm font-medium text-[var(--color-text-primary)] mb-2">
-                    Description *
-                  </label>
-                  <textarea
-                    value={metadata.description}
-                    onChange={(e) => updateMetadata({ description: e.target.value })}
-                    placeholder="Describe what this policy does and when it should be applied..."
-                    rows={3}
-                    className={cn(
-                      'w-full px-4 py-3 rounded-[var(--radius-md)] resize-none',
-                      'bg-[var(--color-surface-secondary)] text-[var(--color-text-primary)]',
-                      'border border-transparent focus:border-[var(--color-info)] focus:outline-none',
-                      'placeholder:text-[var(--color-text-tertiary)]'
-                    )}
-                  />
+                  <div>
+                    <label className="block text-sm font-medium text-[var(--color-text-primary)] mb-2">
+                      Description
+                    </label>
+                    <textarea
+                      value={metadata.description}
+                      onChange={(e) => updateMetadata({ description: e.target.value })}
+                      placeholder="Describe what this policy does, when it applies, and its expected behavior..."
+                      rows={4}
+                      className={cn(
+                        'w-full px-4 py-3 rounded-[var(--radius-lg)] resize-none',
+                        'bg-[var(--color-surface-secondary)] text-[var(--color-text-primary)]',
+                        'border border-[var(--color-border-light)]',
+                        'focus:border-[var(--color-info)] focus:ring-4 focus:ring-[var(--color-info)]/10 focus:outline-none',
+                        'placeholder:text-[var(--color-text-tertiary)]',
+                        'transition-all duration-200'
+                      )}
+                    />
+                  </div>
                 </div>
+              </div>
 
-                <div>
-                  <label className="block text-sm font-medium text-[var(--color-text-primary)] mb-2">
-                    Category
-                  </label>
-                  <select
-                    value={category}
-                    onChange={(e) => setCategory(e.target.value as PolicyCategory)}
-                    className={cn(
-                      'w-full px-4 py-3 rounded-[var(--radius-md)]',
-                      'bg-[var(--color-surface-secondary)] text-[var(--color-text-primary)]',
-                      'border border-transparent focus:border-[var(--color-info)] focus:outline-none'
-                    )}
-                  >
+              {/* Category Card */}
+              <div className="rounded-[var(--radius-xl)] bg-[var(--color-surface)] shadow-[var(--shadow-card)] border border-[var(--color-border-light)] overflow-hidden">
+                <div className="px-6 py-4 border-b border-[var(--color-border-light)] bg-[var(--color-surface-secondary)]/50">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 rounded-[var(--radius-md)] bg-[var(--color-success-bg)]">
+                      <Folder className="w-5 h-5 text-[var(--color-success)]" />
+                    </div>
+                    <div>
+                      <h3 className="font-semibold text-[var(--color-text-primary)]">Category</h3>
+                      <p className="text-sm text-[var(--color-text-secondary)]">Select the policy category</p>
+                    </div>
+                  </div>
+                </div>
+                <div className="p-6">
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3">
                     {categories.map((cat) => (
-                      <option key={cat.value} value={cat.value}>
-                        {cat.label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-[var(--color-text-primary)] mb-2">
-                    Severity
-                  </label>
-                  <select
-                    value={severity}
-                    onChange={(e) => setSeverity(e.target.value as PolicySeverity)}
-                    className={cn(
-                      'w-full px-4 py-3 rounded-[var(--radius-md)]',
-                      'bg-[var(--color-surface-secondary)] text-[var(--color-text-primary)]',
-                      'border border-transparent focus:border-[var(--color-info)] focus:outline-none'
-                    )}
-                  >
-                    {severities.map((sev) => (
-                      <option key={sev.value} value={sev.value}>
-                        {sev.label} - {sev.description}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div className="md:col-span-2">
-                  <label className="block text-sm font-medium text-[var(--color-text-primary)] mb-2">
-                    Tags
-                  </label>
-                  <div className="flex flex-wrap gap-2 mb-2">
-                    {tags.map((tag) => (
-                      <span
-                        key={tag}
-                        className="flex items-center gap-1 px-3 py-1 rounded-full bg-[var(--color-info-bg)] text-[var(--color-info)] text-sm"
+                      <button
+                        key={cat.value}
+                        onClick={() => setCategory(cat.value)}
+                        className={cn(
+                          'flex flex-col items-center gap-2 p-4 rounded-[var(--radius-lg)]',
+                          'border-2 transition-all duration-200',
+                          category === cat.value
+                            ? 'border-[var(--color-info)] bg-[var(--color-info-bg)]'
+                            : 'border-[var(--color-border-light)] bg-[var(--color-surface-secondary)] hover:border-[var(--color-border)]'
+                        )}
                       >
-                        {tag}
-                        <button
-                          onClick={() => handleRemoveTag(tag)}
-                          className="hover:text-[var(--color-error)]"
-                        >
-                          <XCircle className="w-4 h-4" />
-                        </button>
-                      </span>
+                        <div className={cn(
+                          'p-2 rounded-[var(--radius-md)]',
+                          category === cat.value
+                            ? 'bg-[var(--color-info)] text-white'
+                            : 'bg-[var(--color-surface)] text-[var(--color-text-secondary)]'
+                        )}>
+                          {cat.icon}
+                        </div>
+                        <span className={cn(
+                          'text-sm font-medium',
+                          category === cat.value
+                            ? 'text-[var(--color-info)]'
+                            : 'text-[var(--color-text-secondary)]'
+                        )}>
+                          {cat.label}
+                        </span>
+                      </button>
                     ))}
                   </div>
-                  <div className="flex gap-2">
+                </div>
+              </div>
+
+              {/* Severity Card */}
+              <div className="rounded-[var(--radius-xl)] bg-[var(--color-surface)] shadow-[var(--shadow-card)] border border-[var(--color-border-light)] overflow-hidden">
+                <div className="px-6 py-4 border-b border-[var(--color-border-light)] bg-[var(--color-surface-secondary)]/50">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 rounded-[var(--radius-md)] bg-[var(--color-warning-bg)]">
+                      <AlertCircle className="w-5 h-5 text-[var(--color-warning)]" />
+                    </div>
+                    <div>
+                      <h3 className="font-semibold text-[var(--color-text-primary)]">Severity Level</h3>
+                      <p className="text-sm text-[var(--color-text-secondary)]">How critical is this policy?</p>
+                    </div>
+                  </div>
+                </div>
+                <div className="p-6">
+                  <div className="flex gap-3">
+                    {severities.map((sev) => (
+                      <button
+                        key={sev.value}
+                        onClick={() => setSeverity(sev.value)}
+                        className={cn(
+                          'flex-1 py-3 px-4 rounded-[var(--radius-lg)]',
+                          'border-2 transition-all duration-200 font-medium',
+                          severity === sev.value
+                            ? 'border-current'
+                            : 'border-[var(--color-border-light)] hover:border-[var(--color-border)]'
+                        )}
+                        style={{
+                          color: severity === sev.value ? sev.color : 'var(--color-text-secondary)',
+                          backgroundColor: severity === sev.value ? `color-mix(in srgb, ${sev.color} 12%, transparent)` : 'var(--color-surface-secondary)',
+                        }}
+                      >
+                        {sev.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {/* Tags Card */}
+              <div className="rounded-[var(--radius-xl)] bg-[var(--color-surface)] shadow-[var(--shadow-card)] border border-[var(--color-border-light)] overflow-hidden">
+                <div className="px-6 py-4 border-b border-[var(--color-border-light)] bg-[var(--color-surface-secondary)]/50">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 rounded-[var(--radius-md)] bg-[var(--color-info-bg)]">
+                      <Tag className="w-5 h-5 text-[var(--color-info)]" />
+                    </div>
+                    <div>
+                      <h3 className="font-semibold text-[var(--color-text-primary)]">Tags</h3>
+                      <p className="text-sm text-[var(--color-text-secondary)]">Add tags for easier discovery</p>
+                    </div>
+                  </div>
+                </div>
+                <div className="p-6">
+                  {tags.length > 0 && (
+                    <div className="flex flex-wrap gap-2 mb-4">
+                      {tags.map((tag) => (
+                        <span
+                          key={tag}
+                          className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-[var(--color-info-bg)] text-[var(--color-info)] text-sm font-medium"
+                        >
+                          {tag}
+                          <button
+                            onClick={() => handleRemoveTag(tag)}
+                            className="hover:text-[var(--color-error)] transition-colors"
+                          >
+                            <XCircle className="w-4 h-4" />
+                          </button>
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                  <div className="flex gap-3">
                     <input
                       type="text"
                       value={tagInput}
                       onChange={(e) => setTagInput(e.target.value)}
-                      onKeyDown={(e) => e.key === 'Enter' && handleAddTag()}
-                      placeholder="Add a tag..."
+                      onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), handleAddTag())}
+                      placeholder="Type a tag and press Enter..."
                       className={cn(
-                        'flex-1 px-4 py-2 rounded-[var(--radius-md)]',
+                        'flex-1 px-4 py-3 rounded-[var(--radius-lg)]',
                         'bg-[var(--color-surface-secondary)] text-[var(--color-text-primary)]',
-                        'border border-transparent focus:border-[var(--color-info)] focus:outline-none',
-                        'placeholder:text-[var(--color-text-tertiary)]'
+                        'border border-[var(--color-border-light)]',
+                        'focus:border-[var(--color-info)] focus:ring-4 focus:ring-[var(--color-info)]/10 focus:outline-none',
+                        'placeholder:text-[var(--color-text-tertiary)]',
+                        'transition-all duration-200'
                       )}
                     />
                     <button
                       onClick={handleAddTag}
+                      disabled={!tagInput.trim()}
                       className={cn(
-                        'px-4 py-2 rounded-[var(--radius-md)]',
+                        'px-5 py-3 rounded-[var(--radius-lg)] font-medium',
                         'bg-[var(--color-surface-secondary)] text-[var(--color-text-primary)]',
-                        'hover:bg-[var(--color-border-light)] transition-colors'
+                        'border border-[var(--color-border-light)]',
+                        'hover:bg-[var(--color-border-light)] transition-all duration-200',
+                        'disabled:opacity-50 disabled:cursor-not-allowed'
                       )}
                     >
                       Add
@@ -312,7 +399,7 @@ export function CreatePolicy() {
             <div className="space-y-4 -mx-6 px-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <h2 className="text-xl font-semibold text-[var(--color-text-primary)] mb-1">
+                  <h2 className="text-2xl font-semibold text-[var(--color-text-primary)] mb-2">
                     Policy Code
                   </h2>
                   <p className="text-[var(--color-text-secondary)]">
@@ -450,7 +537,7 @@ export function CreatePolicy() {
             <div className="space-y-6">
               <div className="flex items-start justify-between">
                 <div>
-                  <h2 className="text-xl font-semibold text-[var(--color-text-primary)] mb-1">
+                  <h2 className="text-2xl font-semibold text-[var(--color-text-primary)] mb-2">
                     Test Cases
                   </h2>
                   <p className="text-[var(--color-text-secondary)]">
@@ -460,7 +547,7 @@ export function CreatePolicy() {
                 <button
                   onClick={handleAddTestCase}
                   className={cn(
-                    'flex items-center gap-2 px-4 py-2 rounded-[var(--radius-md)]',
+                    'flex items-center gap-2 px-5 py-2.5 rounded-[var(--radius-lg)]',
                     'bg-[var(--color-info)] text-white font-medium',
                     'transition-all hover:opacity-90'
                   )}
@@ -475,84 +562,133 @@ export function CreatePolicy() {
                   {testCases.map((test, index) => (
                     <div
                       key={test.id}
-                      className="p-4 rounded-[var(--radius-lg)] border border-[var(--color-border-light)] bg-[var(--color-surface)]"
+                      className="rounded-[var(--radius-xl)] bg-[var(--color-surface)] shadow-[var(--shadow-card)] border border-[var(--color-border-light)] overflow-hidden"
                     >
-                      <div className="flex items-center justify-between mb-4">
-                        <span className="text-sm font-medium text-[var(--color-text-secondary)]">
-                          Test Case #{index + 1}
-                        </span>
+                      <div className="px-6 py-4 border-b border-[var(--color-border-light)] bg-[var(--color-surface-secondary)]/50 flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <div className="w-8 h-8 rounded-full bg-[var(--color-info-bg)] flex items-center justify-center">
+                            <span className="text-sm font-semibold text-[var(--color-info)]">{index + 1}</span>
+                          </div>
+                          <span className="font-medium text-[var(--color-text-primary)]">
+                            {test.name || `Test Case #${index + 1}`}
+                          </span>
+                        </div>
                         <button
                           onClick={() => handleRemoveTestCase(test.id)}
-                          className="p-1 text-[var(--color-text-tertiary)] hover:text-[var(--color-error)] transition-colors"
+                          className="p-2 rounded-[var(--radius-md)] text-[var(--color-text-tertiary)] hover:text-[var(--color-error)] hover:bg-[var(--color-error-bg)] transition-all"
                         >
                           <Trash2 className="w-4 h-4" />
                         </button>
                       </div>
 
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <input
-                          type="text"
-                          value={test.name}
-                          onChange={(e) => handleUpdateTestCase(test.id, 'name', e.target.value)}
-                          placeholder="Test name"
-                          className={cn(
-                            'px-4 py-2 rounded-[var(--radius-md)]',
-                            'bg-[var(--color-surface-secondary)] text-[var(--color-text-primary)]',
-                            'border border-transparent focus:border-[var(--color-info)] focus:outline-none'
-                          )}
-                        />
-                        <input
-                          type="text"
-                          value={test.description}
-                          onChange={(e) => handleUpdateTestCase(test.id, 'description', e.target.value)}
-                          placeholder="Description"
-                          className={cn(
-                            'px-4 py-2 rounded-[var(--radius-md)]',
-                            'bg-[var(--color-surface-secondary)] text-[var(--color-text-primary)]',
-                            'border border-transparent focus:border-[var(--color-info)] focus:outline-none'
-                          )}
-                        />
-                        <div>
-                          <label className="block text-xs text-[var(--color-text-tertiary)] mb-1">
-                            Input JSON
-                          </label>
-                          <textarea
-                            value={test.inputJson}
-                            onChange={(e) => handleUpdateTestCase(test.id, 'inputJson', e.target.value)}
-                            rows={3}
-                            className={cn(
-                              'w-full px-4 py-2 rounded-[var(--radius-md)] font-mono text-sm resize-none',
-                              'bg-[var(--color-surface-secondary)] text-[var(--color-text-primary)]',
-                              'border border-transparent focus:border-[var(--color-info)] focus:outline-none',
-                              !isValidJson(test.inputJson) && 'border-[var(--color-error)]'
-                            )}
-                          />
+                      <div className="p-6 space-y-4">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div>
+                            <label className="block text-sm font-medium text-[var(--color-text-primary)] mb-2">
+                              Test Name
+                            </label>
+                            <input
+                              type="text"
+                              value={test.name}
+                              onChange={(e) => handleUpdateTestCase(test.id, 'name', e.target.value)}
+                              placeholder="e.g., Should allow admin users"
+                              className={cn(
+                                'w-full px-4 py-3 rounded-[var(--radius-lg)]',
+                                'bg-[var(--color-surface-secondary)] text-[var(--color-text-primary)]',
+                                'border border-[var(--color-border-light)]',
+                                'focus:border-[var(--color-info)] focus:ring-4 focus:ring-[var(--color-info)]/10 focus:outline-none',
+                                'placeholder:text-[var(--color-text-tertiary)]'
+                              )}
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium text-[var(--color-text-primary)] mb-2">
+                              Description
+                            </label>
+                            <input
+                              type="text"
+                              value={test.description}
+                              onChange={(e) => handleUpdateTestCase(test.id, 'description', e.target.value)}
+                              placeholder="Brief description of what this test validates"
+                              className={cn(
+                                'w-full px-4 py-3 rounded-[var(--radius-lg)]',
+                                'bg-[var(--color-surface-secondary)] text-[var(--color-text-primary)]',
+                                'border border-[var(--color-border-light)]',
+                                'focus:border-[var(--color-info)] focus:ring-4 focus:ring-[var(--color-info)]/10 focus:outline-none',
+                                'placeholder:text-[var(--color-text-tertiary)]'
+                              )}
+                            />
+                          </div>
                         </div>
-                        <div>
-                          <label className="block text-xs text-[var(--color-text-tertiary)] mb-1">
-                            Expected Result
-                          </label>
-                          <textarea
-                            value={test.expectedJson}
-                            onChange={(e) => handleUpdateTestCase(test.id, 'expectedJson', e.target.value)}
-                            rows={3}
-                            className={cn(
-                              'w-full px-4 py-2 rounded-[var(--radius-md)] font-mono text-sm resize-none',
-                              'bg-[var(--color-surface-secondary)] text-[var(--color-text-primary)]',
-                              'border border-transparent focus:border-[var(--color-info)] focus:outline-none',
-                              !isValidJson(test.expectedJson) && 'border-[var(--color-error)]'
-                            )}
-                          />
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div>
+                            <label className="block text-sm font-medium text-[var(--color-text-primary)] mb-2">
+                              Input JSON
+                            </label>
+                            <textarea
+                              value={test.inputJson}
+                              onChange={(e) => handleUpdateTestCase(test.id, 'inputJson', e.target.value)}
+                              rows={4}
+                              className={cn(
+                                'w-full px-4 py-3 rounded-[var(--radius-lg)] font-mono text-sm resize-none',
+                                'bg-[var(--color-surface-secondary)] text-[var(--color-text-primary)]',
+                                'border',
+                                'focus:border-[var(--color-info)] focus:ring-4 focus:ring-[var(--color-info)]/10 focus:outline-none',
+                                isValidJson(test.inputJson)
+                                  ? 'border-[var(--color-border-light)]'
+                                  : 'border-[var(--color-error)]'
+                              )}
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium text-[var(--color-text-primary)] mb-2">
+                              Expected Result
+                            </label>
+                            <textarea
+                              value={test.expectedJson}
+                              onChange={(e) => handleUpdateTestCase(test.id, 'expectedJson', e.target.value)}
+                              rows={4}
+                              className={cn(
+                                'w-full px-4 py-3 rounded-[var(--radius-lg)] font-mono text-sm resize-none',
+                                'bg-[var(--color-surface-secondary)] text-[var(--color-text-primary)]',
+                                'border',
+                                'focus:border-[var(--color-info)] focus:ring-4 focus:ring-[var(--color-info)]/10 focus:outline-none',
+                                isValidJson(test.expectedJson)
+                                  ? 'border-[var(--color-border-light)]'
+                                  : 'border-[var(--color-error)]'
+                              )}
+                            />
+                          </div>
                         </div>
                       </div>
                     </div>
                   ))}
                 </div>
               ) : (
-                <div className="flex flex-col items-center justify-center h-48 rounded-[var(--radius-lg)] border border-dashed border-[var(--color-border-light)] text-[var(--color-text-tertiary)]">
-                  <AlertCircle className="w-12 h-12 mb-3 opacity-50" />
-                  <p className="font-medium">No test cases defined</p>
-                  <p className="text-sm">Add test cases to validate your policy</p>
+                <div className="rounded-[var(--radius-xl)] border-2 border-dashed border-[var(--color-border-light)] bg-[var(--color-surface)] p-12">
+                  <div className="flex flex-col items-center justify-center text-center">
+                    <div className="p-4 rounded-full bg-[var(--color-surface-secondary)] mb-4">
+                      <Info className="w-8 h-8 text-[var(--color-text-tertiary)]" />
+                    </div>
+                    <h3 className="text-lg font-semibold text-[var(--color-text-primary)] mb-2">
+                      No test cases yet
+                    </h3>
+                    <p className="text-[var(--color-text-secondary)] mb-6 max-w-sm">
+                      Test cases help ensure your policy works correctly. Add tests to validate different scenarios.
+                    </p>
+                    <button
+                      onClick={handleAddTestCase}
+                      className={cn(
+                        'flex items-center gap-2 px-5 py-2.5 rounded-[var(--radius-lg)]',
+                        'bg-[var(--color-info)] text-white font-medium',
+                        'transition-all hover:opacity-90'
+                      )}
+                    >
+                      <Plus className="w-4 h-4" />
+                      Add Your First Test
+                    </button>
+                  </div>
                 </div>
               )}
             </div>
@@ -562,62 +698,102 @@ export function CreatePolicy() {
           {currentStep === 'review' && (
             <div className="space-y-6">
               <div>
-                <h2 className="text-xl font-semibold text-[var(--color-text-primary)] mb-1">
+                <h2 className="text-2xl font-semibold text-[var(--color-text-primary)] mb-2">
                   Review & Submit
                 </h2>
                 <p className="text-[var(--color-text-secondary)]">
-                  Review your policy before submitting for approval
+                  Review your policy details before submitting for approval
                 </p>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="p-4 rounded-[var(--radius-lg)] border border-[var(--color-border-light)] bg-[var(--color-surface)]">
-                  <h3 className="font-medium text-[var(--color-text-primary)] mb-3">Policy Details</h3>
-                  <dl className="space-y-2 text-sm">
-                    <div className="flex justify-between">
-                      <dt className="text-[var(--color-text-secondary)]">Name</dt>
-                      <dd className="font-medium text-[var(--color-text-primary)]">{metadata.name || '-'}</dd>
-                    </div>
-                    <div className="flex justify-between">
-                      <dt className="text-[var(--color-text-secondary)]">Category</dt>
-                      <dd className="font-medium text-[var(--color-text-primary)] capitalize">
-                        {category.replace('-', ' ')}
-                      </dd>
-                    </div>
-                    <div className="flex justify-between">
-                      <dt className="text-[var(--color-text-secondary)]">Severity</dt>
-                      <dd className="font-medium text-[var(--color-text-primary)] capitalize">{severity}</dd>
-                    </div>
-                    <div className="flex justify-between">
-                      <dt className="text-[var(--color-text-secondary)]">Test Cases</dt>
-                      <dd className="font-medium text-[var(--color-text-primary)]">{testCases.length}</dd>
-                    </div>
-                  </dl>
+                {/* Policy Details Card */}
+                <div className="rounded-[var(--radius-xl)] bg-[var(--color-surface)] shadow-[var(--shadow-card)] border border-[var(--color-border-light)] overflow-hidden">
+                  <div className="px-6 py-4 border-b border-[var(--color-border-light)] bg-[var(--color-surface-secondary)]/50">
+                    <h3 className="font-semibold text-[var(--color-text-primary)]">Policy Details</h3>
+                  </div>
+                  <div className="p-6">
+                    <dl className="space-y-4">
+                      <div className="flex justify-between items-center py-2 border-b border-[var(--color-border-light)]">
+                        <dt className="text-[var(--color-text-secondary)]">Name</dt>
+                        <dd className="font-medium text-[var(--color-text-primary)]">{metadata.name || '—'}</dd>
+                      </div>
+                      <div className="flex justify-between items-center py-2 border-b border-[var(--color-border-light)]">
+                        <dt className="text-[var(--color-text-secondary)]">Category</dt>
+                        <dd className="font-medium text-[var(--color-text-primary)] capitalize">
+                          {category.replace('-', ' ')}
+                        </dd>
+                      </div>
+                      <div className="flex justify-between items-center py-2 border-b border-[var(--color-border-light)]">
+                        <dt className="text-[var(--color-text-secondary)]">Severity</dt>
+                        <dd>
+                          <span
+                            className="px-2.5 py-1 rounded-full text-xs font-semibold capitalize"
+                            style={{
+                              color: severities.find(s => s.value === severity)?.color,
+                              backgroundColor: `color-mix(in srgb, ${severities.find(s => s.value === severity)?.color} 12%, transparent)`,
+                            }}
+                          >
+                            {severity}
+                          </span>
+                        </dd>
+                      </div>
+                      <div className="flex justify-between items-center py-2">
+                        <dt className="text-[var(--color-text-secondary)]">Test Cases</dt>
+                        <dd className="font-medium text-[var(--color-text-primary)]">{testCases.length}</dd>
+                      </div>
+                    </dl>
+                  </div>
                 </div>
 
-                <div className="p-4 rounded-[var(--radius-lg)] border border-[var(--color-border-light)] bg-[var(--color-surface)]">
-                  <h3 className="font-medium text-[var(--color-text-primary)] mb-3">Tags</h3>
-                  <div className="flex flex-wrap gap-2">
+                {/* Tags Card */}
+                <div className="rounded-[var(--radius-xl)] bg-[var(--color-surface)] shadow-[var(--shadow-card)] border border-[var(--color-border-light)] overflow-hidden">
+                  <div className="px-6 py-4 border-b border-[var(--color-border-light)] bg-[var(--color-surface-secondary)]/50">
+                    <h3 className="font-semibold text-[var(--color-text-primary)]">Tags</h3>
+                  </div>
+                  <div className="p-6">
                     {tags.length > 0 ? (
-                      tags.map((tag) => (
-                        <span
-                          key={tag}
-                          className="px-2.5 py-1 rounded-full text-xs bg-[var(--color-surface-secondary)] text-[var(--color-text-secondary)]"
-                        >
-                          {tag}
-                        </span>
-                      ))
+                      <div className="flex flex-wrap gap-2">
+                        {tags.map((tag) => (
+                          <span
+                            key={tag}
+                            className="px-3 py-1.5 rounded-full text-sm font-medium bg-[var(--color-surface-secondary)] text-[var(--color-text-secondary)]"
+                          >
+                            {tag}
+                          </span>
+                        ))}
+                      </div>
                     ) : (
-                      <span className="text-sm text-[var(--color-text-tertiary)]">No tags</span>
+                      <p className="text-[var(--color-text-tertiary)]">No tags added</p>
                     )}
                   </div>
                 </div>
 
-                <div className="md:col-span-2 p-4 rounded-[var(--radius-lg)] border border-[var(--color-border-light)] bg-[var(--color-surface)]">
-                  <h3 className="font-medium text-[var(--color-text-primary)] mb-3">Description</h3>
-                  <p className="text-sm text-[var(--color-text-secondary)]">
-                    {metadata.description || 'No description provided'}
-                  </p>
+                {/* Description Card */}
+                <div className="md:col-span-2 rounded-[var(--radius-xl)] bg-[var(--color-surface)] shadow-[var(--shadow-card)] border border-[var(--color-border-light)] overflow-hidden">
+                  <div className="px-6 py-4 border-b border-[var(--color-border-light)] bg-[var(--color-surface-secondary)]/50">
+                    <h3 className="font-semibold text-[var(--color-text-primary)]">Description</h3>
+                  </div>
+                  <div className="p-6">
+                    <p className="text-[var(--color-text-secondary)] leading-relaxed">
+                      {metadata.description || 'No description provided'}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Code Preview Card */}
+                <div className="md:col-span-2 rounded-[var(--radius-xl)] bg-[var(--color-surface)] shadow-[var(--shadow-card)] border border-[var(--color-border-light)] overflow-hidden">
+                  <div className="px-6 py-4 border-b border-[var(--color-border-light)] bg-[var(--color-surface-secondary)]/50 flex items-center justify-between">
+                    <h3 className="font-semibold text-[var(--color-text-primary)]">Policy Code</h3>
+                    <span className="text-sm text-[var(--color-text-tertiary)]">
+                      {regoCode.split('\n').length} lines
+                    </span>
+                  </div>
+                  <div className="p-6">
+                    <pre className="p-4 rounded-[var(--radius-lg)] bg-[var(--color-surface-secondary)] text-sm font-mono text-[var(--color-text-primary)] overflow-auto max-h-64">
+                      {regoCode || 'No code written'}
+                    </pre>
+                  </div>
                 </div>
               </div>
             </div>
@@ -627,7 +803,7 @@ export function CreatePolicy() {
 
       {/* Footer */}
       <div className="p-4 border-t border-[var(--color-border-light)] bg-[var(--color-surface)]">
-        <div className="max-w-4xl mx-auto flex items-center justify-between">
+        <div className="max-w-3xl mx-auto flex items-center justify-between">
           <button
             onClick={() => {
               const stepIndex = steps.findIndex((s) => s.id === currentStep);
@@ -648,8 +824,9 @@ export function CreatePolicy() {
           <div className="flex items-center gap-3">
             <button
               className={cn(
-                'flex items-center gap-2 px-4 py-2 rounded-[var(--radius-md)]',
+                'flex items-center gap-2 px-5 py-2.5 rounded-[var(--radius-lg)]',
                 'bg-[var(--color-surface-secondary)] text-[var(--color-text-primary)]',
+                'border border-[var(--color-border-light)]',
                 'font-medium transition-all hover:bg-[var(--color-border-light)]'
               )}
             >
@@ -661,7 +838,7 @@ export function CreatePolicy() {
               <button
                 onClick={handleSubmit}
                 className={cn(
-                  'flex items-center gap-2 px-6 py-2 rounded-[var(--radius-md)]',
+                  'flex items-center gap-2 px-6 py-2.5 rounded-[var(--radius-lg)]',
                   'bg-[var(--color-success)] text-white font-medium',
                   'transition-all hover:opacity-90'
                 )}
@@ -679,7 +856,7 @@ export function CreatePolicy() {
                 }}
                 disabled={!canProceed()}
                 className={cn(
-                  'flex items-center gap-2 px-6 py-2 rounded-[var(--radius-md)]',
+                  'flex items-center gap-2 px-6 py-2.5 rounded-[var(--radius-lg)]',
                   'bg-[var(--color-info)] text-white font-medium',
                   'transition-all hover:opacity-90',
                   'disabled:opacity-50 disabled:cursor-not-allowed'
