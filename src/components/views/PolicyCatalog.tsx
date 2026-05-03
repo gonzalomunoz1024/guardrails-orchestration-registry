@@ -290,15 +290,6 @@ export function PolicyCatalog() {
     });
   }, [searchQuery, selectedCategory, selectedStatus]);
 
-  const statusCounts = useMemo(() => {
-    return {
-      all: policies.length,
-      active: policies.filter((p) => p.status === 'active').length,
-      review: policies.filter((p) => p.status === 'review').length,
-      draft: policies.filter((p) => p.status === 'draft').length,
-    };
-  }, [policies]);
-
   return (
     <div className="h-full flex flex-col">
       {/* Filters Bar */}
@@ -381,53 +372,6 @@ export function PolicyCatalog() {
           </div>
         </div>
 
-        {/* Status Pills */}
-        <div className="flex items-center gap-2 mt-3">
-          <button
-            onClick={() => setSelectedStatus(null)}
-            className={cn(
-              'px-3 py-1.5 rounded-full text-sm font-medium transition-all',
-              !selectedStatus
-                ? 'bg-[var(--color-info)] text-white'
-                : 'bg-[var(--color-surface-secondary)] text-[var(--color-text-secondary)] hover:bg-[var(--color-border-light)]'
-            )}
-          >
-            All ({statusCounts.all})
-          </button>
-          <button
-            onClick={() => setSelectedStatus('active')}
-            className={cn(
-              'px-3 py-1.5 rounded-full text-sm font-medium transition-all',
-              selectedStatus === 'active'
-                ? 'bg-[var(--color-success)] text-white'
-                : 'bg-[var(--color-surface-secondary)] text-[var(--color-text-secondary)] hover:bg-[var(--color-border-light)]'
-            )}
-          >
-            Active ({statusCounts.active})
-          </button>
-          <button
-            onClick={() => setSelectedStatus('review')}
-            className={cn(
-              'px-3 py-1.5 rounded-full text-sm font-medium transition-all',
-              selectedStatus === 'review'
-                ? 'bg-[var(--color-warning)] text-white'
-                : 'bg-[var(--color-surface-secondary)] text-[var(--color-text-secondary)] hover:bg-[var(--color-border-light)]'
-            )}
-          >
-            In Review ({statusCounts.review})
-          </button>
-          <button
-            onClick={() => setSelectedStatus('draft')}
-            className={cn(
-              'px-3 py-1.5 rounded-full text-sm font-medium transition-all',
-              selectedStatus === 'draft'
-                ? 'bg-[var(--color-text-tertiary)] text-white'
-                : 'bg-[var(--color-surface-secondary)] text-[var(--color-text-secondary)] hover:bg-[var(--color-border-light)]'
-            )}
-          >
-            Drafts ({statusCounts.draft})
-          </button>
-        </div>
       </div>
 
       {/* Policy Grid */}
