@@ -1,8 +1,88 @@
-import { Search, Bell, Moon, Sun, LogOut } from 'lucide-react';
+import { useState, useRef, useEffect } from 'react';
+import { Search, Bell, Moon, Sun, LogOut, ChevronDown } from 'lucide-react';
 import { useTheme } from '@/hooks';
 import { useRegistryStore } from '@/store/registryStore';
 import { useAuthStore } from '@/store/authStore';
 import { cn } from '@/utils';
+
+interface UserMenuProps {
+  user: {
+    login: string;
+    name: string | null;
+    avatar_url: string;
+  };
+  onLogout: () => void;
+}
+
+function UserMenu({ user, onLogout }: UserMenuProps) {
+  const [isOpen, setIsOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+        setIsOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  return (
+    <div className="relative" ref={menuRef}>
+      <button
+        onClick={() => setIsOpen(!isOpen)}
+        className={cn(
+          'flex items-center gap-3 p-1.5 pr-3 rounded-[var(--radius-md)] transition-all',
+          'hover:bg-[var(--color-surface-secondary)]',
+          isOpen && 'bg-[var(--color-surface-secondary)]'
+        )}
+      >
+        <img
+          src={user.avatar_url}
+          alt={user.login}
+          className="w-8 h-8 rounded-full object-cover border-2 border-[var(--color-border-light)]"
+        />
+        <div className="text-left">
+          <p className="text-sm font-medium text-[var(--color-text-primary)]">
+            {user.name || user.login}
+          </p>
+          <p className="text-xs text-[var(--color-text-tertiary)]">
+            @{user.login}
+          </p>
+        </div>
+        <ChevronDown className={cn(
+          'w-4 h-4 text-[var(--color-text-tertiary)] transition-transform',
+          isOpen && 'rotate-180'
+        )} />
+      </button>
+
+      {isOpen && (
+        <div className={cn(
+          'absolute right-0 top-full mt-2 w-48 py-1',
+          'rounded-[var(--radius-md)] border border-[var(--color-border-light)]',
+          'bg-[var(--color-surface)] shadow-[var(--shadow-lg)]',
+          'animate-fade-in z-50'
+        )}>
+          <button
+            onClick={() => {
+              setIsOpen(false);
+              onLogout();
+            }}
+            className={cn(
+              'w-full flex items-center gap-2 px-3 py-2 text-sm',
+              'text-[var(--color-text-primary)] hover:bg-[var(--color-surface-secondary)]',
+              'transition-colors'
+            )}
+          >
+            <LogOut className="w-4 h-4" />
+            Log out
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
 
 const viewTitles: Record<string, string> = {
   dashboard: 'Dashboard',
@@ -82,34 +162,9 @@ export function TopBar() {
         {/* Divider */}
         <div className="w-px h-6 bg-[var(--color-border-light)]" />
 
-        {/* User */}
+        {/* User Menu */}
         {user && (
-          <div className="flex items-center gap-3">
-            <div className="text-right">
-              <p className="text-sm font-medium text-[var(--color-text-primary)]">
-                {user.name || user.login}
-              </p>
-              <p className="text-xs text-[var(--color-text-tertiary)]">
-                @{user.login}
-              </p>
-            </div>
-            <img
-              src={user.avatar_url}
-              alt={user.login}
-              className="w-9 h-9 rounded-full object-cover border-2 border-[var(--color-border-light)]"
-            />
-            <button
-              onClick={logout}
-              className={cn(
-                'p-2 rounded-[var(--radius-md)] transition-all',
-                'text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]',
-                'hover:bg-[var(--color-surface-secondary)]'
-              )}
-              title="Sign out"
-            >
-              <LogOut className="w-4 h-4" />
-            </button>
-          </div>
+          <UserMenu user={user} onLogout={logout} />
         )}
       </div>
     </header>

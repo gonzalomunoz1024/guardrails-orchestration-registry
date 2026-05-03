@@ -47,16 +47,17 @@ export const githubApi = {
       throw new Error('VITE_GITHUB_CLIENT_ID is not configured');
     }
 
-    const response = await fetch('/auth/github/device/code', {
+    const url = '/auth/github/device/code';
+    const body = { client_id: CLIENT_ID, scope: 'repo' };
+    console.log(`[GitHub] POST ${url}`, body);
+
+    const response = await fetch(url, {
       method: 'POST',
       headers: {
         'Accept': 'application/json',
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({
-        client_id: CLIENT_ID,
-        scope: 'repo',
-      }),
+      body: JSON.stringify(body),
     });
 
     if (!response.ok) {
@@ -78,17 +79,21 @@ export const githubApi = {
     const pollInterval = Math.max(interval, 5) * 1000; // GitHub requires minimum 5 seconds
 
     while (true) {
-      const response = await fetch('/auth/github/oauth/access_token', {
+      const url = '/auth/github/oauth/access_token';
+      const body = {
+        client_id: CLIENT_ID,
+        device_code: deviceCode,
+        grant_type: 'urn:ietf:params:oauth:grant-type:device_code',
+      };
+      console.log(`[GitHub] POST ${url}`, { client_id: CLIENT_ID, device_code: '***' });
+
+      const response = await fetch(url, {
         method: 'POST',
         headers: {
           'Accept': 'application/json',
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          client_id: CLIENT_ID,
-          device_code: deviceCode,
-          grant_type: 'urn:ietf:params:oauth:grant-type:device_code',
-        }),
+        body: JSON.stringify(body),
       });
 
       const data = await response.json();

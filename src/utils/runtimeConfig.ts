@@ -1,8 +1,10 @@
 /**
  * Runtime Configuration
  *
- * Reads configuration from window.__RUNTIME_CONFIG__ which is set by /config.js
- * This allows configuration to be changed at runtime without rebuilding.
+ * Priority order:
+ * 1. VITE_API_BASE_URL env var (for development)
+ * 2. window.__RUNTIME_CONFIG__ (for production, set by serve.cjs)
+ * 3. Default '/api'
  */
 
 interface RuntimeConfig {
@@ -15,17 +17,26 @@ declare global {
   }
 }
 
-const defaultConfig: RuntimeConfig = {
-  API_BASE_URL: import.meta.env.VITE_API_BASE_URL || '/api',
-};
-
 export function getRuntimeConfig(): RuntimeConfig {
-  return {
-    ...defaultConfig,
-    ...window.__RUNTIME_CONFIG__,
-  };
+  // In development, prefer VITE env vars
+  const envApiUrl = import.meta.env.VITE_API_BASE_URL;
+  if (envApiUrl) {
+    return { API_BASE_URL: envApiUrl };
+  }
+
+  // In production, use runtime config from serve.cjs
+  if (window.__RUNTIME_CONFIG__?.API_BASE_URL) {
+    return { API_BASE_URL: window.__RUNTIME_CONFIG__.API_BASE_URL };
+  }
+
+  // Fallback
+  return { API_BASE_URL: '/api' };
 }
 
 export function getApiBaseUrl(): string {
   return getRuntimeConfig().API_BASE_URL;
 }
+
+// Log config on startup
+console.log('[Config] API Base URL:', getApiBaseUrl());
+console.log('[Config] Source:', import.meta.env.VITE_API_BASE_URL ? 'VITE_API_BASE_URL env var' : window.__RUNTIME_CONFIG__?.API_BASE_URL ? 'Runtime config (serve.cjs)' : 'Default fallback');
