@@ -39,6 +39,8 @@ function proxyToGitHub(githubPath, req, res) {
         'Accept': 'application/json',
         'Content-Length': Buffer.byteLength(body),
       },
+      // Skip certificate validation (needed for corporate proxies/firewalls)
+      rejectUnauthorized: false,
     };
 
     const proxyReq = https.request(options, (proxyRes) => {
