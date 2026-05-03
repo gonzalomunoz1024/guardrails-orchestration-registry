@@ -18,8 +18,51 @@
  */
 
 const http = require('http');
+const https = require('https');
 const fs = require('fs');
 const path = require('path');
+
+/**
+ * Proxy POST requests to GitHub API (bypasses CORS)
+ */
+function proxyToGitHub(githubPath, req, res) {
+  let body = '';
+  req.on('data', chunk => { body += chunk; });
+  req.on('end', () => {
+    const options = {
+      hostname: 'github.com',
+      port: 443,
+      path: githubPath,
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+        'Content-Length': Buffer.byteLength(body),
+      },
+    };
+
+    const proxyReq = https.request(options, (proxyRes) => {
+      let data = '';
+      proxyRes.on('data', chunk => { data += chunk; });
+      proxyRes.on('end', () => {
+        res.writeHead(proxyRes.statusCode, {
+          'Content-Type': 'application/json',
+          'Access-Control-Allow-Origin': '*',
+        });
+        res.end(data);
+      });
+    });
+
+    proxyReq.on('error', (err) => {
+      console.error('GitHub proxy error:', err);
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Proxy error', message: err.message }));
+    });
+
+    proxyReq.write(body);
+    proxyReq.end();
+  });
+}
 
 // Parse command line arguments
 function parseArgs() {
@@ -106,6 +149,29 @@ window.__RUNTIME_CONFIG__ = ${JSON.stringify({ API_BASE_URL: config.apiUrl }, nu
 
   const server = http.createServer((req, res) => {
     const urlPath = req.url.split('?')[0];
+
+    // Handle CORS preflight for GitHub proxy endpoints
+    if (req.method === 'OPTIONS' && urlPath.startsWith('/auth/github/')) {
+      res.writeHead(204, {
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Methods': 'POST, OPTIONS',
+        'Access-Control-Allow-Headers': 'Content-Type',
+      });
+      res.end();
+      return;
+    }
+
+    // GitHub Device Flow proxy: request device code
+    if (req.method === 'POST' && urlPath === '/auth/github/device/code') {
+      proxyToGitHub('/login/device/code', req, res);
+      return;
+    }
+
+    // GitHub Device Flow proxy: poll for access token
+    if (req.method === 'POST' && urlPath === '/auth/github/oauth/access_token') {
+      proxyToGitHub('/login/oauth/access_token', req, res);
+      return;
+    }
 
     // Health check endpoint
     if (urlPath === '/api/health') {

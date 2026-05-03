@@ -47,7 +47,7 @@ export const githubApi = {
       throw new Error('VITE_GITHUB_CLIENT_ID is not configured');
     }
 
-    const response = await fetch('https://github.com/login/device/code', {
+    const response = await fetch('/auth/github/device/code', {
       method: 'POST',
       headers: {
         'Accept': 'application/json',
@@ -78,7 +78,7 @@ export const githubApi = {
     const pollInterval = Math.max(interval, 5) * 1000; // GitHub requires minimum 5 seconds
 
     while (true) {
-      const response = await fetch('https://github.com/login/oauth/access_token', {
+      const response = await fetch('/auth/github/oauth/access_token', {
         method: 'POST',
         headers: {
           'Accept': 'application/json',
