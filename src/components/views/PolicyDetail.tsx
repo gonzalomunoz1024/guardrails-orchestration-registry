@@ -218,12 +218,11 @@ export function PolicyDetail() {
               <span
                 className={cn(
                   'px-2.5 py-1 rounded-full text-xs font-medium capitalize',
-                  policy.severity === 'critical' && 'bg-[var(--color-error-bg)] text-[var(--color-error)]',
-                  policy.severity === 'high' && 'bg-[var(--color-warning-bg)] text-[var(--color-warning)]',
-                  policy.severity === 'medium' && 'bg-[var(--color-info-bg)] text-[var(--color-info)]'
+                  policy.resourceType === 'lightspeed' && 'bg-[var(--color-warning-bg)] text-[var(--color-warning)]',
+                  policy.resourceType === 'vmforge' && 'bg-[var(--color-info-bg)] text-[var(--color-info)]'
                 )}
               >
-                {policy.severity}
+                {policy.resourceType}
               </span>
             </div>
             <p className="text-[var(--color-text-secondary)] max-w-2xl">{policy.description}</p>
@@ -378,10 +377,13 @@ export function PolicyDetail() {
               <div className="p-4 rounded-[var(--radius-lg)] border border-[var(--color-border-light)] bg-[var(--color-surface)]">
                 <div className="flex items-center gap-2 mb-3">
                   <TrendingUp className="w-5 h-5 text-[var(--color-info)]" />
-                  <span className="font-medium text-[var(--color-text-primary)]">Category</span>
+                  <span className="font-medium text-[var(--color-text-primary)]">Resource</span>
                 </div>
                 <p className="text-sm text-[var(--color-text-secondary)] capitalize">
-                  {policy.category.replace('-', ' ')}
+                  {policy.resourceType}
+                </p>
+                <p className="text-xs text-[var(--color-text-tertiary)] mt-1">
+                  {policy.resourceKind}
                 </p>
               </div>
             </div>

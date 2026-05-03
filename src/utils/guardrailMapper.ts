@@ -13,7 +13,7 @@ import type {
   UpdateGuardrailRequest,
   UpsertConfigurationRequest,
 } from '@/types/guardrail.types';
-import type { RegistryPolicy, PolicyStatus, PolicyCategory, PolicySeverity } from '@/types/registry.types';
+import type { RegistryPolicy, PolicyStatus, ResourceType } from '@/types/registry.types';
 
 /**
  * Maps backend GuardrailStatus to frontend PolicyStatus
@@ -51,26 +51,17 @@ export function mapPolicyStatusToGuardrail(status: PolicyStatus): GuardrailStatu
 }
 
 /**
- * Infers category from guardrail properties
- * Since backend doesn't have category, we infer from resourceType/kind
+ * Maps backend ResourceType to frontend ResourceType (lowercase)
  */
-export function inferCategory(guardrail: GuardrailDefinition): PolicyCategory {
-  // Default inference based on resource type or kind
-  if (guardrail.kind === 'PRECHECK') {
-    return 'security';
+export function mapResourceType(backendType: string): ResourceType {
+  switch (backendType) {
+    case 'LIGHTSPEED':
+      return 'lightspeed';
+    case 'VMFORGE':
+      return 'vmforge';
+    default:
+      return 'lightspeed'; // Default fallback
   }
-  if (guardrail.resourceType === 'LIGHTSPEED') {
-    return 'operational';
-  }
-  return 'access-control';
-}
-
-/**
- * Infers severity from enforcement type
- * Since backend doesn't have severity, we infer from enforcementType
- */
-export function inferSeverity(guardrail: GuardrailDefinition): PolicySeverity {
-  return guardrail.enforcementType === 'MANDATORY' ? 'critical' : 'medium';
 }
 
 /**
@@ -91,8 +82,8 @@ export function mapGuardrailToPolicy(
     id: guardrail.id,
     name: guardrail.name,
     description: guardrail.description,
-    category: inferCategory(guardrail),
-    severity: inferSeverity(guardrail),
+    resourceType: mapResourceType(guardrail.resourceType),
+    resourceKind: guardrail.resourceKind,
     status: mapGuardrailStatusToPolicy(guardrail.status),
     tags: [], // Not in backend
     author: guardrail.owner,
@@ -110,8 +101,6 @@ export function mapGuardrailToPolicy(
       denyRate: 0,
       avgExecutionTimeMs: 0,
     },
-    // Store backend-specific fields in a way frontend can access if needed
-    // These can be used when displaying or editing
   };
 }
 

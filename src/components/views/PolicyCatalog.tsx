@@ -7,26 +7,24 @@ import {
   Clock,
   CheckCircle,
   AlertCircle,
-  Shield,
   TrendingUp,
   ChevronRight,
   Loader2,
   RefreshCw,
   Plus,
+  Zap,
+  Server,
 } from 'lucide-react';
 import { useRegistryStore } from '@/store/registryStore';
 import { usePolicies } from '@/hooks';
 import { mockPolicies } from '@/data/mockData';
 import { cn } from '@/utils';
-import type { RegistryPolicy, PolicyCategory, PolicyStatus, PolicySeverity } from '@/types';
+import type { RegistryPolicy, ResourceType, PolicyStatus } from '@/types';
 
-const categories: { value: PolicyCategory | null; label: string }[] = [
-  { value: null, label: 'All Categories' },
-  { value: 'access-control', label: 'Access Control' },
-  { value: 'compliance', label: 'Compliance' },
-  { value: 'security', label: 'Security' },
-  { value: 'cost', label: 'Cost' },
-  { value: 'operational', label: 'Operational' },
+const resourceTypes: { value: ResourceType | null; label: string }[] = [
+  { value: null, label: 'All Resource Types' },
+  { value: 'lightspeed', label: 'Lightspeed' },
+  { value: 'vmforge', label: 'VMForge' },
 ];
 
 const statuses: { value: PolicyStatus | null; label: string }[] = [
@@ -37,15 +35,24 @@ const statuses: { value: PolicyStatus | null; label: string }[] = [
   { value: 'deprecated', label: 'Deprecated' },
 ];
 
-function getSeverityColor(severity: PolicySeverity) {
-  switch (severity) {
-    case 'critical':
-      return 'bg-[var(--color-error-bg)] text-[var(--color-error)]';
-    case 'high':
+function getResourceTypeIcon(resourceType: ResourceType) {
+  switch (resourceType) {
+    case 'lightspeed':
+      return <Zap className="w-4 h-4 text-[var(--color-warning)]" />;
+    case 'vmforge':
+      return <Server className="w-4 h-4 text-[var(--color-info)]" />;
+    default:
+      return <Tag className="w-4 h-4" />;
+  }
+}
+
+function getResourceTypeColor(resourceType: ResourceType) {
+  switch (resourceType) {
+    case 'lightspeed':
       return 'bg-[var(--color-warning-bg)] text-[var(--color-warning)]';
-    case 'medium':
+    case 'vmforge':
       return 'bg-[var(--color-info-bg)] text-[var(--color-info)]';
-    case 'low':
+    default:
       return 'bg-[var(--color-surface-secondary)] text-[var(--color-text-secondary)]';
   }
 }
@@ -62,17 +69,6 @@ function getStatusIcon(status: PolicyStatus) {
       return <AlertCircle className="w-4 h-4 text-[var(--color-error)]" />;
     default:
       return null;
-  }
-}
-
-function getCategoryIcon(category: PolicyCategory) {
-  switch (category) {
-    case 'access-control':
-      return <Shield className="w-4 h-4" />;
-    case 'security':
-      return <Shield className="w-4 h-4" />;
-    default:
-      return <Tag className="w-4 h-4" />;
   }
 }
 
@@ -97,10 +93,10 @@ function PolicyTable({ policies, onPolicyClick }: PolicyTableProps) {
               Policy
             </th>
             <th className="px-4 py-3 text-left text-xs font-semibold text-[var(--color-text-secondary)] uppercase tracking-wider">
-              Category
+              Resource Type
             </th>
             <th className="px-4 py-3 text-left text-xs font-semibold text-[var(--color-text-secondary)] uppercase tracking-wider">
-              Severity
+              Resource Kind
             </th>
             <th className="px-4 py-3 text-left text-xs font-semibold text-[var(--color-text-secondary)] uppercase tracking-wider">
               Status
@@ -130,14 +126,14 @@ function PolicyTable({ policies, onPolicyClick }: PolicyTableProps) {
                 </div>
               </td>
               <td className="px-4 py-4">
-                <div className="flex items-center gap-1.5 text-sm text-[var(--color-text-secondary)]">
-                  {getCategoryIcon(policy.category)}
-                  <span className="capitalize">{policy.category.replace('-', ' ')}</span>
-                </div>
+                <span className={cn('inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium', getResourceTypeColor(policy.resourceType))}>
+                  {getResourceTypeIcon(policy.resourceType)}
+                  <span className="capitalize">{policy.resourceType}</span>
+                </span>
               </td>
               <td className="px-4 py-4">
-                <span className={cn('px-2 py-0.5 rounded-full text-xs font-medium', getSeverityColor(policy.severity))}>
-                  {policy.severity}
+                <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-[var(--color-surface-secondary)] text-[var(--color-text-secondary)]">
+                  {policy.resourceKind}
                 </span>
               </td>
               <td className="px-4 py-4">
@@ -190,8 +186,9 @@ function PolicyCard({ policy, onClick }: PolicyCardProps) {
       <div className="flex items-start justify-between gap-3">
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 mb-1">
-            <span className={cn('px-2 py-0.5 rounded-full text-xs font-medium', getSeverityColor(policy.severity))}>
-              {policy.severity}
+            <span className={cn('inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium', getResourceTypeColor(policy.resourceType))}>
+              {getResourceTypeIcon(policy.resourceType)}
+              <span className="capitalize">{policy.resourceType}</span>
             </span>
             <span className="flex items-center gap-1 text-xs text-[var(--color-text-tertiary)]">
               {getStatusIcon(policy.status)}
@@ -210,9 +207,12 @@ function PolicyCard({ policy, onClick }: PolicyCardProps) {
         {policy.description}
       </p>
 
-      {/* Tags */}
+      {/* Resource Kind & Tags */}
       <div className="mt-3 flex flex-wrap gap-1.5">
-        {policy.tags.slice(0, 3).map((tag) => (
+        <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-[var(--color-surface-tertiary)] text-[var(--color-text-primary)] border border-[var(--color-border-light)]">
+          {policy.resourceKind}
+        </span>
+        {policy.tags.slice(0, 2).map((tag) => (
           <span
             key={tag}
             className="px-2 py-0.5 rounded-full text-xs bg-[var(--color-surface-secondary)] text-[var(--color-text-secondary)]"
@@ -220,24 +220,18 @@ function PolicyCard({ policy, onClick }: PolicyCardProps) {
             {tag}
           </span>
         ))}
-        {policy.tags.length > 3 && (
+        {policy.tags.length > 2 && (
           <span className="px-2 py-0.5 rounded-full text-xs bg-[var(--color-surface-secondary)] text-[var(--color-text-tertiary)]">
-            +{policy.tags.length - 3}
+            +{policy.tags.length - 2}
           </span>
         )}
       </div>
 
       {/* Stats */}
       <div className="mt-4 pt-4 border-t border-[var(--color-border-light)] flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <div className="flex items-center gap-1.5 text-xs text-[var(--color-text-tertiary)]">
-            {getCategoryIcon(policy.category)}
-            <span className="capitalize">{policy.category.replace('-', ' ')}</span>
-          </div>
-          <span className="text-xs text-[var(--color-text-tertiary)]">
-            v{policy.currentVersion}
-          </span>
-        </div>
+        <span className="text-xs text-[var(--color-text-tertiary)]">
+          v{policy.currentVersion}
+        </span>
         {policy.stats.totalEvaluations > 0 && (
           <div className="flex items-center gap-3">
             <span className="text-xs text-[var(--color-text-tertiary)]">
@@ -259,21 +253,30 @@ type ViewMode = 'grid' | 'table';
 export function PolicyCatalog() {
   const {
     searchQuery,
-    selectedCategory,
+    selectedResourceType,
+    selectedResourceKind,
     selectedStatus,
-    setSelectedCategory,
+    setSelectedResourceType,
+    setSelectedResourceKind,
     setSelectedStatus,
     navigateToPolicy,
     setView,
   } = useRegistryStore();
 
   const [viewMode, setViewMode] = useState<ViewMode>('grid');
+  const [resourceKindInput, setResourceKindInput] = useState('');
 
   // Fetch policies from backend with fallback to mock data
   const { data: backendPolicies, isLoading, error, refetch } = usePolicies();
 
   // Use backend data if available, otherwise fall back to mock data
   const policies = backendPolicies && backendPolicies.length > 0 ? backendPolicies : mockPolicies;
+
+  // Get unique resource kinds from policies for autocomplete
+  const uniqueResourceKinds = useMemo(() => {
+    const kinds = new Set(policies.map((p) => p.resourceKind));
+    return Array.from(kinds).sort();
+  }, [policies]);
 
   const filteredPolicies = useMemo(() => {
     return policies.filter((policy) => {
@@ -283,12 +286,13 @@ export function PolicyCatalog() {
         policy.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
         policy.tags.some((tag) => tag.toLowerCase().includes(searchQuery.toLowerCase()));
 
-      const matchesCategory = !selectedCategory || policy.category === selectedCategory;
+      const matchesResourceType = !selectedResourceType || policy.resourceType === selectedResourceType;
+      const matchesResourceKind = !selectedResourceKind || policy.resourceKind.toLowerCase().includes(selectedResourceKind.toLowerCase());
       const matchesStatus = !selectedStatus || policy.status === selectedStatus;
 
-      return matchesSearch && matchesCategory && matchesStatus;
+      return matchesSearch && matchesResourceType && matchesResourceKind && matchesStatus;
     });
-  }, [searchQuery, selectedCategory, selectedStatus]);
+  }, [searchQuery, selectedResourceType, selectedResourceKind, selectedStatus, policies]);
 
   return (
     <div className="h-full flex flex-col">
@@ -298,22 +302,47 @@ export function PolicyCatalog() {
           <div className="flex items-center gap-3">
             <Filter className="w-5 h-5 text-[var(--color-text-tertiary)]" />
 
-            {/* Category Filter */}
+            {/* Resource Type Filter */}
             <select
-              value={selectedCategory || ''}
-              onChange={(e) => setSelectedCategory((e.target.value as PolicyCategory) || null)}
+              value={selectedResourceType || ''}
+              onChange={(e) => setSelectedResourceType((e.target.value as ResourceType) || null)}
               className={cn(
                 'px-3 py-2 rounded-[var(--radius-md)] text-sm',
                 'bg-[var(--color-surface-secondary)] text-[var(--color-text-primary)]',
                 'border border-transparent focus:border-[var(--color-info)] focus:outline-none'
               )}
             >
-              {categories.map((cat) => (
-                <option key={cat.value || 'all'} value={cat.value || ''}>
-                  {cat.label}
+              {resourceTypes.map((rt) => (
+                <option key={rt.value || 'all'} value={rt.value || ''}>
+                  {rt.label}
                 </option>
               ))}
             </select>
+
+            {/* Resource Kind Filter */}
+            <div className="relative">
+              <input
+                type="text"
+                placeholder="Filter by Resource Kind..."
+                value={resourceKindInput}
+                onChange={(e) => {
+                  setResourceKindInput(e.target.value);
+                  setSelectedResourceKind(e.target.value || null);
+                }}
+                list="resource-kinds"
+                className={cn(
+                  'px-3 py-2 rounded-[var(--radius-md)] text-sm w-48',
+                  'bg-[var(--color-surface-secondary)] text-[var(--color-text-primary)]',
+                  'border border-transparent focus:border-[var(--color-info)] focus:outline-none',
+                  'placeholder:text-[var(--color-text-tertiary)]'
+                )}
+              />
+              <datalist id="resource-kinds">
+                {uniqueResourceKinds.map((kind) => (
+                  <option key={kind} value={kind} />
+                ))}
+              </datalist>
+            </div>
 
             {/* Status Filter */}
             <select

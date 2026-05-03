@@ -1,4 +1,14 @@
 export type PolicyStatus = 'draft' | 'review' | 'approved' | 'active' | 'deprecated';
+
+// Frontend resource types (lowercase for display)
+// Note: guardrail.types.ts has backend ResourceType with UPPERCASE values
+export type FrontendResourceType = 'lightspeed' | 'vmforge';
+
+// Alias for simpler usage in frontend components
+export type ResourceType = FrontendResourceType;
+export type ResourceKind = string; // Free-form for now, can be constrained later
+
+// Keep for backwards compatibility during migration
 export type PolicySeverity = 'low' | 'medium' | 'high' | 'critical';
 export type PolicyCategory = 'access-control' | 'compliance' | 'security' | 'cost' | 'operational';
 
@@ -32,8 +42,8 @@ export interface RegistryPolicy {
   id: string;
   name: string;
   description: string;
-  category: PolicyCategory;
-  severity: PolicySeverity;
+  resourceType: ResourceType;
+  resourceKind: string;
   status: PolicyStatus;
   tags: string[];
   author: string;

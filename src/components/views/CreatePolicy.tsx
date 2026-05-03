@@ -7,53 +7,116 @@ import {
   CheckCircle,
   XCircle,
   AlertCircle,
-  Plus,
-  Trash2,
   ChevronRight,
   FileText,
   Tag,
-  Shield,
-  Zap,
-  Folder,
-  Info,
+  Search,
+  Loader2,
+  Database,
+  Building2,
+  AppWindow,
+  Server,
+  ChevronDown,
+  ChevronUp,
+  Box,
+  Layers,
 } from 'lucide-react';
 import { useUIStore, usePolicyStore, useEvaluationStore } from '@/store';
 import { useRegistryStore } from '@/store/registryStore';
 import { useEvaluate } from '@/hooks';
 import { initializeMonaco, defaultEditorOptions } from '@/monaco/config';
-import { cn, isValidJson } from '@/utils';
-import type { PolicyCategory, PolicySeverity } from '@/types';
+import { cn } from '@/utils';
+import type { ResourceType } from '@/types';
 
-type Step = 'metadata' | 'code' | 'tests' | 'review';
+type Step = 'metadata' | 'code' | 'scope' | 'review';
 
-const categories: { value: PolicyCategory; label: string; icon: React.ReactNode }[] = [
-  { value: 'access-control', label: 'Access Control', icon: <Shield className="w-4 h-4" /> },
-  { value: 'compliance', label: 'Compliance', icon: <CheckCircle className="w-4 h-4" /> },
-  { value: 'security', label: 'Security', icon: <Shield className="w-4 h-4" /> },
-  { value: 'cost', label: 'Cost', icon: <Zap className="w-4 h-4" /> },
-  { value: 'operational', label: 'Operational', icon: <Folder className="w-4 h-4" /> },
-];
-
-const severities: { value: PolicySeverity; label: string; color: string }[] = [
-  { value: 'critical', label: 'Critical', color: 'var(--color-error)' },
-  { value: 'high', label: 'High', color: 'var(--color-warning)' },
-  { value: 'medium', label: 'Medium', color: 'var(--color-info)' },
-  { value: 'low', label: 'Low', color: 'var(--color-text-tertiary)' },
+const resourceTypes: { value: ResourceType; label: string; description: string }[] = [
+  { value: 'lightspeed', label: 'Lightspeed', description: 'AI-powered automation policies' },
+  { value: 'vmforge', label: 'VMForge', description: 'Virtual machine provisioning policies' },
 ];
 
 const steps: { id: Step; label: string; number: number }[] = [
   { id: 'metadata', label: 'Metadata', number: 1 },
   { id: 'code', label: 'Policy Code', number: 2 },
-  { id: 'tests', label: 'Test Cases', number: 3 },
+  { id: 'scope', label: 'Scope', number: 3 },
   { id: 'review', label: 'Review & Submit', number: 4 },
 ];
 
-interface TestCaseForm {
+interface TestCase {
   id: string;
   name: string;
   description: string;
-  inputJson: string;
-  expectedJson: string;
+  input: Record<string, unknown>;
+  applicationId?: string;
+  organization?: string;
+  environment?: string;
+}
+
+// Mock function to simulate API call - replace with actual API call
+async function fetchTestCases(filters: {
+  applicationId?: string;
+  organization?: string;
+  environment?: string;
+}): Promise<TestCase[]> {
+  // Simulate API delay
+  await new Promise((resolve) => setTimeout(resolve, 1000));
+
+  // Mock test cases - in production, this would be an actual API call
+  const allTestCases: TestCase[] = [
+    {
+      id: '1',
+      name: 'Admin user access request',
+      description: 'Test case for admin role accessing protected resources',
+      input: { user: { role: 'admin', department: 'IT' }, resource: '/api/users', action: 'read' },
+      applicationId: 'app-001',
+      organization: 'acme-corp',
+      environment: 'production',
+    },
+    {
+      id: '2',
+      name: 'Standard user denied access',
+      description: 'Test case for standard user being denied admin resources',
+      input: { user: { role: 'user', department: 'Sales' }, resource: '/api/admin', action: 'write' },
+      applicationId: 'app-001',
+      organization: 'acme-corp',
+      environment: 'production',
+    },
+    {
+      id: '3',
+      name: 'Service account automation',
+      description: 'Test case for service accounts in CI/CD pipelines',
+      input: { user: { role: 'service', serviceId: 'ci-runner' }, resource: '/api/deploy', action: 'execute' },
+      applicationId: 'app-002',
+      organization: 'acme-corp',
+      environment: 'staging',
+    },
+    {
+      id: '4',
+      name: 'Cross-org access attempt',
+      description: 'Test case for users attempting cross-organization access',
+      input: { user: { role: 'admin', org: 'external' }, resource: '/api/internal', action: 'read' },
+      applicationId: 'app-001',
+      organization: 'external-org',
+      environment: 'development',
+    },
+    {
+      id: '5',
+      name: 'Guest user limited access',
+      description: 'Test case for guest users with read-only permissions',
+      input: { user: { role: 'guest' }, resource: '/api/public', action: 'read' },
+      applicationId: 'app-003',
+      organization: 'acme-corp',
+      environment: 'production',
+    },
+  ];
+
+  // Filter based on provided criteria
+  return allTestCases.filter((tc) => {
+    if (filters.applicationId && tc.applicationId !== filters.applicationId) return false;
+    if (filters.organization && tc.organization !== filters.organization) return false;
+    if (filters.environment && tc.environment !== filters.environment) return false;
+    return true;
+  });
 }
 
 export function CreatePolicy() {
@@ -64,11 +127,19 @@ export function CreatePolicy() {
   const { evaluate } = useEvaluate();
 
   const [currentStep, setCurrentStep] = useState<Step>('metadata');
-  const [category, setCategory] = useState<PolicyCategory>('access-control');
-  const [severity, setSeverity] = useState<PolicySeverity>('medium');
+  const [resourceType, setResourceType] = useState<ResourceType>('lightspeed');
+  const [resourceKind, setResourceKind] = useState('');
   const [tags, setTags] = useState<string[]>([]);
   const [tagInput, setTagInput] = useState('');
-  const [testCases, setTestCases] = useState<TestCaseForm[]>([]);
+
+  // Scope filter state
+  const [applicationId, setApplicationId] = useState('');
+  const [organization, setOrganization] = useState('');
+  const [environment, setEnvironment] = useState('');
+  const [testCases, setTestCases] = useState<TestCase[]>([]);
+  const [isFetchingTestCases, setIsFetchingTestCases] = useState(false);
+  const [hasFetched, setHasFetched] = useState(false);
+  const [expandedTestCase, setExpandedTestCase] = useState<string | null>(null);
 
   const handleAddTag = () => {
     if (tagInput.trim() && !tags.includes(tagInput.trim())) {
@@ -81,34 +152,35 @@ export function CreatePolicy() {
     setTags(tags.filter((t) => t !== tag));
   };
 
-  const handleAddTestCase = () => {
-    setTestCases([
-      ...testCases,
-      {
-        id: `test-${Date.now()}`,
-        name: '',
-        description: '',
-        inputJson: '{}',
-        expectedJson: '{"allow": true}',
-      },
-    ]);
+  const handleFetchTestCases = async () => {
+    setIsFetchingTestCases(true);
+    try {
+      const cases = await fetchTestCases({
+        applicationId: applicationId || undefined,
+        organization: organization || undefined,
+        environment: environment || undefined,
+      });
+      setTestCases(cases);
+      setHasFetched(true);
+    } catch (error) {
+      console.error('Failed to fetch test cases:', error);
+    } finally {
+      setIsFetchingTestCases(false);
+    }
   };
 
-  const handleUpdateTestCase = (id: string, field: keyof TestCaseForm, value: string) => {
-    setTestCases(testCases.map((tc) => (tc.id === id ? { ...tc, [field]: value } : tc)));
-  };
-
-  const handleRemoveTestCase = (id: string) => {
-    setTestCases(testCases.filter((tc) => tc.id !== id));
+  const handleUseTestInput = (testCase: TestCase) => {
+    setInputJson(JSON.stringify(testCase.input, null, 2));
+    setCurrentStep('code');
   };
 
   const canProceed = () => {
     switch (currentStep) {
       case 'metadata':
-        return metadata.name.trim() && metadata.description.trim();
+        return metadata.name.trim() && metadata.description.trim() && resourceKind.trim();
       case 'code':
         return regoCode.trim().length > 0;
-      case 'tests':
+      case 'scope':
         return true;
       case 'review':
         return true;
@@ -206,7 +278,7 @@ export function CreatePolicy() {
                       type="text"
                       value={metadata.name}
                       onChange={(e) => updateMetadata({ name: e.target.value })}
-                      placeholder="e.g., Admin Access Control Policy"
+                      placeholder="e.g., VM Size Limit Policy"
                       className={cn(
                         'w-full px-4 py-3 rounded-[var(--radius-lg)]',
                         'bg-[var(--color-surface-secondary)] text-[var(--color-text-primary)]',
@@ -240,90 +312,88 @@ export function CreatePolicy() {
                 </div>
               </div>
 
-              {/* Category Card */}
+              {/* Resource Type Card */}
               <div className="rounded-[var(--radius-xl)] bg-[var(--color-surface)] shadow-[var(--shadow-card)] border border-[var(--color-border-light)] overflow-hidden">
                 <div className="px-6 py-4 border-b border-[var(--color-border-light)] bg-[var(--color-surface-secondary)]/50">
                   <div className="flex items-center gap-3">
                     <div className="p-2 rounded-[var(--radius-md)] bg-[var(--color-success-bg)]">
-                      <Folder className="w-5 h-5 text-[var(--color-success)]" />
+                      <Box className="w-5 h-5 text-[var(--color-success)]" />
                     </div>
                     <div>
-                      <h3 className="font-semibold text-[var(--color-text-primary)]">Category</h3>
-                      <p className="text-sm text-[var(--color-text-secondary)]">Select the policy category</p>
+                      <h3 className="font-semibold text-[var(--color-text-primary)]">Resource Type</h3>
+                      <p className="text-sm text-[var(--color-text-secondary)]">Select the resource type this policy applies to</p>
                     </div>
                   </div>
                 </div>
                 <div className="p-6">
-                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3">
-                    {categories.map((cat) => (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    {resourceTypes.map((rt) => (
                       <button
-                        key={cat.value}
-                        onClick={() => setCategory(cat.value)}
+                        key={rt.value}
+                        onClick={() => setResourceType(rt.value)}
                         className={cn(
-                          'flex flex-col items-center gap-2 p-4 rounded-[var(--radius-lg)]',
-                          'border-2 transition-all duration-200',
-                          category === cat.value
+                          'flex items-start gap-4 p-4 rounded-[var(--radius-lg)]',
+                          'border-2 transition-all duration-200 text-left',
+                          resourceType === rt.value
                             ? 'border-[var(--color-info)] bg-[var(--color-info-bg)]'
                             : 'border-[var(--color-border-light)] bg-[var(--color-surface-secondary)] hover:border-[var(--color-border)]'
                         )}
                       >
                         <div className={cn(
-                          'p-2 rounded-[var(--radius-md)]',
-                          category === cat.value
+                          'p-3 rounded-[var(--radius-md)]',
+                          resourceType === rt.value
                             ? 'bg-[var(--color-info)] text-white'
                             : 'bg-[var(--color-surface)] text-[var(--color-text-secondary)]'
                         )}>
-                          {cat.icon}
+                          <Box className="w-5 h-5" />
                         </div>
-                        <span className={cn(
-                          'text-sm font-medium',
-                          category === cat.value
-                            ? 'text-[var(--color-info)]'
-                            : 'text-[var(--color-text-secondary)]'
-                        )}>
-                          {cat.label}
-                        </span>
+                        <div>
+                          <span className={cn(
+                            'block text-base font-semibold',
+                            resourceType === rt.value
+                              ? 'text-[var(--color-info)]'
+                              : 'text-[var(--color-text-primary)]'
+                          )}>
+                            {rt.label}
+                          </span>
+                          <span className="text-sm text-[var(--color-text-secondary)]">
+                            {rt.description}
+                          </span>
+                        </div>
                       </button>
                     ))}
                   </div>
                 </div>
               </div>
 
-              {/* Severity Card */}
+              {/* Resource Kind Card */}
               <div className="rounded-[var(--radius-xl)] bg-[var(--color-surface)] shadow-[var(--shadow-card)] border border-[var(--color-border-light)] overflow-hidden">
                 <div className="px-6 py-4 border-b border-[var(--color-border-light)] bg-[var(--color-surface-secondary)]/50">
                   <div className="flex items-center gap-3">
                     <div className="p-2 rounded-[var(--radius-md)] bg-[var(--color-warning-bg)]">
-                      <AlertCircle className="w-5 h-5 text-[var(--color-warning)]" />
+                      <Layers className="w-5 h-5 text-[var(--color-warning)]" />
                     </div>
                     <div>
-                      <h3 className="font-semibold text-[var(--color-text-primary)]">Severity Level</h3>
-                      <p className="text-sm text-[var(--color-text-secondary)]">How critical is this policy?</p>
+                      <h3 className="font-semibold text-[var(--color-text-primary)]">Resource Kind</h3>
+                      <p className="text-sm text-[var(--color-text-secondary)]">Specify the kind of resource within the selected type</p>
                     </div>
                   </div>
                 </div>
                 <div className="p-6">
-                  <div className="flex gap-3">
-                    {severities.map((sev) => (
-                      <button
-                        key={sev.value}
-                        onClick={() => setSeverity(sev.value)}
-                        className={cn(
-                          'flex-1 py-3 px-4 rounded-[var(--radius-lg)]',
-                          'border-2 transition-all duration-200 font-medium',
-                          severity === sev.value
-                            ? 'border-current'
-                            : 'border-[var(--color-border-light)] hover:border-[var(--color-border)]'
-                        )}
-                        style={{
-                          color: severity === sev.value ? sev.color : 'var(--color-text-secondary)',
-                          backgroundColor: severity === sev.value ? `color-mix(in srgb, ${sev.color} 12%, transparent)` : 'var(--color-surface-secondary)',
-                        }}
-                      >
-                        {sev.label}
-                      </button>
-                    ))}
-                  </div>
+                  <input
+                    type="text"
+                    value={resourceKind}
+                    onChange={(e) => setResourceKind(e.target.value)}
+                    placeholder="e.g., VirtualMachine, Playbook, Template"
+                    className={cn(
+                      'w-full px-4 py-3 rounded-[var(--radius-lg)]',
+                      'bg-[var(--color-surface-secondary)] text-[var(--color-text-primary)]',
+                      'border border-[var(--color-border-light)]',
+                      'focus:border-[var(--color-info)] focus:ring-4 focus:ring-[var(--color-info)]/10 focus:outline-none',
+                      'placeholder:text-[var(--color-text-tertiary)]',
+                      'transition-all duration-200'
+                    )}
+                  />
                 </div>
               </div>
 
@@ -532,165 +602,238 @@ export function CreatePolicy() {
             </div>
           )}
 
-          {/* Step 3: Tests */}
-          {currentStep === 'tests' && (
+          {/* Step 3: Scope - Fetch Test Cases */}
+          {currentStep === 'scope' && (
             <div className="space-y-6">
-              <div className="flex items-start justify-between">
-                <div>
-                  <h2 className="text-2xl font-semibold text-[var(--color-text-primary)] mb-2">
-                    Test Cases
-                  </h2>
-                  <p className="text-[var(--color-text-secondary)]">
-                    Define test cases to validate your policy behavior
-                  </p>
-                </div>
-                <button
-                  onClick={handleAddTestCase}
-                  className={cn(
-                    'flex items-center gap-2 px-5 py-2.5 rounded-[var(--radius-lg)]',
-                    'bg-[var(--color-info)] text-white font-medium',
-                    'transition-all hover:opacity-90'
-                  )}
-                >
-                  <Plus className="w-4 h-4" />
-                  Add Test Case
-                </button>
+              <div>
+                <h2 className="text-2xl font-semibold text-[var(--color-text-primary)] mb-2">
+                  Policy Scope & Test Cases
+                </h2>
+                <p className="text-[var(--color-text-secondary)]">
+                  Filter by scope to find relevant test cases for your policy
+                </p>
               </div>
 
-              {testCases.length > 0 ? (
-                <div className="space-y-4">
-                  {testCases.map((test, index) => (
-                    <div
-                      key={test.id}
-                      className="rounded-[var(--radius-xl)] bg-[var(--color-surface)] shadow-[var(--shadow-card)] border border-[var(--color-border-light)] overflow-hidden"
-                    >
-                      <div className="px-6 py-4 border-b border-[var(--color-border-light)] bg-[var(--color-surface-secondary)]/50 flex items-center justify-between">
-                        <div className="flex items-center gap-3">
-                          <div className="w-8 h-8 rounded-full bg-[var(--color-info-bg)] flex items-center justify-center">
-                            <span className="text-sm font-semibold text-[var(--color-info)]">{index + 1}</span>
-                          </div>
-                          <span className="font-medium text-[var(--color-text-primary)]">
-                            {test.name || `Test Case #${index + 1}`}
-                          </span>
-                        </div>
-                        <button
-                          onClick={() => handleRemoveTestCase(test.id)}
-                          className="p-2 rounded-[var(--radius-md)] text-[var(--color-text-tertiary)] hover:text-[var(--color-error)] hover:bg-[var(--color-error-bg)] transition-all"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </div>
-
-                      <div className="p-6 space-y-4">
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                          <div>
-                            <label className="block text-sm font-medium text-[var(--color-text-primary)] mb-2">
-                              Test Name
-                            </label>
-                            <input
-                              type="text"
-                              value={test.name}
-                              onChange={(e) => handleUpdateTestCase(test.id, 'name', e.target.value)}
-                              placeholder="e.g., Should allow admin users"
-                              className={cn(
-                                'w-full px-4 py-3 rounded-[var(--radius-lg)]',
-                                'bg-[var(--color-surface-secondary)] text-[var(--color-text-primary)]',
-                                'border border-[var(--color-border-light)]',
-                                'focus:border-[var(--color-info)] focus:ring-4 focus:ring-[var(--color-info)]/10 focus:outline-none',
-                                'placeholder:text-[var(--color-text-tertiary)]'
-                              )}
-                            />
-                          </div>
-                          <div>
-                            <label className="block text-sm font-medium text-[var(--color-text-primary)] mb-2">
-                              Description
-                            </label>
-                            <input
-                              type="text"
-                              value={test.description}
-                              onChange={(e) => handleUpdateTestCase(test.id, 'description', e.target.value)}
-                              placeholder="Brief description of what this test validates"
-                              className={cn(
-                                'w-full px-4 py-3 rounded-[var(--radius-lg)]',
-                                'bg-[var(--color-surface-secondary)] text-[var(--color-text-primary)]',
-                                'border border-[var(--color-border-light)]',
-                                'focus:border-[var(--color-info)] focus:ring-4 focus:ring-[var(--color-info)]/10 focus:outline-none',
-                                'placeholder:text-[var(--color-text-tertiary)]'
-                              )}
-                            />
-                          </div>
-                        </div>
-
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                          <div>
-                            <label className="block text-sm font-medium text-[var(--color-text-primary)] mb-2">
-                              Input JSON
-                            </label>
-                            <textarea
-                              value={test.inputJson}
-                              onChange={(e) => handleUpdateTestCase(test.id, 'inputJson', e.target.value)}
-                              rows={4}
-                              className={cn(
-                                'w-full px-4 py-3 rounded-[var(--radius-lg)] font-mono text-sm resize-none',
-                                'bg-[var(--color-surface-secondary)] text-[var(--color-text-primary)]',
-                                'border',
-                                'focus:border-[var(--color-info)] focus:ring-4 focus:ring-[var(--color-info)]/10 focus:outline-none',
-                                isValidJson(test.inputJson)
-                                  ? 'border-[var(--color-border-light)]'
-                                  : 'border-[var(--color-error)]'
-                              )}
-                            />
-                          </div>
-                          <div>
-                            <label className="block text-sm font-medium text-[var(--color-text-primary)] mb-2">
-                              Expected Result
-                            </label>
-                            <textarea
-                              value={test.expectedJson}
-                              onChange={(e) => handleUpdateTestCase(test.id, 'expectedJson', e.target.value)}
-                              rows={4}
-                              className={cn(
-                                'w-full px-4 py-3 rounded-[var(--radius-lg)] font-mono text-sm resize-none',
-                                'bg-[var(--color-surface-secondary)] text-[var(--color-text-primary)]',
-                                'border',
-                                'focus:border-[var(--color-info)] focus:ring-4 focus:ring-[var(--color-info)]/10 focus:outline-none',
-                                isValidJson(test.expectedJson)
-                                  ? 'border-[var(--color-border-light)]'
-                                  : 'border-[var(--color-error)]'
-                              )}
-                            />
-                          </div>
-                        </div>
-                      </div>
+              {/* Filter Card */}
+              <div className="rounded-[var(--radius-xl)] bg-[var(--color-surface)] shadow-[var(--shadow-card)] border border-[var(--color-border-light)] overflow-hidden">
+                <div className="px-6 py-4 border-b border-[var(--color-border-light)] bg-[var(--color-surface-secondary)]/50">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 rounded-[var(--radius-md)] bg-[var(--color-info-bg)]">
+                      <Search className="w-5 h-5 text-[var(--color-info)]" />
                     </div>
-                  ))}
+                    <div>
+                      <h3 className="font-semibold text-[var(--color-text-primary)]">Filter Test Cases</h3>
+                      <p className="text-sm text-[var(--color-text-secondary)]">All fields are optional. Leave empty to fetch all test cases.</p>
+                    </div>
+                  </div>
                 </div>
-              ) : (
-                <div className="rounded-[var(--radius-xl)] border-2 border-dashed border-[var(--color-border-light)] bg-[var(--color-surface)] p-12">
-                  <div className="flex flex-col items-center justify-center text-center">
-                    <div className="p-4 rounded-full bg-[var(--color-surface-secondary)] mb-4">
-                      <Info className="w-8 h-8 text-[var(--color-text-tertiary)]" />
+                <div className="p-6">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    {/* Application ID */}
+                    <div>
+                      <label className="flex items-center gap-2 text-sm font-medium text-[var(--color-text-primary)] mb-2">
+                        <AppWindow className="w-4 h-4 text-[var(--color-text-tertiary)]" />
+                        Application ID
+                      </label>
+                      <input
+                        type="text"
+                        value={applicationId}
+                        onChange={(e) => setApplicationId(e.target.value)}
+                        placeholder="e.g., app-001"
+                        className={cn(
+                          'w-full px-4 py-3 rounded-[var(--radius-lg)]',
+                          'bg-[var(--color-surface-secondary)] text-[var(--color-text-primary)]',
+                          'border border-[var(--color-border-light)]',
+                          'focus:border-[var(--color-info)] focus:ring-4 focus:ring-[var(--color-info)]/10 focus:outline-none',
+                          'placeholder:text-[var(--color-text-tertiary)]'
+                        )}
+                      />
                     </div>
-                    <h3 className="text-lg font-semibold text-[var(--color-text-primary)] mb-2">
-                      No test cases yet
-                    </h3>
-                    <p className="text-[var(--color-text-secondary)] mb-6 max-w-sm">
-                      Test cases help ensure your policy works correctly. Add tests to validate different scenarios.
+
+                    {/* Organization */}
+                    <div>
+                      <label className="flex items-center gap-2 text-sm font-medium text-[var(--color-text-primary)] mb-2">
+                        <Building2 className="w-4 h-4 text-[var(--color-text-tertiary)]" />
+                        Organization
+                      </label>
+                      <input
+                        type="text"
+                        value={organization}
+                        onChange={(e) => setOrganization(e.target.value)}
+                        placeholder="e.g., acme-corp"
+                        className={cn(
+                          'w-full px-4 py-3 rounded-[var(--radius-lg)]',
+                          'bg-[var(--color-surface-secondary)] text-[var(--color-text-primary)]',
+                          'border border-[var(--color-border-light)]',
+                          'focus:border-[var(--color-info)] focus:ring-4 focus:ring-[var(--color-info)]/10 focus:outline-none',
+                          'placeholder:text-[var(--color-text-tertiary)]'
+                        )}
+                      />
+                    </div>
+
+                    {/* Environment */}
+                    <div>
+                      <label className="flex items-center gap-2 text-sm font-medium text-[var(--color-text-primary)] mb-2">
+                        <Server className="w-4 h-4 text-[var(--color-text-tertiary)]" />
+                        Environment
+                      </label>
+                      <input
+                        type="text"
+                        value={environment}
+                        onChange={(e) => setEnvironment(e.target.value)}
+                        placeholder="e.g., production"
+                        className={cn(
+                          'w-full px-4 py-3 rounded-[var(--radius-lg)]',
+                          'bg-[var(--color-surface-secondary)] text-[var(--color-text-primary)]',
+                          'border border-[var(--color-border-light)]',
+                          'focus:border-[var(--color-info)] focus:ring-4 focus:ring-[var(--color-info)]/10 focus:outline-none',
+                          'placeholder:text-[var(--color-text-tertiary)]'
+                        )}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="mt-6 flex items-center justify-between">
+                    <p className="text-sm text-[var(--color-text-tertiary)]">
+                      {applicationId || organization || environment
+                        ? `Filtering by: ${[applicationId && 'Application', organization && 'Organization', environment && 'Environment'].filter(Boolean).join(', ')}`
+                        : 'No filters applied - will fetch all test cases'}
                     </p>
                     <button
-                      onClick={handleAddTestCase}
+                      onClick={handleFetchTestCases}
+                      disabled={isFetchingTestCases}
                       className={cn(
-                        'flex items-center gap-2 px-5 py-2.5 rounded-[var(--radius-lg)]',
+                        'flex items-center gap-2 px-6 py-2.5 rounded-[var(--radius-lg)]',
                         'bg-[var(--color-info)] text-white font-medium',
-                        'transition-all hover:opacity-90'
+                        'transition-all hover:opacity-90',
+                        'disabled:opacity-50 disabled:cursor-not-allowed'
                       )}
                     >
-                      <Plus className="w-4 h-4" />
-                      Add Your First Test
+                      {isFetchingTestCases ? (
+                        <>
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                          Fetching...
+                        </>
+                      ) : (
+                        <>
+                          <Database className="w-4 h-4" />
+                          Fetch Test Cases
+                        </>
+                      )}
                     </button>
                   </div>
                 </div>
+              </div>
+
+              {/* Test Cases Results */}
+              {hasFetched && (
+                <div className="rounded-[var(--radius-xl)] bg-[var(--color-surface)] shadow-[var(--shadow-card)] border border-[var(--color-border-light)] overflow-hidden">
+                  <div className="px-6 py-4 border-b border-[var(--color-border-light)] bg-[var(--color-surface-secondary)]/50">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <div className="p-2 rounded-[var(--radius-md)] bg-[var(--color-success-bg)]">
+                          <Database className="w-5 h-5 text-[var(--color-success)]" />
+                        </div>
+                        <div>
+                          <h3 className="font-semibold text-[var(--color-text-primary)]">Test Cases</h3>
+                          <p className="text-sm text-[var(--color-text-secondary)]">
+                            {testCases.length} test case{testCases.length !== 1 ? 's' : ''} found
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="divide-y divide-[var(--color-border-light)]">
+                    {testCases.length > 0 ? (
+                      testCases.map((testCase) => (
+                        <div key={testCase.id} className="p-4">
+                          <button
+                            onClick={() => setExpandedTestCase(expandedTestCase === testCase.id ? null : testCase.id)}
+                            className="w-full flex items-center justify-between text-left"
+                          >
+                            <div className="flex-1">
+                              <div className="flex items-center gap-3 mb-1">
+                                <h4 className="font-medium text-[var(--color-text-primary)]">
+                                  {testCase.name}
+                                </h4>
+                                <div className="flex gap-2">
+                                  {testCase.applicationId && (
+                                    <span className="px-2 py-0.5 rounded-full text-xs bg-[var(--color-surface-secondary)] text-[var(--color-text-secondary)]">
+                                      {testCase.applicationId}
+                                    </span>
+                                  )}
+                                  {testCase.environment && (
+                                    <span className="px-2 py-0.5 rounded-full text-xs bg-[var(--color-info-bg)] text-[var(--color-info)]">
+                                      {testCase.environment}
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                              <p className="text-sm text-[var(--color-text-secondary)]">
+                                {testCase.description}
+                              </p>
+                            </div>
+                            {expandedTestCase === testCase.id ? (
+                              <ChevronUp className="w-5 h-5 text-[var(--color-text-tertiary)]" />
+                            ) : (
+                              <ChevronDown className="w-5 h-5 text-[var(--color-text-tertiary)]" />
+                            )}
+                          </button>
+
+                          {expandedTestCase === testCase.id && (
+                            <div className="mt-4 space-y-3">
+                              <div className="p-4 rounded-[var(--radius-lg)] bg-[var(--color-surface-secondary)]">
+                                <label className="block text-xs font-medium text-[var(--color-text-tertiary)] mb-2">
+                                  INPUT JSON
+                                </label>
+                                <pre className="text-sm font-mono text-[var(--color-text-primary)] overflow-auto">
+                                  {JSON.stringify(testCase.input, null, 2)}
+                                </pre>
+                              </div>
+                              <button
+                                onClick={() => handleUseTestInput(testCase)}
+                                className={cn(
+                                  'flex items-center gap-2 px-4 py-2 rounded-[var(--radius-md)]',
+                                  'bg-[var(--color-info)] text-white font-medium text-sm',
+                                  'transition-all hover:opacity-90'
+                                )}
+                              >
+                                <Play className="w-4 h-4" />
+                                Use This Input
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      ))
+                    ) : (
+                      <div className="p-12 text-center">
+                        <Database className="w-12 h-12 mx-auto mb-4 text-[var(--color-text-tertiary)] opacity-50" />
+                        <h3 className="text-lg font-medium text-[var(--color-text-primary)] mb-2">
+                          No test cases found
+                        </h3>
+                        <p className="text-[var(--color-text-secondary)]">
+                          Try adjusting your filters or leave them empty to see all test cases.
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                </div>
               )}
+
+              {/* Info Box */}
+              <div className="rounded-[var(--radius-lg)] bg-[var(--color-info-bg)] border border-[var(--color-info)]/20 p-4">
+                <div className="flex gap-3">
+                  <AlertCircle className="w-5 h-5 text-[var(--color-info)] flex-shrink-0 mt-0.5" />
+                  <div>
+                    <p className="text-sm font-medium text-[var(--color-info)]">
+                      How it works
+                    </p>
+                    <p className="text-sm text-[var(--color-info)]/80 mt-1">
+                      Test cases are fetched from your organization's test database. Use filters to narrow down relevant inputs for your policy, then click "Use This Input" to test your policy with real data.
+                    </p>
+                  </div>
+                </div>
+              </div>
             </div>
           )}
 
@@ -719,28 +862,22 @@ export function CreatePolicy() {
                         <dd className="font-medium text-[var(--color-text-primary)]">{metadata.name || '—'}</dd>
                       </div>
                       <div className="flex justify-between items-center py-2 border-b border-[var(--color-border-light)]">
-                        <dt className="text-[var(--color-text-secondary)]">Category</dt>
+                        <dt className="text-[var(--color-text-secondary)]">Resource Type</dt>
                         <dd className="font-medium text-[var(--color-text-primary)] capitalize">
-                          {category.replace('-', ' ')}
+                          {resourceType}
                         </dd>
                       </div>
                       <div className="flex justify-between items-center py-2 border-b border-[var(--color-border-light)]">
-                        <dt className="text-[var(--color-text-secondary)]">Severity</dt>
-                        <dd>
-                          <span
-                            className="px-2.5 py-1 rounded-full text-xs font-semibold capitalize"
-                            style={{
-                              color: severities.find(s => s.value === severity)?.color,
-                              backgroundColor: `color-mix(in srgb, ${severities.find(s => s.value === severity)?.color} 12%, transparent)`,
-                            }}
-                          >
-                            {severity}
-                          </span>
+                        <dt className="text-[var(--color-text-secondary)]">Resource Kind</dt>
+                        <dd className="font-medium text-[var(--color-text-primary)]">
+                          {resourceKind || '—'}
                         </dd>
                       </div>
                       <div className="flex justify-between items-center py-2">
-                        <dt className="text-[var(--color-text-secondary)]">Test Cases</dt>
-                        <dd className="font-medium text-[var(--color-text-primary)]">{testCases.length}</dd>
+                        <dt className="text-[var(--color-text-secondary)]">Code Lines</dt>
+                        <dd className="font-medium text-[var(--color-text-primary)]">
+                          {regoCode.split('\n').length}
+                        </dd>
                       </div>
                     </dl>
                   </div>

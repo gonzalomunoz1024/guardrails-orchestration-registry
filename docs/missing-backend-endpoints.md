@@ -692,7 +692,179 @@ CRUD operations for test cases associated with a guardrail.
 
 ---
 
-## 9. Policy Code Storage (Rego)
+## 9. Scope-Based Test Cases Fetch
+
+### Endpoint Purpose
+Fetches test case inputs from an external data source based on scope filters. Used during policy creation to retrieve real-world sample inputs for testing the policy against.
+
+### Frontend Flow That Needs It
+- `CreatePolicy.tsx` - "Scope" step (Step 3) where users specify Application ID, Organization, and Environment to fetch relevant test case inputs
+- All three filter fields are optional - if none are provided, all test cases are returned
+- Fetched test cases can be used as inputs in the policy editor for evaluation
+
+### Specification
+
+**HTTP Method:** GET
+
+**Proposed Path:** `/api/v1/registry/test-inputs` or `/api/v1/scope/test-cases`
+
+**Request Headers:**
+```
+Content-Type: application/json
+Authorization: Bearer {token}
+```
+
+**Path Parameters:** None
+
+**Query Parameters:**
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `applicationId` | string | No | Filter by application ID |
+| `organization` | string | No | Filter by organization/LOB |
+| `environment` | string | No | Filter by environment (e.g., "dev", "staging", "prod") |
+| `resourceType` | string | No | Filter by resource type (e.g., "lightspeed", "vmforge") |
+| `resourceKind` | string | No | Filter by resource kind |
+| `page` | number | No | Page number (default: 0) |
+| `size` | number | No | Page size (default: 20, max: 100) |
+
+**Request Body:** None
+
+**Example Requests:**
+```http
+# Fetch all test cases (no filters)
+GET /api/v1/registry/test-inputs
+
+# Fetch test cases for a specific application
+GET /api/v1/registry/test-inputs?applicationId=app-123
+
+# Fetch test cases with multiple filters
+GET /api/v1/registry/test-inputs?applicationId=app-123&environment=production&resourceType=lightspeed
+```
+
+**Example Success Response (200 OK):**
+```json
+{
+  "page": 0,
+  "size": 20,
+  "totalElements": 156,
+  "totalPages": 8,
+  "content": [
+    {
+      "id": "tc-input-001",
+      "name": "VM Provisioning Request - Large Instance",
+      "description": "Sample input for provisioning a large VM in production",
+      "applicationId": "app-123",
+      "organization": "Platform Team",
+      "environment": "production",
+      "resourceType": "vmforge",
+      "resourceKind": "VirtualMachine",
+      "input": {
+        "request": {
+          "action": "provision",
+          "resource": {
+            "type": "virtual_machine",
+            "size": "large",
+            "region": "us-east-1"
+          },
+          "user": {
+            "id": "user-456",
+            "role": "developer",
+            "department": "engineering"
+          }
+        }
+      },
+      "metadata": {
+        "source": "production-logs",
+        "capturedAt": "2024-03-15T10:30:00Z"
+      }
+    },
+    {
+      "id": "tc-input-002",
+      "name": "AI Model Deployment Request",
+      "description": "Sample input for deploying an AI model through Lightspeed",
+      "applicationId": "app-789",
+      "organization": "ML Ops",
+      "environment": "staging",
+      "resourceType": "lightspeed",
+      "resourceKind": "ModelDeployment",
+      "input": {
+        "request": {
+          "action": "deploy",
+          "model": {
+            "name": "recommendation-v2",
+            "version": "2.1.0",
+            "resources": {
+              "gpu": 2,
+              "memory": "32Gi"
+            }
+          },
+          "user": {
+            "id": "user-789",
+            "role": "ml-engineer",
+            "team": "recommendations"
+          }
+        }
+      },
+      "metadata": {
+        "source": "staging-environment",
+        "capturedAt": "2024-03-20T14:00:00Z"
+      }
+    }
+  ],
+  "filters": {
+    "availableApplications": ["app-123", "app-456", "app-789"],
+    "availableOrganizations": ["Platform Team", "ML Ops", "Security"],
+    "availableEnvironments": ["dev", "staging", "production"]
+  }
+}
+```
+
+**Example Empty Response (200 OK):**
+```json
+{
+  "page": 0,
+  "size": 20,
+  "totalElements": 0,
+  "totalPages": 0,
+  "content": [],
+  "message": "No test cases found matching the specified filters"
+}
+```
+
+**Example Error Response (400 Bad Request):**
+```json
+{
+  "error": "INVALID_PARAMETER",
+  "message": "Invalid environment value: 'invalid'. Must be one of: dev, staging, production",
+  "timestamp": "2024-03-21T08:30:00Z"
+}
+```
+
+**Expected Status Codes:**
+- 200: Success (may return empty content array)
+- 400: Bad Request (invalid filter parameters)
+- 401: Unauthorized
+- 500: Internal Server Error
+
+**Auth Requirements:** Bearer token required
+
+**Priority:** HIGH - Required for the policy creation workflow to fetch real sample inputs
+
+**Implementation Notes:**
+- This endpoint should pull from historical evaluation data or a curated test data repository
+- The `input` field should contain the actual JSON input that would be evaluated against a policy
+- Consider caching frequently accessed test cases
+- The `filters` object in the response helps the frontend populate dropdown options
+
+**Frontend Usage:**
+1. User enters filter criteria (all optional)
+2. Frontend calls this endpoint with the filters
+3. Results are displayed in a list
+4. User can click "Use This Input" to populate the policy editor's input field with the test case's `input` value
+
+---
+
+## 10. Policy Code Storage (Rego)
 
 ### Endpoint Purpose
 The backend currently stores guardrail definitions but not the actual Rego policy code. If policies need to be executable, the code must be stored.
@@ -752,7 +924,7 @@ allow if {
 
 ---
 
-## 10. OPA Evaluation Passthrough
+## 11. OPA Evaluation Passthrough
 
 ### Endpoint Purpose
 Provides a passthrough to OPA for policy evaluation. This allows the frontend to talk to a single backend service instead of needing direct access to OPA.
@@ -913,9 +1085,10 @@ For syntax validation without full evaluation:
 | 5 | Extended Metadata | MEDIUM | Filtering, categories, tags |
 | 6 | Version History | LOW | Version tracking |
 | 7 | Evaluation Stats | MEDIUM | Policy effectiveness metrics |
-| 8 | Test Cases | LOW | Policy testing |
-| 9 | Policy Code Storage | HIGH/LOW | Depends on execution model |
-| 10 | OPA Evaluation Passthrough | HIGH | Policy editor evaluation |
+| 8 | Test Cases Management | LOW | Policy testing CRUD |
+| 9 | Scope-Based Test Cases Fetch | HIGH | Policy creation workflow (fetch sample inputs) |
+| 10 | Policy Code Storage | HIGH/LOW | Depends on execution model |
+| 11 | OPA Evaluation Passthrough | HIGH | Policy editor evaluation |
 
 ---
 

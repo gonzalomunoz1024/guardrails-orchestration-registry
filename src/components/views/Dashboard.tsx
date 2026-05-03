@@ -107,7 +107,8 @@ export function Dashboard() {
   };
 
   const recentPolicies = policies.slice(0, 3);
-  const criticalPolicies = policies.filter((p) => p.severity === 'critical' && p.status === 'active');
+  // Filter active policies (was previously filtered by severity='critical')
+  const activePoliciesList = policies.filter((p) => p.status === 'active');
 
   const statCards = [
     {
@@ -308,11 +309,11 @@ export function Dashboard() {
               <h2 className="font-semibold text-[var(--color-text-primary)]">Critical Policies</h2>
             </div>
             <span className="text-xs text-[var(--color-text-tertiary)]">
-              {criticalPolicies.length} active
+              {activePoliciesList.length} active
             </span>
           </div>
           <div className="divide-y divide-[var(--color-border-light)]">
-            {criticalPolicies.map((policy) => (
+            {activePoliciesList.map((policy) => (
               <button
                 key={policy.id}
                 onClick={() => navigateToPolicy(policy)}
