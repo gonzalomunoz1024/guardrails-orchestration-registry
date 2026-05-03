@@ -20,19 +20,31 @@ import {
   ChevronUp,
   Box,
   Layers,
+  Shield,
+  Zap,
 } from 'lucide-react';
 import { useUIStore, usePolicyStore, useEvaluationStore } from '@/store';
 import { useRegistryStore } from '@/store/registryStore';
 import { useEvaluate } from '@/hooks';
 import { initializeMonaco, defaultEditorOptions } from '@/monaco/config';
 import { cn } from '@/utils';
-import type { ResourceType } from '@/types';
+import type { ResourceType, EnforcementType, GuardrailKind } from '@/types';
 
 type Step = 'metadata' | 'code' | 'scope' | 'review';
 
 const resourceTypes: { value: ResourceType; label: string; description: string }[] = [
   { value: 'lightspeed', label: 'Lightspeed', description: 'AI-powered automation policies' },
   { value: 'vmforge', label: 'VMForge', description: 'Virtual machine provisioning policies' },
+];
+
+const enforcementTypes: { value: EnforcementType; label: string; description: string }[] = [
+  { value: 'MANDATORY', label: 'Mandatory', description: 'Policy must pass for action to proceed' },
+  { value: 'OPTIONAL', label: 'Optional', description: 'Policy is advisory, failures are logged but allowed' },
+];
+
+const guardrailKinds: { value: GuardrailKind; label: string; description: string }[] = [
+  { value: 'PRECHECK', label: 'Pre-check', description: 'Evaluated before the action is executed' },
+  { value: 'POSTCHECK', label: 'Post-check', description: 'Evaluated after the action completes' },
 ];
 
 const steps: { id: Step; label: string; number: number }[] = [
@@ -127,8 +139,11 @@ export function CreatePolicy() {
   const { evaluate } = useEvaluate();
 
   const [currentStep, setCurrentStep] = useState<Step>('metadata');
+  const [policyId, setPolicyId] = useState('');
   const [resourceType, setResourceType] = useState<ResourceType>('lightspeed');
   const [resourceKind, setResourceKind] = useState('');
+  const [enforcementType, setEnforcementType] = useState<EnforcementType>('MANDATORY');
+  const [guardrailKind, setGuardrailKind] = useState<GuardrailKind>('PRECHECK');
   const [tags, setTags] = useState<string[]>([]);
   const [tagInput, setTagInput] = useState('');
 
@@ -177,7 +192,7 @@ export function CreatePolicy() {
   const canProceed = () => {
     switch (currentStep) {
       case 'metadata':
-        return metadata.name.trim() && metadata.description.trim() && resourceKind.trim();
+        return policyId.trim() && metadata.name.trim() && metadata.description.trim() && resourceKind.trim();
       case 'code':
         return regoCode.trim().length > 0;
       case 'scope':
@@ -190,6 +205,38 @@ export function CreatePolicy() {
   };
 
   const handleSubmit = () => {
+    // Map frontend resourceType to backend format (uppercase)
+    const backendResourceType = resourceType.toUpperCase() as 'LIGHTSPEED' | 'VMFORGE';
+
+    // Prepare the backend payload
+    const createGuardrailPayload = {
+      id: policyId,
+      name: metadata.name,
+      description: metadata.description,
+      version: '1.0.0', // Implicit: always start with 1.0.0
+      status: 'DRAFT' as const, // Implicit: new policies start as draft
+      enforcementType: enforcementType,
+      kind: guardrailKind,
+      resourceType: backendResourceType,
+      resourceKind: resourceKind,
+      owner: metadata.author || 'current-user', // TODO: Get from auth context
+      // createdAt and updatedAt are set by the backend
+    };
+
+    // Log the payload for now (replace with actual API call)
+    console.log('Creating guardrail with payload:', createGuardrailPayload);
+
+    // Configuration payload (separate endpoint)
+    const configPayload = {
+      global: JSON.parse(configJson || '{}'),
+      lobOverrides: {},
+    };
+    console.log('Configuration payload:', configPayload);
+
+    // TODO: Call actual API endpoints:
+    // 1. POST /api/v1/registry/guardrails - Create guardrail definition
+    // 2. PUT /api/v1/registry/configurations/{guardrailId} - Set configuration
+
     alert('Policy submitted for review!');
     setView('policies');
   };
@@ -270,24 +317,48 @@ export function CreatePolicy() {
                   </div>
                 </div>
                 <div className="p-6 space-y-5">
-                  <div>
-                    <label className="block text-sm font-medium text-[var(--color-text-primary)] mb-2">
-                      Policy Name
-                    </label>
-                    <input
-                      type="text"
-                      value={metadata.name}
-                      onChange={(e) => updateMetadata({ name: e.target.value })}
-                      placeholder="e.g., VM Size Limit Policy"
-                      className={cn(
-                        'w-full px-4 py-3 rounded-[var(--radius-lg)]',
-                        'bg-[var(--color-surface-secondary)] text-[var(--color-text-primary)]',
-                        'border border-[var(--color-border-light)]',
-                        'focus:border-[var(--color-info)] focus:ring-4 focus:ring-[var(--color-info)]/10 focus:outline-none',
-                        'placeholder:text-[var(--color-text-tertiary)]',
-                        'transition-all duration-200'
-                      )}
-                    />
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-[var(--color-text-primary)] mb-2">
+                        Policy ID
+                      </label>
+                      <input
+                        type="text"
+                        value={policyId}
+                        onChange={(e) => setPolicyId(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '-'))}
+                        placeholder="e.g., vm-size-limit"
+                        className={cn(
+                          'w-full px-4 py-3 rounded-[var(--radius-lg)]',
+                          'bg-[var(--color-surface-secondary)] text-[var(--color-text-primary)]',
+                          'border border-[var(--color-border-light)]',
+                          'focus:border-[var(--color-info)] focus:ring-4 focus:ring-[var(--color-info)]/10 focus:outline-none',
+                          'placeholder:text-[var(--color-text-tertiary)]',
+                          'transition-all duration-200 font-mono'
+                        )}
+                      />
+                      <p className="mt-1.5 text-xs text-[var(--color-text-tertiary)]">
+                        Unique identifier (lowercase, hyphens allowed)
+                      </p>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-[var(--color-text-primary)] mb-2">
+                        Policy Name
+                      </label>
+                      <input
+                        type="text"
+                        value={metadata.name}
+                        onChange={(e) => updateMetadata({ name: e.target.value })}
+                        placeholder="e.g., VM Size Limit Policy"
+                        className={cn(
+                          'w-full px-4 py-3 rounded-[var(--radius-lg)]',
+                          'bg-[var(--color-surface-secondary)] text-[var(--color-text-primary)]',
+                          'border border-[var(--color-border-light)]',
+                          'focus:border-[var(--color-info)] focus:ring-4 focus:ring-[var(--color-info)]/10 focus:outline-none',
+                          'placeholder:text-[var(--color-text-tertiary)]',
+                          'transition-all duration-200'
+                        )}
+                      />
+                    </div>
                   </div>
 
                   <div>
@@ -394,6 +465,120 @@ export function CreatePolicy() {
                       'transition-all duration-200'
                     )}
                   />
+                </div>
+              </div>
+
+              {/* Enforcement Type Card */}
+              <div className="rounded-[var(--radius-xl)] bg-[var(--color-surface)] shadow-[var(--shadow-card)] border border-[var(--color-border-light)] overflow-hidden">
+                <div className="px-6 py-4 border-b border-[var(--color-border-light)] bg-[var(--color-surface-secondary)]/50">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 rounded-[var(--radius-md)] bg-[var(--color-error-bg)]">
+                      <Shield className="w-5 h-5 text-[var(--color-error)]" />
+                    </div>
+                    <div>
+                      <h3 className="font-semibold text-[var(--color-text-primary)]">Enforcement Type</h3>
+                      <p className="text-sm text-[var(--color-text-secondary)]">How should policy violations be handled?</p>
+                    </div>
+                  </div>
+                </div>
+                <div className="p-6">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    {enforcementTypes.map((et) => (
+                      <button
+                        key={et.value}
+                        onClick={() => setEnforcementType(et.value)}
+                        className={cn(
+                          'flex items-start gap-4 p-4 rounded-[var(--radius-lg)]',
+                          'border-2 transition-all duration-200 text-left',
+                          enforcementType === et.value
+                            ? et.value === 'MANDATORY'
+                              ? 'border-[var(--color-error)] bg-[var(--color-error-bg)]'
+                              : 'border-[var(--color-warning)] bg-[var(--color-warning-bg)]'
+                            : 'border-[var(--color-border-light)] bg-[var(--color-surface-secondary)] hover:border-[var(--color-border)]'
+                        )}
+                      >
+                        <div className={cn(
+                          'p-3 rounded-[var(--radius-md)]',
+                          enforcementType === et.value
+                            ? et.value === 'MANDATORY'
+                              ? 'bg-[var(--color-error)] text-white'
+                              : 'bg-[var(--color-warning)] text-white'
+                            : 'bg-[var(--color-surface)] text-[var(--color-text-secondary)]'
+                        )}>
+                          <Shield className="w-5 h-5" />
+                        </div>
+                        <div>
+                          <span className={cn(
+                            'block text-base font-semibold',
+                            enforcementType === et.value
+                              ? et.value === 'MANDATORY'
+                                ? 'text-[var(--color-error)]'
+                                : 'text-[var(--color-warning)]'
+                              : 'text-[var(--color-text-primary)]'
+                          )}>
+                            {et.label}
+                          </span>
+                          <span className="text-sm text-[var(--color-text-secondary)]">
+                            {et.description}
+                          </span>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {/* Guardrail Kind Card */}
+              <div className="rounded-[var(--radius-xl)] bg-[var(--color-surface)] shadow-[var(--shadow-card)] border border-[var(--color-border-light)] overflow-hidden">
+                <div className="px-6 py-4 border-b border-[var(--color-border-light)] bg-[var(--color-surface-secondary)]/50">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 rounded-[var(--radius-md)] bg-[var(--color-info-bg)]">
+                      <Zap className="w-5 h-5 text-[var(--color-info)]" />
+                    </div>
+                    <div>
+                      <h3 className="font-semibold text-[var(--color-text-primary)]">Evaluation Timing</h3>
+                      <p className="text-sm text-[var(--color-text-secondary)]">When should this policy be evaluated?</p>
+                    </div>
+                  </div>
+                </div>
+                <div className="p-6">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    {guardrailKinds.map((gk) => (
+                      <button
+                        key={gk.value}
+                        onClick={() => setGuardrailKind(gk.value)}
+                        className={cn(
+                          'flex items-start gap-4 p-4 rounded-[var(--radius-lg)]',
+                          'border-2 transition-all duration-200 text-left',
+                          guardrailKind === gk.value
+                            ? 'border-[var(--color-info)] bg-[var(--color-info-bg)]'
+                            : 'border-[var(--color-border-light)] bg-[var(--color-surface-secondary)] hover:border-[var(--color-border)]'
+                        )}
+                      >
+                        <div className={cn(
+                          'p-3 rounded-[var(--radius-md)]',
+                          guardrailKind === gk.value
+                            ? 'bg-[var(--color-info)] text-white'
+                            : 'bg-[var(--color-surface)] text-[var(--color-text-secondary)]'
+                        )}>
+                          <Zap className="w-5 h-5" />
+                        </div>
+                        <div>
+                          <span className={cn(
+                            'block text-base font-semibold',
+                            guardrailKind === gk.value
+                              ? 'text-[var(--color-info)]'
+                              : 'text-[var(--color-text-primary)]'
+                          )}>
+                            {gk.label}
+                          </span>
+                          <span className="text-sm text-[var(--color-text-secondary)]">
+                            {gk.description}
+                          </span>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
                 </div>
               </div>
 
@@ -858,9 +1043,42 @@ export function CreatePolicy() {
                   <div className="p-6">
                     <dl className="space-y-4">
                       <div className="flex justify-between items-center py-2 border-b border-[var(--color-border-light)]">
+                        <dt className="text-[var(--color-text-secondary)]">ID</dt>
+                        <dd className="font-mono text-sm text-[var(--color-text-primary)]">{policyId || '—'}</dd>
+                      </div>
+                      <div className="flex justify-between items-center py-2 border-b border-[var(--color-border-light)]">
                         <dt className="text-[var(--color-text-secondary)]">Name</dt>
                         <dd className="font-medium text-[var(--color-text-primary)]">{metadata.name || '—'}</dd>
                       </div>
+                      <div className="flex justify-between items-center py-2 border-b border-[var(--color-border-light)]">
+                        <dt className="text-[var(--color-text-secondary)]">Version</dt>
+                        <dd className="font-mono text-sm text-[var(--color-text-primary)]">1.0.0</dd>
+                      </div>
+                      <div className="flex justify-between items-center py-2 border-b border-[var(--color-border-light)]">
+                        <dt className="text-[var(--color-text-secondary)]">Status</dt>
+                        <dd>
+                          <span className="px-2.5 py-1 rounded-full text-xs font-medium bg-[var(--color-surface-secondary)] text-[var(--color-text-secondary)]">
+                            Draft
+                          </span>
+                        </dd>
+                      </div>
+                      <div className="flex justify-between items-center py-2">
+                        <dt className="text-[var(--color-text-secondary)]">Code Lines</dt>
+                        <dd className="font-medium text-[var(--color-text-primary)]">
+                          {regoCode.split('\n').length}
+                        </dd>
+                      </div>
+                    </dl>
+                  </div>
+                </div>
+
+                {/* Resource & Enforcement Card */}
+                <div className="rounded-[var(--radius-xl)] bg-[var(--color-surface)] shadow-[var(--shadow-card)] border border-[var(--color-border-light)] overflow-hidden">
+                  <div className="px-6 py-4 border-b border-[var(--color-border-light)] bg-[var(--color-surface-secondary)]/50">
+                    <h3 className="font-semibold text-[var(--color-text-primary)]">Resource & Enforcement</h3>
+                  </div>
+                  <div className="p-6">
+                    <dl className="space-y-4">
                       <div className="flex justify-between items-center py-2 border-b border-[var(--color-border-light)]">
                         <dt className="text-[var(--color-text-secondary)]">Resource Type</dt>
                         <dd className="font-medium text-[var(--color-text-primary)] capitalize">
@@ -873,10 +1091,25 @@ export function CreatePolicy() {
                           {resourceKind || '—'}
                         </dd>
                       </div>
+                      <div className="flex justify-between items-center py-2 border-b border-[var(--color-border-light)]">
+                        <dt className="text-[var(--color-text-secondary)]">Enforcement</dt>
+                        <dd>
+                          <span className={cn(
+                            'px-2.5 py-1 rounded-full text-xs font-medium',
+                            enforcementType === 'MANDATORY'
+                              ? 'bg-[var(--color-error-bg)] text-[var(--color-error)]'
+                              : 'bg-[var(--color-warning-bg)] text-[var(--color-warning)]'
+                          )}>
+                            {enforcementType === 'MANDATORY' ? 'Mandatory' : 'Optional'}
+                          </span>
+                        </dd>
+                      </div>
                       <div className="flex justify-between items-center py-2">
-                        <dt className="text-[var(--color-text-secondary)]">Code Lines</dt>
-                        <dd className="font-medium text-[var(--color-text-primary)]">
-                          {regoCode.split('\n').length}
+                        <dt className="text-[var(--color-text-secondary)]">Timing</dt>
+                        <dd>
+                          <span className="px-2.5 py-1 rounded-full text-xs font-medium bg-[var(--color-info-bg)] text-[var(--color-info)]">
+                            {guardrailKind === 'PRECHECK' ? 'Pre-check' : 'Post-check'}
+                          </span>
                         </dd>
                       </div>
                     </dl>
