@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import {
   Filter,
   Grid,
@@ -12,6 +12,7 @@ import {
   ChevronRight,
   Loader2,
   RefreshCw,
+  Plus,
 } from 'lucide-react';
 import { useRegistryStore } from '@/store/registryStore';
 import { usePolicies } from '@/hooks';
@@ -79,6 +80,94 @@ function formatNumber(num: number): string {
   if (num >= 1000000) return `${(num / 1000000).toFixed(1)}M`;
   if (num >= 1000) return `${(num / 1000).toFixed(1)}K`;
   return num.toString();
+}
+
+interface PolicyTableProps {
+  policies: RegistryPolicy[];
+  onPolicyClick: (policy: RegistryPolicy) => void;
+}
+
+function PolicyTable({ policies, onPolicyClick }: PolicyTableProps) {
+  return (
+    <div className="rounded-[var(--radius-lg)] border border-[var(--color-border-light)] bg-[var(--color-surface)] overflow-hidden">
+      <table className="w-full">
+        <thead>
+          <tr className="border-b border-[var(--color-border-light)] bg-[var(--color-surface-secondary)]">
+            <th className="px-4 py-3 text-left text-xs font-semibold text-[var(--color-text-secondary)] uppercase tracking-wider">
+              Policy
+            </th>
+            <th className="px-4 py-3 text-left text-xs font-semibold text-[var(--color-text-secondary)] uppercase tracking-wider">
+              Category
+            </th>
+            <th className="px-4 py-3 text-left text-xs font-semibold text-[var(--color-text-secondary)] uppercase tracking-wider">
+              Severity
+            </th>
+            <th className="px-4 py-3 text-left text-xs font-semibold text-[var(--color-text-secondary)] uppercase tracking-wider">
+              Status
+            </th>
+            <th className="px-4 py-3 text-left text-xs font-semibold text-[var(--color-text-secondary)] uppercase tracking-wider">
+              Version
+            </th>
+            <th className="px-4 py-3 text-left text-xs font-semibold text-[var(--color-text-secondary)] uppercase tracking-wider">
+              Evaluations
+            </th>
+            <th className="px-4 py-3 text-left text-xs font-semibold text-[var(--color-text-secondary)] uppercase tracking-wider">
+              Allow Rate
+            </th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-[var(--color-border-light)]">
+          {policies.map((policy) => (
+            <tr
+              key={policy.id}
+              onClick={() => onPolicyClick(policy)}
+              className="hover:bg-[var(--color-surface-secondary)] cursor-pointer transition-colors"
+            >
+              <td className="px-4 py-4">
+                <div>
+                  <p className="font-medium text-[var(--color-text-primary)]">{policy.name}</p>
+                  <p className="text-sm text-[var(--color-text-tertiary)] line-clamp-1">{policy.description}</p>
+                </div>
+              </td>
+              <td className="px-4 py-4">
+                <div className="flex items-center gap-1.5 text-sm text-[var(--color-text-secondary)]">
+                  {getCategoryIcon(policy.category)}
+                  <span className="capitalize">{policy.category.replace('-', ' ')}</span>
+                </div>
+              </td>
+              <td className="px-4 py-4">
+                <span className={cn('px-2 py-0.5 rounded-full text-xs font-medium', getSeverityColor(policy.severity))}>
+                  {policy.severity}
+                </span>
+              </td>
+              <td className="px-4 py-4">
+                <span className="flex items-center gap-1.5 text-sm">
+                  {getStatusIcon(policy.status)}
+                  <span className="capitalize text-[var(--color-text-secondary)]">{policy.status}</span>
+                </span>
+              </td>
+              <td className="px-4 py-4 text-sm text-[var(--color-text-secondary)]">
+                v{policy.currentVersion}
+              </td>
+              <td className="px-4 py-4 text-sm text-[var(--color-text-secondary)]">
+                {formatNumber(policy.stats.totalEvaluations)}
+              </td>
+              <td className="px-4 py-4">
+                {policy.stats.totalEvaluations > 0 ? (
+                  <span className="flex items-center gap-1 text-sm font-medium text-[var(--color-success)]">
+                    <TrendingUp className="w-3 h-3" />
+                    {policy.stats.allowRate}%
+                  </span>
+                ) : (
+                  <span className="text-sm text-[var(--color-text-tertiary)]">—</span>
+                )}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
 }
 
 interface PolicyCardProps {
@@ -165,6 +254,8 @@ function PolicyCard({ policy, onClick }: PolicyCardProps) {
   );
 }
 
+type ViewMode = 'grid' | 'table';
+
 export function PolicyCatalog() {
   const {
     searchQuery,
@@ -173,7 +264,10 @@ export function PolicyCatalog() {
     setSelectedCategory,
     setSelectedStatus,
     navigateToPolicy,
+    setView,
   } = useRegistryStore();
+
+  const [viewMode, setViewMode] = useState<ViewMode>('grid');
 
   // Fetch policies from backend with fallback to mock data
   const { data: backendPolicies, isLoading, error, refetch } = usePolicies();
@@ -248,19 +342,42 @@ export function PolicyCatalog() {
             </select>
           </div>
 
-          {/* View Toggle & Count */}
+          {/* View Toggle, Count & Create Button */}
           <div className="flex items-center gap-4">
             <span className="text-sm text-[var(--color-text-tertiary)]">
               {filteredPolicies.length} {filteredPolicies.length === 1 ? 'policy' : 'policies'}
             </span>
             <div className="flex items-center gap-1 p-1 rounded-[var(--radius-md)] bg-[var(--color-surface-secondary)]">
-              <button className="p-1.5 rounded-[var(--radius-sm)] bg-[var(--color-surface)] shadow-sm">
-                <Grid className="w-4 h-4 text-[var(--color-text-primary)]" />
+              <button
+                onClick={() => setViewMode('grid')}
+                className={cn(
+                  'p-1.5 rounded-[var(--radius-sm)] transition-all',
+                  viewMode === 'grid'
+                    ? 'bg-[var(--color-surface)] shadow-sm'
+                    : 'text-[var(--color-text-tertiary)] hover:text-[var(--color-text-primary)]'
+                )}
+              >
+                <Grid className={cn('w-4 h-4', viewMode === 'grid' && 'text-[var(--color-text-primary)]')} />
               </button>
-              <button className="p-1.5 rounded-[var(--radius-sm)] text-[var(--color-text-tertiary)] hover:text-[var(--color-text-primary)]">
-                <List className="w-4 h-4" />
+              <button
+                onClick={() => setViewMode('table')}
+                className={cn(
+                  'p-1.5 rounded-[var(--radius-sm)] transition-all',
+                  viewMode === 'table'
+                    ? 'bg-[var(--color-surface)] shadow-sm'
+                    : 'text-[var(--color-text-tertiary)] hover:text-[var(--color-text-primary)]'
+                )}
+              >
+                <List className={cn('w-4 h-4', viewMode === 'table' && 'text-[var(--color-text-primary)]')} />
               </button>
             </div>
+            <button
+              onClick={() => setView('create-policy')}
+              className="flex items-center gap-2 px-4 py-2 rounded-[var(--radius-md)] bg-[var(--color-info)] text-white font-medium transition-all hover:opacity-90"
+            >
+              <Plus className="w-4 h-4" />
+              Create Policy
+            </button>
           </div>
         </div>
 
@@ -334,15 +451,19 @@ export function PolicyCatalog() {
             </button>
           </div>
         ) : filteredPolicies.length > 0 ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-            {filteredPolicies.map((policy) => (
-              <PolicyCard
-                key={policy.id}
-                policy={policy}
-                onClick={() => navigateToPolicy(policy)}
-              />
-            ))}
-          </div>
+          viewMode === 'grid' ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+              {filteredPolicies.map((policy) => (
+                <PolicyCard
+                  key={policy.id}
+                  policy={policy}
+                  onClick={() => navigateToPolicy(policy)}
+                />
+              ))}
+            </div>
+          ) : (
+            <PolicyTable policies={filteredPolicies} onPolicyClick={navigateToPolicy} />
+          )
         ) : (
           <div className="flex flex-col items-center justify-center h-64 text-[var(--color-text-tertiary)]">
             <AlertCircle className="w-12 h-12 mb-3 opacity-50" />
