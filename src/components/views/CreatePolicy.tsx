@@ -92,13 +92,13 @@ export function CreatePolicy() {
   const [expandedEditor, setExpandedEditor] = useState<'input' | 'config' | 'output' | null>(null);
 
   // Stabilize filter object to prevent React Query cache key instability
-  // resourceKind is pre-populated from Step 1
+  // resourceKind is pre-populated from Step 1 (only for Lightspeed)
   const testInputFilters = useMemo(() => ({
     applicationId: applicationId || undefined,
     organization: organization || undefined,
     environment: environment || undefined,
-    resourceKind: resourceKind || undefined,
-  }), [applicationId, organization, environment, resourceKind]);
+    resourceKind: resourceType === 'lightspeed' ? (resourceKind || undefined) : undefined,
+  }), [applicationId, organization, environment, resourceKind, resourceType]);
 
   // Use the real test inputs hook with scroll-based pagination
   const {
@@ -152,7 +152,9 @@ export function CreatePolicy() {
   const canProceed = () => {
     switch (currentStep) {
       case 'metadata':
-        return policyId.trim() && metadata.name.trim() && metadata.description.trim() && resourceKind.trim();
+        const baseValid = policyId.trim() && metadata.name.trim() && metadata.description.trim();
+        // Only require resourceKind for Lightspeed
+        return resourceType === 'lightspeed' ? baseValid && resourceKind.trim() : baseValid;
       case 'code':
         return regoCode.trim().length > 0;
       case 'blastradius':
@@ -179,7 +181,8 @@ export function CreatePolicy() {
       enforcementType: enforcementType,
       kind: DEFAULT_GUARDRAIL_KIND,
       resourceType: backendResourceType,
-      resourceKind: resourceKind,
+      // resourceKind only applies to Lightspeed
+      ...(resourceType === 'lightspeed' && { resourceKind }),
       owner: metadata.author || 'current-user', // TODO: Get from auth context
       // createdAt and updatedAt are set by the backend
     };
@@ -426,36 +429,38 @@ export function CreatePolicy() {
                 </div>
               </div>
 
-              {/* Resource Kind Card */}
-              <div className="rounded-[var(--radius-xl)] bg-[var(--color-surface)] shadow-[var(--shadow-card)] border border-[var(--color-border-light)] overflow-hidden">
-                <div className="px-6 py-4 border-b border-[var(--color-border-light)] bg-[var(--color-surface-secondary)]/50">
-                  <div className="flex items-center gap-3">
-                    <div className="p-2 rounded-[var(--radius-md)] bg-[var(--color-warning-bg)]">
-                      <Layers className="w-5 h-5 text-[var(--color-warning)]" />
-                    </div>
-                    <div>
-                      <h3 className="font-semibold text-[var(--color-text-primary)]">Resource Kind</h3>
-                      <p className="text-sm text-[var(--color-text-secondary)]">Specify the kind of resource within the selected type</p>
+              {/* Resource Kind Card - Only for Lightspeed */}
+              {resourceType === 'lightspeed' && (
+                <div className="rounded-[var(--radius-xl)] bg-[var(--color-surface)] shadow-[var(--shadow-card)] border border-[var(--color-border-light)] overflow-hidden">
+                  <div className="px-6 py-4 border-b border-[var(--color-border-light)] bg-[var(--color-surface-secondary)]/50">
+                    <div className="flex items-center gap-3">
+                      <div className="p-2 rounded-[var(--radius-md)] bg-[var(--color-warning-bg)]">
+                        <Layers className="w-5 h-5 text-[var(--color-warning)]" />
+                      </div>
+                      <div>
+                        <h3 className="font-semibold text-[var(--color-text-primary)]">Resource Kind</h3>
+                        <p className="text-sm text-[var(--color-text-secondary)]">Specify the kind of resource within the selected type</p>
+                      </div>
                     </div>
                   </div>
+                  <div className="p-6">
+                    <input
+                      type="text"
+                      value={resourceKind}
+                      onChange={(e) => setResourceKind(e.target.value)}
+                      placeholder="e.g., VirtualMachine, Playbook, Template"
+                      className={cn(
+                        'w-full px-4 py-3 rounded-[var(--radius-lg)]',
+                        'bg-[var(--color-surface-secondary)] text-[var(--color-text-primary)]',
+                        'border border-[var(--color-border-light)]',
+                        'focus:border-[var(--color-info)] focus:ring-4 focus:ring-[var(--color-info)]/10 focus:outline-none',
+                        'placeholder:text-[var(--color-text-tertiary)]',
+                        'transition-all duration-200'
+                      )}
+                    />
+                  </div>
                 </div>
-                <div className="p-6">
-                  <input
-                    type="text"
-                    value={resourceKind}
-                    onChange={(e) => setResourceKind(e.target.value)}
-                    placeholder="e.g., VirtualMachine, Playbook, Template"
-                    className={cn(
-                      'w-full px-4 py-3 rounded-[var(--radius-lg)]',
-                      'bg-[var(--color-surface-secondary)] text-[var(--color-text-primary)]',
-                      'border border-[var(--color-border-light)]',
-                      'focus:border-[var(--color-info)] focus:ring-4 focus:ring-[var(--color-info)]/10 focus:outline-none',
-                      'placeholder:text-[var(--color-text-tertiary)]',
-                      'transition-all duration-200'
-                    )}
-                  />
-                </div>
-              </div>
+              )}
 
               {/* Enforcement Type Card */}
               <div className="rounded-[var(--radius-xl)] bg-[var(--color-surface)] shadow-[var(--shadow-card)] border border-[var(--color-border-light)] overflow-hidden">
@@ -814,32 +819,41 @@ export function CreatePolicy() {
                     </div>
                     <div>
                       <h3 className="font-semibold text-[var(--color-text-primary)]">Filter Test Cases</h3>
-                      <p className="text-sm text-[var(--color-text-secondary)]">Resource Kind is pre-filled from Step 1. Other filters are optional.</p>
+                      <p className="text-sm text-[var(--color-text-secondary)]">
+                        {resourceType === 'lightspeed'
+                          ? 'Resource Kind is pre-filled from Step 1. Other filters are optional.'
+                          : 'All filters are optional. Leave empty to fetch all test cases.'}
+                      </p>
                     </div>
                   </div>
                 </div>
                 <div className="p-6">
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                    {/* Resource Kind - Pre-filled from Step 1 */}
-                    <div>
-                      <label className="flex items-center gap-2 text-sm font-medium text-[var(--color-text-primary)] mb-2">
-                        <Layers className="w-4 h-4 text-[var(--color-text-tertiary)]" />
-                        Resource Kind
-                      </label>
-                      <div
-                        className={cn(
-                          'w-full px-4 py-3 rounded-[var(--radius-lg)]',
-                          'bg-[var(--color-info-bg)] text-[var(--color-info)]',
-                          'border border-[var(--color-info)]/30',
-                          'font-medium'
-                        )}
-                      >
-                        {resourceKind || 'Not specified'}
+                  <div className={cn(
+                    "grid grid-cols-1 md:grid-cols-2 gap-4",
+                    resourceType === 'lightspeed' && "lg:grid-cols-4"
+                  )}>
+                    {/* Resource Kind - Pre-filled from Step 1 (Lightspeed only) */}
+                    {resourceType === 'lightspeed' && (
+                      <div>
+                        <label className="flex items-center gap-2 text-sm font-medium text-[var(--color-text-primary)] mb-2">
+                          <Layers className="w-4 h-4 text-[var(--color-text-tertiary)]" />
+                          Resource Kind
+                        </label>
+                        <div
+                          className={cn(
+                            'w-full px-4 py-3 rounded-[var(--radius-lg)]',
+                            'bg-[var(--color-info-bg)] text-[var(--color-info)]',
+                            'border border-[var(--color-info)]/30',
+                            'font-medium'
+                          )}
+                        >
+                          {resourceKind || 'Not specified'}
+                        </div>
+                        <p className="mt-1 text-xs text-[var(--color-text-tertiary)]">
+                          From Step 1
+                        </p>
                       </div>
-                      <p className="mt-1 text-xs text-[var(--color-text-tertiary)]">
-                        From Step 1
-                      </p>
-                    </div>
+                    )}
 
                     {/* Application ID */}
                     <div>
@@ -907,8 +921,8 @@ export function CreatePolicy() {
 
                   <div className="mt-6 flex items-center justify-between">
                     <p className="text-sm text-[var(--color-text-tertiary)]">
-                      {resourceKind || applicationId || organization || environment
-                        ? `Filtering by: ${[resourceKind && 'Resource Kind', applicationId && 'Application', organization && 'Organization', environment && 'Environment'].filter(Boolean).join(', ')}`
+                      {(resourceType === 'lightspeed' && resourceKind) || applicationId || organization || environment
+                        ? `Filtering by: ${[resourceType === 'lightspeed' && resourceKind && 'Resource Kind', applicationId && 'Application', organization && 'Organization', environment && 'Environment'].filter(Boolean).join(', ')}`
                         : 'No filters applied - will fetch all test cases'}
                     </p>
                     <button
@@ -955,7 +969,7 @@ export function CreatePolicy() {
                       </div>
                     </div>
                   </div>
-                  <div className="divide-y divide-[var(--color-border-light)]">
+                  <div className="divide-y divide-[var(--color-border-light)] max-h-[400px] overflow-auto">
                     {testInputs.length > 0 ? (
                       <>
                         {testInputs.map((testInput) => (
@@ -1232,12 +1246,14 @@ export function CreatePolicy() {
                           {resourceType}
                         </dd>
                       </div>
-                      <div className="flex justify-between items-center py-2 border-b border-[var(--color-border-light)]">
-                        <dt className="text-[var(--color-text-secondary)]">Resource Kind</dt>
-                        <dd className="font-medium text-[var(--color-text-primary)]">
-                          {resourceKind || '—'}
-                        </dd>
-                      </div>
+                      {resourceType === 'lightspeed' && (
+                        <div className="flex justify-between items-center py-2 border-b border-[var(--color-border-light)]">
+                          <dt className="text-[var(--color-text-secondary)]">Resource Kind</dt>
+                          <dd className="font-medium text-[var(--color-text-primary)]">
+                            {resourceKind || '—'}
+                          </dd>
+                        </div>
+                      )}
                       <div className="flex justify-between items-center py-2 border-b border-[var(--color-border-light)]">
                         <dt className="text-[var(--color-text-secondary)]">Enforcement</dt>
                         <dd>
