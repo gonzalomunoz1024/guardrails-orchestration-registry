@@ -22,15 +22,6 @@ export default defineConfig({
       '/api': {
         target: 'http://localhost:8080',
         changeOrigin: true,
-        // Don't rewrite - backend expects /api prefix
-        configure: (proxy) => {
-          proxy.on('proxyReq', (proxyReq, req) => {
-            // req.url has the full path with query string
-            console.log('[PROXY] req.url:', req.url);
-            console.log('[PROXY] proxyReq.path:', proxyReq.path);
-            console.log('[PROXY] Forwarding to:', `http://localhost:8080${req.url}`);
-          });
-        },
       },
     },
   },

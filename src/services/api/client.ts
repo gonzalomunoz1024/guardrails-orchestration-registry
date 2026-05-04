@@ -12,11 +12,14 @@ export const apiClient = axios.create({
 apiClient.interceptors.request.use((config) => {
   config.baseURL = getApiBaseUrl();
   // Build full URL with query params for logging
-  const queryString = config.params
-    ? '?' + new URLSearchParams(config.params as Record<string, string>).toString()
+  const paramsObj = config.params || {};
+  const paramKeys = Object.keys(paramsObj);
+  const queryString = paramKeys.length > 0
+    ? '?' + paramKeys.map(k => `${k}=${encodeURIComponent(paramsObj[k])}`).join('&')
     : '';
   const fullUrl = `${config.baseURL}${config.url}${queryString}`;
-  console.log(`[API] ${config.method?.toUpperCase()} ${fullUrl}`, config.data || '');
+  console.log(`[AXIOS REQUEST] ${config.method?.toUpperCase()} ${fullUrl}`);
+  console.log(`[AXIOS REQUEST] params object:`, paramsObj);
   return config;
 });
 
