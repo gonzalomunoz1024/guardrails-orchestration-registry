@@ -114,14 +114,13 @@ export interface RegistryStats {
   inactiveGuardrails: number;
   guardrailsByStatus: Record<string, number>;
   guardrailsByEnforcementType: Record<string, number>;
-  totalEvaluations: number;
-  allowedEvaluations: number;
-  deniedEvaluations: number;
-  errorEvaluations: number;
-  avgAllowRate: number;
-  avgDenyRate: number;
-  avgErrorRate: number;
-  timeRange: string;
+  evaluations: {
+    total: number;
+    passed: number;
+    failed: number;
+    passRate: number;
+  };
+  computedAt: string;
 }
 
 export interface User {
