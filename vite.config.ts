@@ -23,6 +23,11 @@ export default defineConfig({
         target: 'http://localhost:8080',
         changeOrigin: true,
         // Don't rewrite - backend expects /api prefix
+        configure: (proxy) => {
+          proxy.on('proxyReq', (proxyReq, req) => {
+            console.log('[PROXY] Forwarding:', req.method, req.url, '→', proxyReq.path);
+          });
+        },
       },
     },
   },

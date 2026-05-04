@@ -11,7 +11,11 @@ export const apiClient = axios.create({
 // Set baseURL dynamically on each request to support runtime configuration
 apiClient.interceptors.request.use((config) => {
   config.baseURL = getApiBaseUrl();
-  const fullUrl = `${config.baseURL}${config.url}`;
+  // Build full URL with query params for logging
+  const queryString = config.params
+    ? '?' + new URLSearchParams(config.params as Record<string, string>).toString()
+    : '';
+  const fullUrl = `${config.baseURL}${config.url}${queryString}`;
   console.log(`[API] ${config.method?.toUpperCase()} ${fullUrl}`, config.data || '');
   return config;
 });

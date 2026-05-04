@@ -360,12 +360,17 @@ export const guardrailsApi = {
    * Handles nested structure: _source.spec.metadata contains appId, organization, etc.
    */
   _mapSourceToTestInput: (item: TestInputSource, index: number): TestInput => {
+    console.log(`[mapSource ${index}] Input item:`, item);
     const source = item._source;
 
+    if (!source) {
+      console.warn(`[mapSource ${index}] No _source found in item!`);
+    }
+
     // The structure is: _source.spec.metadata.{appId, organization, ...}
-    const spec = (source.spec as Record<string, unknown>) || {};
+    const spec = (source?.spec as Record<string, unknown>) || {};
     const specMetadata = (spec.metadata as Record<string, unknown>) || {};
-    const topMetadata = (source.metadata as Record<string, unknown>) || {};
+    const topMetadata = (source?.metadata as Record<string, unknown>) || {};
 
     // Extract fields from spec.metadata (primary) or fallback to top-level
     const appId =
@@ -455,12 +460,24 @@ export const guardrailsApi = {
         if (filters?.resourceKind) params.resourceKind = filters.resourceKind;
       }
 
+      console.log('[getTestInputs] Params being sent:', params);
+
       const response = await apiClient.get<TestInputsRawResponse>(TEST_INPUTS_PATH, { params });
       const rawResponse = response.data;
 
+      console.log('[getTestInputs] Response received:', {
+        scrollId: rawResponse.scrollId,
+        total: rawResponse.total,
+        sourcesCount: rawResponse.sources?.length ?? 0,
+        rawKeys: Object.keys(rawResponse),
+      });
+
       // Map raw OpenSearch response to normalized format
       const sources = rawResponse.sources || [];
+      console.log('[getTestInputs] Sources array length:', sources.length);
+
       const testInputs = sources.map((item, index) => guardrailsApi._mapSourceToTestInput(item, index));
+      console.log('[getTestInputs] Mapped testInputs count:', testInputs.length);
 
       // Determine if there are more results to fetch
       // If we received fewer sources than the limit, we've reached the end

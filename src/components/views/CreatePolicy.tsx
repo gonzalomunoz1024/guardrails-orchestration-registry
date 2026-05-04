@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import Editor from '@monaco-editor/react';
 import {
   Save,
@@ -75,6 +75,13 @@ export function CreatePolicy() {
   const [shouldFetchTestInputs, setShouldFetchTestInputs] = useState(false);
   const [expandedTestCase, setExpandedTestCase] = useState<string | null>(null);
 
+  // Stabilize filter object to prevent React Query cache key instability
+  const testInputFilters = useMemo(() => ({
+    applicationId: applicationId || undefined,
+    organization: organization || undefined,
+    environment: environment || undefined,
+  }), [applicationId, organization, environment]);
+
   // Use the real test inputs hook with scroll-based pagination
   const {
     testInputs,
@@ -85,11 +92,7 @@ export function CreatePolicy() {
     fetchNextPage,
     refetch,
   } = useTestInputs({
-    filters: {
-      applicationId: applicationId || undefined,
-      organization: organization || undefined,
-      environment: environment || undefined,
-    },
+    filters: testInputFilters,
     enabled: shouldFetchTestInputs,
   });
 
