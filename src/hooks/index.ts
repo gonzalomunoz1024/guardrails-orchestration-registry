@@ -21,3 +21,4 @@ export {
   evaluationKeys,
 } from './useEvaluations';
 export { useStats, statsKeys } from './useStats';
+export { useTestInputs, testInputsKeys } from './useTestInputs';

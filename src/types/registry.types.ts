@@ -130,3 +130,41 @@ export interface User {
   avatar?: string;
   role: 'admin' | 'author' | 'reviewer' | 'viewer';
 }
+
+// Test Inputs (Scope-Based Test Cases)
+export interface TestInput {
+  id: string;
+  name: string;
+  description?: string;
+  applicationId?: string;
+  organization?: string;
+  environment?: string;
+  resourceType?: string;
+  resourceKind?: string;
+  input: Record<string, unknown>;
+  metadata?: {
+    source?: string;
+    capturedAt?: string;
+  };
+}
+
+export interface TestInputFilters {
+  applicationId?: string;
+  organization?: string;
+  environment?: string;
+  resourceType?: string;
+  resourceKind?: string;
+}
+
+export interface TestInputsResponse {
+  scrollId: string | null;
+  totalHits: number;
+  hasMore: boolean;
+  content: TestInput[];
+  filters?: {
+    availableApplications: string[];
+    availableOrganizations: string[];
+    availableEnvironments: string[];
+  };
+  message?: string;
+}

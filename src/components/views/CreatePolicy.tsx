@@ -24,10 +24,10 @@ import {
 } from 'lucide-react';
 import { useUIStore, usePolicyStore, useEvaluationStore } from '@/store';
 import { useRegistryStore } from '@/store/registryStore';
-import { useEvaluate } from '@/hooks';
+import { useEvaluate, useTestInputs } from '@/hooks';
 import { initializeMonaco, defaultEditorOptions } from '@/monaco/config';
 import { cn } from '@/utils';
-import type { ResourceType } from '@/types/registry.types';
+import type { ResourceType, TestInput } from '@/types/registry.types';
 import type { EnforcementType, GuardrailKind } from '@/types/guardrail.types';
 
 type Step = 'metadata' | 'code' | 'scope' | 'review';
@@ -52,82 +52,6 @@ const steps: { id: Step; label: string; number: number }[] = [
   { id: 'review', label: 'Review & Submit', number: 4 },
 ];
 
-interface TestCase {
-  id: string;
-  name: string;
-  description: string;
-  input: Record<string, unknown>;
-  applicationId?: string;
-  organization?: string;
-  environment?: string;
-}
-
-// Mock function to simulate API call - replace with actual API call
-async function fetchTestCases(filters: {
-  applicationId?: string;
-  organization?: string;
-  environment?: string;
-}): Promise<TestCase[]> {
-  // Simulate API delay
-  await new Promise((resolve) => setTimeout(resolve, 1000));
-
-  // Mock test cases - in production, this would be an actual API call
-  const allTestCases: TestCase[] = [
-    {
-      id: '1',
-      name: 'Admin user access request',
-      description: 'Test case for admin role accessing protected resources',
-      input: { user: { role: 'admin', department: 'IT' }, resource: '/api/users', action: 'read' },
-      applicationId: 'app-001',
-      organization: 'acme-corp',
-      environment: 'production',
-    },
-    {
-      id: '2',
-      name: 'Standard user denied access',
-      description: 'Test case for standard user being denied admin resources',
-      input: { user: { role: 'user', department: 'Sales' }, resource: '/api/admin', action: 'write' },
-      applicationId: 'app-001',
-      organization: 'acme-corp',
-      environment: 'production',
-    },
-    {
-      id: '3',
-      name: 'Service account automation',
-      description: 'Test case for service accounts in CI/CD pipelines',
-      input: { user: { role: 'service', serviceId: 'ci-runner' }, resource: '/api/deploy', action: 'execute' },
-      applicationId: 'app-002',
-      organization: 'acme-corp',
-      environment: 'staging',
-    },
-    {
-      id: '4',
-      name: 'Cross-org access attempt',
-      description: 'Test case for users attempting cross-organization access',
-      input: { user: { role: 'admin', org: 'external' }, resource: '/api/internal', action: 'read' },
-      applicationId: 'app-001',
-      organization: 'external-org',
-      environment: 'development',
-    },
-    {
-      id: '5',
-      name: 'Guest user limited access',
-      description: 'Test case for guest users with read-only permissions',
-      input: { user: { role: 'guest' }, resource: '/api/public', action: 'read' },
-      applicationId: 'app-003',
-      organization: 'acme-corp',
-      environment: 'production',
-    },
-  ];
-
-  // Filter based on provided criteria
-  return allTestCases.filter((tc) => {
-    if (filters.applicationId && tc.applicationId !== filters.applicationId) return false;
-    if (filters.organization && tc.organization !== filters.organization) return false;
-    if (filters.environment && tc.environment !== filters.environment) return false;
-    return true;
-  });
-}
 
 export function CreatePolicy() {
   const { resolvedTheme } = useUIStore();
@@ -148,10 +72,26 @@ export function CreatePolicy() {
   const [applicationId, setApplicationId] = useState('');
   const [organization, setOrganization] = useState('');
   const [environment, setEnvironment] = useState('');
-  const [testCases, setTestCases] = useState<TestCase[]>([]);
-  const [isFetchingTestCases, setIsFetchingTestCases] = useState(false);
-  const [hasFetched, setHasFetched] = useState(false);
+  const [shouldFetchTestInputs, setShouldFetchTestInputs] = useState(false);
   const [expandedTestCase, setExpandedTestCase] = useState<string | null>(null);
+
+  // Use the real test inputs hook with scroll-based pagination
+  const {
+    testInputs,
+    totalHits,
+    hasMore,
+    isLoading: isFetchingTestCases,
+    isFetchingNextPage,
+    fetchNextPage,
+    refetch,
+  } = useTestInputs({
+    filters: {
+      applicationId: applicationId || undefined,
+      organization: organization || undefined,
+      environment: environment || undefined,
+    },
+    enabled: shouldFetchTestInputs,
+  });
 
   const handleAddTag = () => {
     if (tagInput.trim() && !tags.includes(tagInput.trim())) {
@@ -164,25 +104,18 @@ export function CreatePolicy() {
     setTags(tags.filter((t) => t !== tag));
   };
 
-  const handleFetchTestCases = async () => {
-    setIsFetchingTestCases(true);
-    try {
-      const cases = await fetchTestCases({
-        applicationId: applicationId || undefined,
-        organization: organization || undefined,
-        environment: environment || undefined,
-      });
-      setTestCases(cases);
-      setHasFetched(true);
-    } catch (error) {
-      console.error('Failed to fetch test cases:', error);
-    } finally {
-      setIsFetchingTestCases(false);
+  const handleFetchTestCases = () => {
+    if (shouldFetchTestInputs) {
+      // If already fetching, refetch with current filters
+      refetch();
+    } else {
+      // Enable fetching for the first time
+      setShouldFetchTestInputs(true);
     }
   };
 
-  const handleUseTestInput = (testCase: TestCase) => {
-    setInputJson(JSON.stringify(testCase.input, null, 2));
+  const handleUseTestInput = (testInput: TestInput) => {
+    setInputJson(JSON.stringify(testInput.input, null, 2));
     setCurrentStep('code');
   };
 
@@ -883,7 +816,7 @@ export function CreatePolicy() {
               </div>
 
               {/* Test Cases Results */}
-              {hasFetched && (
+              {shouldFetchTestInputs && (
                 <div className="rounded-[var(--radius-xl)] bg-[var(--color-surface)] shadow-[var(--shadow-card)] border border-[var(--color-border-light)] overflow-hidden">
                   <div className="px-6 py-4 border-b border-[var(--color-border-light)] bg-[var(--color-surface-secondary)]/50">
                     <div className="flex items-center justify-between">
@@ -894,74 +827,116 @@ export function CreatePolicy() {
                         <div>
                           <h3 className="font-semibold text-[var(--color-text-primary)]">Test Cases</h3>
                           <p className="text-sm text-[var(--color-text-secondary)]">
-                            {testCases.length} test case{testCases.length !== 1 ? 's' : ''} found
+                            {isFetchingTestCases ? 'Loading...' : `${testInputs.length} of ${totalHits} test case${totalHits !== 1 ? 's' : ''}`}
                           </p>
                         </div>
                       </div>
                     </div>
                   </div>
                   <div className="divide-y divide-[var(--color-border-light)]">
-                    {testCases.length > 0 ? (
-                      testCases.map((testCase) => (
-                        <div key={testCase.id} className="p-4">
-                          <button
-                            onClick={() => setExpandedTestCase(expandedTestCase === testCase.id ? null : testCase.id)}
-                            className="w-full flex items-center justify-between text-left"
-                          >
-                            <div className="flex-1">
-                              <div className="flex items-center gap-3 mb-1">
-                                <h4 className="font-medium text-[var(--color-text-primary)]">
-                                  {testCase.name}
-                                </h4>
-                                <div className="flex gap-2">
-                                  {testCase.applicationId && (
-                                    <span className="px-2 py-0.5 rounded-full text-xs bg-[var(--color-surface-secondary)] text-[var(--color-text-secondary)]">
-                                      {testCase.applicationId}
-                                    </span>
-                                  )}
-                                  {testCase.environment && (
-                                    <span className="px-2 py-0.5 rounded-full text-xs bg-[var(--color-info-bg)] text-[var(--color-info)]">
-                                      {testCase.environment}
-                                    </span>
-                                  )}
+                    {testInputs.length > 0 ? (
+                      <>
+                        {testInputs.map((testInput) => (
+                          <div key={testInput.id} className="p-4">
+                            <button
+                              onClick={() => setExpandedTestCase(expandedTestCase === testInput.id ? null : testInput.id)}
+                              className="w-full flex items-center justify-between text-left"
+                            >
+                              <div className="flex-1">
+                                <div className="flex items-center gap-3 mb-1">
+                                  <h4 className="font-medium text-[var(--color-text-primary)]">
+                                    {testInput.name}
+                                  </h4>
+                                  <div className="flex gap-2">
+                                    {testInput.applicationId && (
+                                      <span className="px-2 py-0.5 rounded-full text-xs bg-[var(--color-surface-secondary)] text-[var(--color-text-secondary)]">
+                                        {testInput.applicationId}
+                                      </span>
+                                    )}
+                                    {testInput.environment && (
+                                      <span className="px-2 py-0.5 rounded-full text-xs bg-[var(--color-info-bg)] text-[var(--color-info)]">
+                                        {testInput.environment}
+                                      </span>
+                                    )}
+                                  </div>
                                 </div>
-                              </div>
-                              <p className="text-sm text-[var(--color-text-secondary)]">
-                                {testCase.description}
-                              </p>
-                            </div>
-                            {expandedTestCase === testCase.id ? (
-                              <ChevronUp className="w-5 h-5 text-[var(--color-text-tertiary)]" />
-                            ) : (
-                              <ChevronDown className="w-5 h-5 text-[var(--color-text-tertiary)]" />
-                            )}
-                          </button>
-
-                          {expandedTestCase === testCase.id && (
-                            <div className="mt-4 space-y-3">
-                              <div className="p-4 rounded-[var(--radius-lg)] bg-[var(--color-surface-secondary)]">
-                                <label className="block text-xs font-medium text-[var(--color-text-tertiary)] mb-2">
-                                  INPUT JSON
-                                </label>
-                                <pre className="text-sm font-mono text-[var(--color-text-primary)] overflow-auto">
-                                  {JSON.stringify(testCase.input, null, 2)}
-                                </pre>
-                              </div>
-                              <button
-                                onClick={() => handleUseTestInput(testCase)}
-                                className={cn(
-                                  'flex items-center gap-2 px-4 py-2 rounded-[var(--radius-md)]',
-                                  'bg-[var(--color-info)] text-white font-medium text-sm',
-                                  'transition-all hover:opacity-90'
+                                {testInput.description && (
+                                  <p className="text-sm text-[var(--color-text-secondary)]">
+                                    {testInput.description}
+                                  </p>
                                 )}
-                              >
-                                <Play className="w-4 h-4" />
-                                Use This Input
-                              </button>
-                            </div>
-                          )}
-                        </div>
-                      ))
+                              </div>
+                              {expandedTestCase === testInput.id ? (
+                                <ChevronUp className="w-5 h-5 text-[var(--color-text-tertiary)]" />
+                              ) : (
+                                <ChevronDown className="w-5 h-5 text-[var(--color-text-tertiary)]" />
+                              )}
+                            </button>
+
+                            {expandedTestCase === testInput.id && (
+                              <div className="mt-4 space-y-3">
+                                <div className="p-4 rounded-[var(--radius-lg)] bg-[var(--color-surface-secondary)]">
+                                  <label className="block text-xs font-medium text-[var(--color-text-tertiary)] mb-2">
+                                    INPUT JSON
+                                  </label>
+                                  <pre className="text-sm font-mono text-[var(--color-text-primary)] overflow-auto max-h-64">
+                                    {JSON.stringify(testInput.input, null, 2)}
+                                  </pre>
+                                </div>
+                                <button
+                                  onClick={() => handleUseTestInput(testInput)}
+                                  className={cn(
+                                    'flex items-center gap-2 px-4 py-2 rounded-[var(--radius-md)]',
+                                    'bg-[var(--color-info)] text-white font-medium text-sm',
+                                    'transition-all hover:opacity-90'
+                                  )}
+                                >
+                                  <Play className="w-4 h-4" />
+                                  Use This Input
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                        {/* Load More Button */}
+                        {hasMore && (
+                          <div className="p-4 text-center">
+                            <button
+                              onClick={() => fetchNextPage()}
+                              disabled={isFetchingNextPage}
+                              className={cn(
+                                'inline-flex items-center gap-2 px-6 py-2.5 rounded-[var(--radius-lg)]',
+                                'bg-[var(--color-surface-secondary)] text-[var(--color-text-primary)]',
+                                'border border-[var(--color-border-light)]',
+                                'font-medium transition-all hover:bg-[var(--color-border-light)]',
+                                'disabled:opacity-50 disabled:cursor-not-allowed'
+                              )}
+                            >
+                              {isFetchingNextPage ? (
+                                <>
+                                  <Loader2 className="w-4 h-4 animate-spin" />
+                                  Loading more...
+                                </>
+                              ) : (
+                                <>
+                                  <ChevronDown className="w-4 h-4" />
+                                  Load More ({totalHits - testInputs.length} remaining)
+                                </>
+                              )}
+                            </button>
+                          </div>
+                        )}
+                      </>
+                    ) : isFetchingTestCases ? (
+                      <div className="p-12 text-center">
+                        <Loader2 className="w-12 h-12 mx-auto mb-4 text-[var(--color-info)] animate-spin" />
+                        <h3 className="text-lg font-medium text-[var(--color-text-primary)] mb-2">
+                          Fetching test cases...
+                        </h3>
+                        <p className="text-[var(--color-text-secondary)]">
+                          Searching for matching test inputs from OpenSearch.
+                        </p>
+                      </div>
                     ) : (
                       <div className="p-12 text-center">
                         <Database className="w-12 h-12 mx-auto mb-4 text-[var(--color-text-tertiary)] opacity-50" />

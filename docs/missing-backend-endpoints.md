@@ -695,7 +695,7 @@ CRUD operations for test cases associated with a guardrail.
 ## 9. Scope-Based Test Cases Fetch
 
 ### Endpoint Purpose
-Fetches test case inputs from an external data source based on scope filters. Used during policy creation to retrieve real-world sample inputs for testing the policy against.
+Fetches test case inputs from OpenSearch via a backend proxy based on scope filters. Used during policy creation to retrieve real-world sample inputs for testing the policy against. The backend proxies requests to OpenSearch and uses OpenSearch's scroll API for efficient pagination of large result sets.
 
 ### Frontend Flow That Needs It
 - `CreatePolicy.tsx` - "Scope" step (Step 3) where users specify Application ID, Organization, and Environment to fetch relevant test case inputs
@@ -706,7 +706,7 @@ Fetches test case inputs from an external data source based on scope filters. Us
 
 **HTTP Method:** GET
 
-**Proposed Path:** `/api/v1/registry/test-inputs` or `/api/v1/scope/test-cases`
+**Proposed Path:** `/api/v1/registry/test-inputs`
 
 **Request Headers:**
 ```
@@ -724,30 +724,31 @@ Authorization: Bearer {token}
 | `environment` | string | No | Filter by environment (e.g., "dev", "staging", "prod") |
 | `resourceType` | string | No | Filter by resource type (e.g., "lightspeed", "vmforge") |
 | `resourceKind` | string | No | Filter by resource kind |
-| `page` | number | No | Page number (default: 0) |
-| `size` | number | No | Page size (default: 20, max: 100) |
+| `scrollId` | string | No | OpenSearch scroll ID for pagination. Omit for initial request. |
+| `limit` | number | No | Number of results per scroll batch (default: 50, max: 100) |
 
 **Request Body:** None
 
 **Example Requests:**
 ```http
-# Fetch all test cases (no filters)
-GET /api/v1/registry/test-inputs
+# Initial request - fetch first batch (no scrollId)
+GET /api/v1/registry/test-inputs?limit=50
 
-# Fetch test cases for a specific application
-GET /api/v1/registry/test-inputs?applicationId=app-123
+# Initial request with filters
+GET /api/v1/registry/test-inputs?applicationId=app-123&environment=production&limit=50
 
-# Fetch test cases with multiple filters
-GET /api/v1/registry/test-inputs?applicationId=app-123&environment=production&resourceType=lightspeed
+# Subsequent request - fetch next batch using scrollId
+GET /api/v1/registry/test-inputs?scrollId=DXF1ZXJ5QW5kRmV0Y2gBAAAAAA...
+
+# Note: When using scrollId, filters are not needed (they're retained in the scroll context)
 ```
 
-**Example Success Response (200 OK):**
+**Example Success Response - Initial Request (200 OK):**
 ```json
 {
-  "page": 0,
-  "size": 20,
-  "totalElements": 156,
-  "totalPages": 8,
+  "scrollId": "DXF1ZXJ5QW5kRmV0Y2gBAAAAAAAAAD4WYm9laVYtZndUQlNsdDcwakFMNjU1QQ==",
+  "totalHits": 156,
+  "hasMore": true,
   "content": [
     {
       "id": "tc-input-001",
@@ -819,15 +820,54 @@ GET /api/v1/registry/test-inputs?applicationId=app-123&environment=production&re
 }
 ```
 
+**Example Success Response - Subsequent Scroll Request (200 OK):**
+```json
+{
+  "scrollId": "DXF1ZXJ5QW5kRmV0Y2gBAAAAAAAAAD4WYm9laVYtZndUQlNsdDcwakFMNjU1QQ==",
+  "totalHits": 156,
+  "hasMore": true,
+  "content": [
+    {
+      "id": "tc-input-051",
+      "name": "Database Access Request",
+      ...
+    }
+  ]
+}
+```
+
+**Example Final Batch Response (200 OK):**
+```json
+{
+  "scrollId": null,
+  "totalHits": 156,
+  "hasMore": false,
+  "content": [
+    {
+      "id": "tc-input-150",
+      ...
+    }
+  ]
+}
+```
+
 **Example Empty Response (200 OK):**
 ```json
 {
-  "page": 0,
-  "size": 20,
-  "totalElements": 0,
-  "totalPages": 0,
+  "scrollId": null,
+  "totalHits": 0,
+  "hasMore": false,
   "content": [],
   "message": "No test cases found matching the specified filters"
+}
+```
+
+**Example Error Response - Invalid Scroll ID (400 Bad Request):**
+```json
+{
+  "error": "INVALID_SCROLL_ID",
+  "message": "The scroll context has expired or is invalid. Please start a new search.",
+  "timestamp": "2024-03-21T08:30:00Z"
 }
 ```
 
@@ -842,25 +882,57 @@ GET /api/v1/registry/test-inputs?applicationId=app-123&environment=production&re
 
 **Expected Status Codes:**
 - 200: Success (may return empty content array)
-- 400: Bad Request (invalid filter parameters)
+- 400: Bad Request (invalid filter parameters or expired scroll ID)
 - 401: Unauthorized
 - 500: Internal Server Error
+- 503: Service Unavailable (OpenSearch connection failed)
 
 **Auth Requirements:** Bearer token required
 
 **Priority:** HIGH - Required for the policy creation workflow to fetch real sample inputs
 
 **Implementation Notes:**
-- This endpoint should pull from historical evaluation data or a curated test data repository
-- The `input` field should contain the actual JSON input that would be evaluated against a policy
-- Consider caching frequently accessed test cases
-- The `filters` object in the response helps the frontend populate dropdown options
+- Backend acts as a proxy to OpenSearch using the scroll API
+- Scroll context is maintained server-side with a TTL (e.g., 5 minutes)
+- When `scrollId` is provided, filters are ignored (scroll context already contains them)
+- When `scrollId` is null or `hasMore` is false, the scroll context has been exhausted
+- The backend should clear the scroll context when `hasMore` becomes false
+- The `filters` object is only returned on the initial request to populate dropdown options
+- Consider implementing scroll context cleanup on client disconnect
+
+**OpenSearch Scroll Implementation:**
+```
+# Backend translates to OpenSearch queries:
+
+# Initial request (no scrollId):
+POST /evaluation-logs/_search?scroll=5m
+{
+  "size": 50,
+  "query": {
+    "bool": {
+      "filter": [
+        { "term": { "applicationId": "app-123" } },
+        { "term": { "environment": "production" } }
+      ]
+    }
+  }
+}
+
+# Subsequent requests (with scrollId):
+POST /_search/scroll
+{
+  "scroll": "5m",
+  "scroll_id": "DXF1ZXJ5QW5kRmV0Y2gBAAAAAAAAAD4..."
+}
+```
 
 **Frontend Usage:**
 1. User enters filter criteria (all optional)
-2. Frontend calls this endpoint with the filters
-3. Results are displayed in a list
-4. User can click "Use This Input" to populate the policy editor's input field with the test case's `input` value
+2. Frontend calls this endpoint without scrollId to get first batch
+3. Results are displayed in a list with "Load More" button
+4. When user clicks "Load More", frontend calls with the scrollId from previous response
+5. Repeat until `hasMore` is false
+6. User can click "Use This Input" to populate the policy editor's input field with the test case's `input` value
 
 ---
 

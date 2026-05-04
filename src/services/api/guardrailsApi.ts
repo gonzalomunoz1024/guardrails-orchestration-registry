@@ -16,7 +16,13 @@ import type {
   EvaluationRecord,
   PaginatedResponse,
 } from '@/types/guardrail.types';
-import type { RegistryPolicy, RegistryStats, TimeRange } from '@/types/registry.types';
+import type {
+  RegistryPolicy,
+  RegistryStats,
+  TimeRange,
+  TestInputFilters,
+  TestInputsResponse,
+} from '@/types/registry.types';
 import {
   mapGuardrailToPolicy,
   mapPolicyToCreateGuardrailRequest,
@@ -29,6 +35,7 @@ const GUARDRAILS_PATH = '/v1/registry/guardrails';
 const CONFIGURATIONS_PATH = '/v1/registry/configurations';
 const EVALUATIONS_PATH = '/v1/evaluations';
 const STATS_PATH = '/v1/registry/stats';
+const TEST_INPUTS_PATH = '/v1/registry/test-inputs';
 
 /**
  * Error class for API errors with additional context
@@ -336,6 +343,51 @@ export const guardrailsApi = {
         `Failed to fetch registry stats`,
         (error as { response?: { status?: number } })?.response?.status,
         STATS_PATH,
+        error
+      );
+    }
+  },
+
+  // ============================================
+  // TEST INPUTS ENDPOINTS (OpenSearch Scroll)
+  // ============================================
+
+  /**
+   * Fetch test inputs for policy testing (scope-based)
+   * Uses OpenSearch scroll API for pagination
+   *
+   * @param filters - Optional filters for applicationId, organization, environment, etc.
+   * @param scrollId - Scroll ID from previous request for pagination (omit for initial request)
+   * @param limit - Number of results per batch (default: 50)
+   */
+  getTestInputs: async (
+    filters?: TestInputFilters,
+    scrollId?: string,
+    limit: number = 50
+  ): Promise<TestInputsResponse> => {
+    try {
+      const params: Record<string, string | number> = { limit };
+
+      // If scrollId is provided, only pass scrollId (filters are in scroll context)
+      if (scrollId) {
+        params.scrollId = scrollId;
+      } else {
+        // Initial request - include filters
+        if (filters?.applicationId) params.applicationId = filters.applicationId;
+        if (filters?.organization) params.organization = filters.organization;
+        if (filters?.environment) params.environment = filters.environment;
+        if (filters?.resourceType) params.resourceType = filters.resourceType;
+        if (filters?.resourceKind) params.resourceKind = filters.resourceKind;
+      }
+
+      const response = await apiClient.get<TestInputsResponse>(TEST_INPUTS_PATH, { params });
+      return response.data;
+    } catch (error) {
+      console.error('[guardrailsApi] Failed to fetch test inputs:', error);
+      throw new GuardrailsApiError(
+        'Failed to fetch test inputs',
+        (error as { response?: { status?: number } })?.response?.status,
+        TEST_INPUTS_PATH,
         error
       );
     }
