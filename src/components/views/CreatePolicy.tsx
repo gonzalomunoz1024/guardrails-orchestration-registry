@@ -697,10 +697,28 @@ export function CreatePolicy() {
                           Output
                         </label>
                         {result?.success && (
-                          <span className="flex items-center gap-1 text-xs text-[var(--color-success)]">
-                            <CheckCircle className="w-3 h-3" />
-                            Success
-                          </span>
+                          (() => {
+                            const resultObj = result.result as Record<string, unknown> | undefined;
+                            const isAllowed = resultObj?.allow === true;
+                            return (
+                              <span className={cn(
+                                "flex items-center gap-1 text-xs",
+                                isAllowed ? "text-[var(--color-success)]" : "text-[var(--color-error)]"
+                              )}>
+                                {isAllowed ? (
+                                  <>
+                                    <CheckCircle className="w-3 h-3" />
+                                    Allowed
+                                  </>
+                                ) : (
+                                  <>
+                                    <XCircle className="w-3 h-3" />
+                                    Denied
+                                  </>
+                                )}
+                              </span>
+                            );
+                          })()
                         )}
                       </div>
                       {result && (
@@ -717,7 +735,9 @@ export function CreatePolicy() {
                       className={cn(
                         'flex-1 p-4 rounded-[var(--radius-lg)] border overflow-auto shadow-[var(--shadow-card)]',
                         result?.success
-                          ? 'border-[var(--color-success)] bg-[var(--color-success-bg)]'
+                          ? (result.result as Record<string, unknown> | undefined)?.allow === true
+                            ? 'border-[var(--color-success)] bg-[var(--color-success-bg)]'
+                            : 'border-[var(--color-error)] bg-[var(--color-error-bg)]'
                           : result?.error
                             ? 'border-[var(--color-error)] bg-[var(--color-error-bg)]'
                             : 'border-[var(--color-border-light)] bg-[var(--color-surface)]'
