@@ -21,7 +21,9 @@ import {
   Box,
   Layers,
   Shield,
+  Zap,
 } from 'lucide-react';
+import { BlastRadiusExecutionModal } from '@/components/modals/BlastRadiusExecutionModal';
 import { useUIStore, usePolicyStore, useEvaluationStore } from '@/store';
 import { useRegistryStore } from '@/store/registryStore';
 import { useEvaluate, useTestInputs } from '@/hooks';
@@ -30,7 +32,7 @@ import { cn } from '@/utils';
 import type { ResourceType, TestInput } from '@/types/registry.types';
 import type { EnforcementType, GuardrailKind } from '@/types/guardrail.types';
 
-type Step = 'metadata' | 'code' | 'scope' | 'review';
+type Step = 'metadata' | 'code' | 'blastradius' | 'review';
 
 const resourceTypes: { value: ResourceType; label: string; description: string }[] = [
   { value: 'lightspeed', label: 'Lightspeed', description: 'AI-powered automation policies' },
@@ -48,7 +50,7 @@ const DEFAULT_GUARDRAIL_KIND: GuardrailKind = 'PRECHECK';
 const steps: { id: Step; label: string; number: number }[] = [
   { id: 'metadata', label: 'Metadata', number: 1 },
   { id: 'code', label: 'Policy Code', number: 2 },
-  { id: 'scope', label: 'Scope', number: 3 },
+  { id: 'blastradius', label: 'Blast Radius', number: 3 },
   { id: 'review', label: 'Review & Submit', number: 4 },
 ];
 
@@ -58,22 +60,32 @@ export function CreatePolicy() {
   const { regoCode, setRegoCode, inputJson, setInputJson, configJson, setConfigJson, metadata, updateMetadata } = usePolicyStore();
   const { result, isEvaluating } = useEvaluationStore();
   const { setView } = useRegistryStore();
-  const { evaluate } = useEvaluate();
 
   const [currentStep, setCurrentStep] = useState<Step>('metadata');
   const [policyId, setPolicyId] = useState('');
   const [resourceType, setResourceType] = useState<ResourceType>('lightspeed');
   const [resourceKind, setResourceKind] = useState('');
   const [enforcementType, setEnforcementType] = useState<EnforcementType>('MANDATORY');
+
+  // Pass guardrail info to evaluate hook
+  const { evaluate } = useEvaluate({
+    guardrailInfo: {
+      id: policyId,
+      name: metadata.name,
+      version: '1.0.0',
+      enforcementType,
+    },
+  });
   const [tags, setTags] = useState<string[]>([]);
   const [tagInput, setTagInput] = useState('');
 
-  // Scope filter state
+  // Blast Radius filter state
   const [applicationId, setApplicationId] = useState('');
   const [organization, setOrganization] = useState('');
   const [environment, setEnvironment] = useState('');
   const [shouldFetchTestInputs, setShouldFetchTestInputs] = useState(false);
   const [expandedTestCase, setExpandedTestCase] = useState<string | null>(null);
+  const [isExecutionModalOpen, setIsExecutionModalOpen] = useState(false);
 
   // Stabilize filter object to prevent React Query cache key instability
   const testInputFilters = useMemo(() => ({
@@ -128,7 +140,7 @@ export function CreatePolicy() {
         return policyId.trim() && metadata.name.trim() && metadata.description.trim() && resourceKind.trim();
       case 'code':
         return regoCode.trim().length > 0;
-      case 'scope':
+      case 'blastradius':
         return true;
       case 'review':
         return true;
@@ -695,15 +707,15 @@ export function CreatePolicy() {
             </div>
           )}
 
-          {/* Step 3: Scope - Fetch Test Cases */}
-          {currentStep === 'scope' && (
+          {/* Step 3: Blast Radius - Fetch & Execute Test Cases */}
+          {currentStep === 'blastradius' && (
             <div className="space-y-6">
               <div>
                 <h2 className="text-2xl font-semibold text-[var(--color-text-primary)] mb-2">
-                  Policy Scope & Test Cases
+                  Blast Radius Analysis
                 </h2>
                 <p className="text-[var(--color-text-secondary)]">
-                  Filter by scope to find relevant test cases for your policy
+                  Evaluate your policy against real test cases to understand its impact
                 </p>
               </div>
 
@@ -955,6 +967,42 @@ export function CreatePolicy() {
                 </div>
               )}
 
+              {/* Execute Test Cases Button */}
+              {testInputs.length > 0 && (
+                <div className="rounded-[var(--radius-xl)] bg-gradient-to-r from-[var(--color-info)]/5 via-[var(--color-success)]/5 to-[var(--color-info)]/5 border border-[var(--color-border-light)] p-6">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-4">
+                      <div className="p-3 rounded-2xl bg-gradient-to-br from-[var(--color-info)] to-[var(--color-success)] shadow-lg">
+                        <Zap className="w-6 h-6 text-white" />
+                      </div>
+                      <div>
+                        <h3 className="text-lg font-semibold text-[var(--color-text-primary)]">
+                          Ready to Analyze
+                        </h3>
+                        <p className="text-sm text-[var(--color-text-secondary)]">
+                          Execute your policy against {testInputs.length} test case{testInputs.length !== 1 ? 's' : ''} to see the blast radius
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => setIsExecutionModalOpen(true)}
+                      disabled={!regoCode.trim()}
+                      className={cn(
+                        'flex items-center gap-3 px-8 py-4 rounded-2xl',
+                        'bg-gradient-to-r from-[var(--color-info)] to-[var(--color-success)]',
+                        'text-white font-semibold text-base',
+                        'shadow-lg shadow-[var(--color-info)]/25',
+                        'transition-all duration-300 hover:shadow-xl hover:shadow-[var(--color-info)]/30 hover:scale-[1.02]',
+                        'disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100'
+                      )}
+                    >
+                      <Play className="w-5 h-5" />
+                      Run Blast Radius
+                    </button>
+                  </div>
+                </div>
+              )}
+
               {/* Info Box */}
               <div className="rounded-[var(--radius-lg)] bg-[var(--color-info-bg)] border border-[var(--color-info)]/20 p-4">
                 <div className="flex gap-3">
@@ -964,13 +1012,28 @@ export function CreatePolicy() {
                       How it works
                     </p>
                     <p className="text-sm text-[var(--color-info)]/80 mt-1">
-                      Test cases are fetched from your organization's test database. Use filters to narrow down relevant inputs for your policy, then click "Use This Input" to test your policy with real data.
+                      Test cases are fetched from your organization's test database. Use filters to narrow down relevant inputs, then click "Run Blast Radius" to evaluate your policy against all fetched test cases.
                     </p>
                   </div>
                 </div>
               </div>
             </div>
           )}
+
+          {/* Blast Radius Execution Modal */}
+          <BlastRadiusExecutionModal
+            isOpen={isExecutionModalOpen}
+            onClose={() => setIsExecutionModalOpen(false)}
+            testInputs={testInputs}
+            regoCode={regoCode}
+            configJson={configJson}
+            guardrailInfo={{
+              id: policyId,
+              name: metadata.name,
+              version: '1.0.0',
+              enforcementType,
+            }}
+          />
 
           {/* Step 4: Review */}
           {currentStep === 'review' && (

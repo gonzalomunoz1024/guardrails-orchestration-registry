@@ -29,8 +29,21 @@ const defaultRegoCode = `package policy
 
 default allow := false
 
+# Example: Check resource data
 allow if {
-    input.user.role == "admin"
+    input.resource.user.role == "admin"
+}
+
+# Example: Use configuration data
+allow if {
+    input.configuration.allowAll == true
+}
+
+# Example: Deny with message based on guardrail
+deny[msg] if {
+    input.guardrail.enforcementType == "MANDATORY"
+    not allow
+    msg := sprintf("Guardrail %s: access denied", [input.guardrail.name])
 }
 `;
 

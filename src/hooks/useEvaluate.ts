@@ -5,24 +5,62 @@ import { usePolicyStore, useEvaluationStore } from '@/store';
 import { parseJson } from '@/utils';
 import type { EvaluationResult } from '@/types';
 
-export function useEvaluate() {
-  const { regoCode, inputJson, configJson } = usePolicyStore();
+interface GuardrailInfo {
+  id?: string;
+  name?: string;
+  version?: string;
+  enforcementType?: string;
+}
+
+/**
+ * Build the inputBundle for OPA evaluation
+ * Contains: guardrail metadata, configuration, and resource (test input data)
+ */
+function buildInputBundle(
+  resource: Record<string, unknown>,
+  configuration: Record<string, unknown>,
+  guardrailInfo: GuardrailInfo
+): Record<string, unknown> {
+  return {
+    guardrail: {
+      id: guardrailInfo.id || 'test-policy',
+      name: guardrailInfo.name || 'Test Policy',
+      version: guardrailInfo.version || '1.0.0',
+      enforcementType: guardrailInfo.enforcementType || 'MANDATORY',
+    },
+    configuration: configuration,
+    resource: resource,
+  };
+}
+
+interface UseEvaluateOptions {
+  guardrailInfo?: GuardrailInfo;
+}
+
+export function useEvaluate(options: UseEvaluateOptions = {}) {
+  const { regoCode, inputJson, configJson, metadata } = usePolicyStore();
   const { setResult, setIsEvaluating } = useEvaluationStore();
 
   const mutation = useMutation({
     mutationFn: async () => {
-      const input = parseJson(inputJson);
-      const data = parseJson(configJson);
+      const resource = parseJson(inputJson) || {};
+      const configuration = parseJson(configJson) || {};
 
-      if (input === null) {
-        throw new Error('Invalid input JSON');
-      }
+      // Build the inputBundle with guardrail info, configuration, and resource
+      const guardrailInfo: GuardrailInfo = {
+        id: options.guardrailInfo?.id,
+        name: options.guardrailInfo?.name || metadata.name,
+        version: options.guardrailInfo?.version || metadata.version,
+        enforcementType: options.guardrailInfo?.enforcementType || 'MANDATORY',
+      };
+
+      const inputBundle = buildInputBundle(resource, configuration, guardrailInfo);
 
       const startTime = performance.now();
       const response = await evaluationApi.evaluate(
         regoCode,
-        input,
-        data || undefined
+        inputBundle,
+        configuration
       );
       const executionTime = performance.now() - startTime;
 
