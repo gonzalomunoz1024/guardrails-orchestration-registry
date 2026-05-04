@@ -361,10 +361,11 @@ export const guardrailsApi = {
    */
   _mapSourceToTestInput: (item: TestInputSource, index: number): TestInput => {
     console.log(`[mapSource ${index}] Input item:`, item);
-    const source = item._source;
+    // Backend may return 'source' or '_source' field
+    const source = item.source || item._source;
 
     if (!source) {
-      console.warn(`[mapSource ${index}] No _source found in item!`);
+      console.warn(`[mapSource ${index}] No source or _source found in item!`, Object.keys(item));
     }
 
     // The structure is: _source.spec.metadata.{appId, organization, ...}
@@ -395,8 +396,9 @@ export const guardrailsApi = {
       (specMetadata.resourceKind as string) ||
       undefined;
 
-    // Generate an ID from metadata or use index
+    // Generate an ID from item.id, metadata, or use index
     const id =
+      item.id ||
       (topMetadata.eventId as string) ||
       (topMetadata.correlationId as string) ||
       `test-input-${index}`;

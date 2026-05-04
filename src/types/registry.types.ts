@@ -135,9 +135,12 @@ export interface User {
 
 /**
  * Raw source item from backend response
+ * Backend may return either 'source' or '_source' field
  */
 export interface TestInputSource {
-  _source: Record<string, unknown>;
+  id?: string;
+  source?: Record<string, unknown>;
+  _source?: Record<string, unknown>;
 }
 
 /**
