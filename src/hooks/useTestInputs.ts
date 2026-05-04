@@ -7,7 +7,7 @@
 
 import { useInfiniteQuery } from '@tanstack/react-query';
 import { guardrailsApi } from '@/services/api';
-import type { TestInputFilters, TestInputsResponse, TestInput } from '@/types/registry.types';
+import type { TestInputFilters, TestInput } from '@/types/registry.types';
 
 // Query keys for cache management
 export const testInputsKeys = {
@@ -28,8 +28,6 @@ interface UseTestInputsResult {
   totalHits: number;
   /** Whether more results are available */
   hasMore: boolean;
-  /** Available filter options from the initial response */
-  availableFilters?: TestInputsResponse['filters'];
   /** Loading state for initial fetch */
   isLoading: boolean;
   /** Loading state for fetching next page */
@@ -81,12 +79,11 @@ export function useTestInputs(options: UseTestInputsOptions = {}): UseTestInputs
   });
 
   // Flatten all pages into a single array of test inputs
-  const testInputs = query.data?.pages.flatMap((page) => page.content) ?? [];
+  const testInputs = query.data?.pages.flatMap((page) => page.testInputs) ?? [];
 
   // Get metadata from first page
   const firstPage = query.data?.pages[0];
-  const totalHits = firstPage?.totalHits ?? 0;
-  const availableFilters = firstPage?.filters;
+  const totalHits = firstPage?.total ?? 0;
 
   // Check if there are more results to load
   const lastPage = query.data?.pages[query.data.pages.length - 1];
@@ -96,7 +93,6 @@ export function useTestInputs(options: UseTestInputsOptions = {}): UseTestInputs
     testInputs,
     totalHits,
     hasMore,
-    availableFilters,
     isLoading: query.isLoading,
     isFetchingNextPage: query.isFetchingNextPage,
     error: query.error,

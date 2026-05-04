@@ -746,91 +746,70 @@ GET /api/v1/registry/test-inputs?scrollId=DXF1ZXJ5QW5kRmV0Y2gBAAAAAA...
 **Example Success Response - Initial Request (200 OK):**
 ```json
 {
-  "scrollId": "DXF1ZXJ5QW5kRmV0Y2gBAAAAAAAAAD4WYm9laVYtZndUQlNsdDcwakFMNjU1QQ==",
-  "totalHits": 156,
-  "hasMore": true,
-  "content": [
+  "scrollId": "FGluY2x1ZGVfY29udGV4dF91dWlkDXF1ZXJ5QW5kRmV0Y2gBFm...",
+  "total": 156,
+  "hits": [
     {
-      "id": "tc-input-001",
-      "name": "VM Provisioning Request - Large Instance",
-      "description": "Sample input for provisioning a large VM in production",
-      "applicationId": "app-123",
-      "organization": "Platform Team",
-      "environment": "production",
-      "resourceType": "vmforge",
-      "resourceKind": "VirtualMachine",
-      "input": {
+      "_id": "6JU7V2ZGVY7905bAb9r645c-0997-72233559V9ZX",
+      "_source": {
+        "appId": "DCTRN-LIGHTSPEED",
+        "organization": "wfigitas-CHIEF-TECH-OFC-NonProd",
+        "environment": "dev",
+        "correlationId": "c1d2e3f4-5678-90ab-cdef-1234567890ab",
+        "eventId": "evt-001-abc123",
+        "guardrailId": "vm-size-limit",
+        "metadata": {
+          "correlationId": "c1d2e3f4-5678-90ab-cdef-1234567890ab",
+          "requestId": "req-12345",
+          "timestamp": "2024-03-15T10:30:00Z"
+        },
+        "version": "1.0.0",
         "request": {
           "action": "provision",
           "resource": {
             "type": "virtual_machine",
-            "size": "large",
-            "region": "us-east-1"
+            "size": "large"
           },
           "user": {
             "id": "user-456",
-            "role": "developer",
-            "department": "engineering"
+            "role": "developer"
           }
         }
-      },
-      "metadata": {
-        "source": "production-logs",
-        "capturedAt": "2024-03-15T10:30:00Z"
       }
     },
     {
-      "id": "tc-input-002",
-      "name": "AI Model Deployment Request",
-      "description": "Sample input for deploying an AI model through Lightspeed",
-      "applicationId": "app-789",
-      "organization": "ML Ops",
-      "environment": "staging",
-      "resourceType": "lightspeed",
-      "resourceKind": "ModelDeployment",
-      "input": {
-        "request": {
-          "action": "deploy",
-          "model": {
-            "name": "recommendation-v2",
-            "version": "2.1.0",
-            "resources": {
-              "gpu": 2,
-              "memory": "32Gi"
-            }
-          },
-          "user": {
-            "id": "user-789",
-            "role": "ml-engineer",
-            "team": "recommendations"
-          }
-        }
-      },
-      "metadata": {
-        "source": "staging-environment",
-        "capturedAt": "2024-03-20T14:00:00Z"
+      "_id": "7KV8W3AHWZ8016cBc0s756d-1098-83344660W0AY",
+      "_source": {
+        "appId": "DCTRN-LIGHTSPEED",
+        "organization": "wfigitas-CHIEF-TECH-OFC-NonProd",
+        "environment": "staging",
+        "correlationId": "d2e3f4g5-6789-01bc-defg-2345678901bc",
+        "eventId": "evt-002-def456",
+        "guardrailId": "api-rate-limit",
+        "metadata": {
+          "correlationId": "d2e3f4g5-6789-01bc-defg-2345678901bc",
+          "requestId": "req-67890"
+        },
+        "version": "1.0.0"
       }
     }
-  ],
-  "filters": {
-    "availableApplications": ["app-123", "app-456", "app-789"],
-    "availableOrganizations": ["Platform Team", "ML Ops", "Security"],
-    "availableEnvironments": ["dev", "staging", "production"]
-  }
+  ]
 }
 ```
 
 **Example Success Response - Subsequent Scroll Request (200 OK):**
 ```json
 {
-  "scrollId": "DXF1ZXJ5QW5kRmV0Y2gBAAAAAAAAAD4WYm9laVYtZndUQlNsdDcwakFMNjU1QQ==",
-  "totalHits": 156,
-  "hasMore": true,
-  "content": [
+  "scrollId": "FGluY2x1ZGVfY29udGV4dF91dWlkDXF1ZXJ5QW5kRmV0Y2gBFn...",
+  "total": 156,
+  "hits": [
     {
-      "id": "tc-input-051",
-      "name": "Database Access Request",
-      ...
+      "_id": "8LW9X4BIXA9127dCd1t867e-2109-94455771X1BZ",
+      "_source": {
+        "appId": "DCTRN-VMFORGE",
+        "environment": "production",
+        ...
+      }
     }
   ]
 }
@@ -840,14 +819,8 @@ GET /api/v1/registry/test-inputs?scrollId=DXF1ZXJ5QW5kRmV0Y2gBAAAAAA...
 ```json
 {
   "scrollId": null,
-  "totalHits": 156,
-  "hasMore": false,
-  "content": [
-    {
-      "id": "tc-input-150",
-      ...
-    }
-  ]
+  "total": 156,
+  "hits": []
 }
 ```
 
@@ -855,10 +828,8 @@ GET /api/v1/registry/test-inputs?scrollId=DXF1ZXJ5QW5kRmV0Y2gBAAAAAA...
 ```json
 {
   "scrollId": null,
-  "totalHits": 0,
-  "hasMore": false,
-  "content": [],
-  "message": "No test cases found matching the specified filters"
+  "total": 0,
+  "hits": []
 }
 ```
 

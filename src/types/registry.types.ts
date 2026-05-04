@@ -132,6 +132,18 @@ export interface User {
 }
 
 // Test Inputs (Scope-Based Test Cases)
+
+/**
+ * Raw hit from OpenSearch response
+ */
+export interface TestInputHit {
+  _id: string;
+  _source: Record<string, unknown>;
+}
+
+/**
+ * Normalized test input for frontend use
+ */
 export interface TestInput {
   id: string;
   name: string;
@@ -142,10 +154,7 @@ export interface TestInput {
   resourceType?: string;
   resourceKind?: string;
   input: Record<string, unknown>;
-  metadata?: {
-    source?: string;
-    capturedAt?: string;
-  };
+  metadata?: Record<string, unknown>;
 }
 
 export interface TestInputFilters {
@@ -156,15 +165,21 @@ export interface TestInputFilters {
   resourceKind?: string;
 }
 
+/**
+ * Raw response from backend (OpenSearch format)
+ */
+export interface TestInputsRawResponse {
+  scrollId: string | null;
+  total: number;
+  hits: TestInputHit[];
+}
+
+/**
+ * Normalized response for frontend use
+ */
 export interface TestInputsResponse {
   scrollId: string | null;
-  totalHits: number;
+  total: number;
   hasMore: boolean;
-  content: TestInput[];
-  filters?: {
-    availableApplications: string[];
-    availableOrganizations: string[];
-    availableEnvironments: string[];
-  };
-  message?: string;
+  testInputs: TestInput[];
 }

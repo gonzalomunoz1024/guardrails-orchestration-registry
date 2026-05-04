@@ -22,6 +22,9 @@ import type {
   TimeRange,
   TestInputFilters,
   TestInputsResponse,
+  TestInputsRawResponse,
+  TestInput,
+  TestInputHit,
 } from '@/types/registry.types';
 import {
   mapGuardrailToPolicy,
@@ -353,6 +356,53 @@ export const guardrailsApi = {
   // ============================================
 
   /**
+   * Map a raw OpenSearch hit to a normalized TestInput
+   */
+  _mapHitToTestInput: (hit: TestInputHit): TestInput => {
+    const source = hit._source;
+
+    // Extract common fields from _source, handling various field naming conventions
+    const id = hit._id;
+    const appId = (source.appId || source.applicationId || source.app_id) as string | undefined;
+    const org = (source.organization || source.org || source.lob) as string | undefined;
+    const env = (source.environment || source.env) as string | undefined;
+    const resType = (source.resourceType || source.resource_type) as string | undefined;
+    const resKind = (source.resourceKind || source.resource_kind) as string | undefined;
+
+    // Generate a name from available fields
+    const name =
+      (source.name as string) ||
+      (source.eventId as string) ||
+      (source.correlationId as string) ||
+      `Test Input ${id.slice(0, 8)}`;
+
+    // Description from source or generate one
+    const description =
+      (source.description as string) ||
+      (source.guardrailId ? `Evaluation for guardrail: ${source.guardrailId}` : undefined);
+
+    // The actual input to use for policy testing - use the entire _source as the input
+    // This allows the full evaluation context to be used when testing policies
+    const input = source;
+
+    // Extract metadata if present
+    const metadata = (source.metadata as Record<string, unknown>) || undefined;
+
+    return {
+      id,
+      name,
+      description,
+      applicationId: appId,
+      organization: org,
+      environment: env,
+      resourceType: resType,
+      resourceKind: resKind,
+      input,
+      metadata,
+    };
+  },
+
+  /**
    * Fetch test inputs for policy testing (scope-based)
    * Uses OpenSearch scroll API for pagination
    *
@@ -380,8 +430,22 @@ export const guardrailsApi = {
         if (filters?.resourceKind) params.resourceKind = filters.resourceKind;
       }
 
-      const response = await apiClient.get<TestInputsResponse>(TEST_INPUTS_PATH, { params });
-      return response.data;
+      const response = await apiClient.get<TestInputsRawResponse>(TEST_INPUTS_PATH, { params });
+      const rawResponse = response.data;
+
+      // Map raw OpenSearch response to normalized format
+      const testInputs = rawResponse.hits.map(guardrailsApi._mapHitToTestInput);
+
+      // Determine if there are more results to fetch
+      // If we received fewer hits than the limit, we've reached the end
+      const hasMore = rawResponse.hits.length >= limit && rawResponse.scrollId !== null;
+
+      return {
+        scrollId: rawResponse.scrollId,
+        total: rawResponse.total,
+        hasMore,
+        testInputs,
+      };
     } catch (error) {
       console.error('[guardrailsApi] Failed to fetch test inputs:', error);
       throw new GuardrailsApiError(
