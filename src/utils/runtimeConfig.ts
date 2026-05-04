@@ -36,7 +36,3 @@ export function getRuntimeConfig(): RuntimeConfig {
 export function getApiBaseUrl(): string {
   return getRuntimeConfig().API_BASE_URL;
 }
-
-// Log config on startup
-console.log('[Config] API Base URL:', getApiBaseUrl());
-console.log('[Config] Source:', import.meta.env.VITE_API_BASE_URL ? 'VITE_API_BASE_URL env var' : window.__RUNTIME_CONFIG__?.API_BASE_URL ? 'Runtime config (serve.cjs)' : 'Default fallback');

@@ -360,13 +360,8 @@ export const guardrailsApi = {
    * Handles nested structure: _source.spec.metadata contains appId, organization, etc.
    */
   _mapSourceToTestInput: (item: TestInputSource, index: number): TestInput => {
-    console.log(`[mapSource ${index}] Input item:`, item);
     // Backend may return 'source' or '_source' field
     const source = item.source || item._source;
-
-    if (!source) {
-      console.warn(`[mapSource ${index}] No source or _source found in item!`, Object.keys(item));
-    }
 
     // The structure is: _source.spec.metadata.{appId, organization, ...}
     const spec = (source?.spec as Record<string, unknown>) || {};
@@ -462,26 +457,13 @@ export const guardrailsApi = {
         if (filters?.resourceKind) params.resourceKind = filters.resourceKind;
       }
 
-      console.log('[getTestInputs] Params being sent:', params);
-
       const response = await apiClient.get<TestInputsRawResponse>(TEST_INPUTS_PATH, { params });
       const rawResponse = response.data;
-
-      console.log('[getTestInputs] Response received:', {
-        scrollId: rawResponse.scrollId,
-        total: rawResponse.total,
-        hitsCount: rawResponse.hits?.length ?? 0,
-        sourcesCount: rawResponse.sources?.length ?? 0,
-        rawKeys: Object.keys(rawResponse),
-      });
 
       // Map raw OpenSearch response to normalized format
       // Backend may return either 'hits' or 'sources' array
       const sources = rawResponse.hits || rawResponse.sources || [];
-      console.log('[getTestInputs] Sources array length:', sources.length);
-
       const testInputs = sources.map((item, index) => guardrailsApi._mapSourceToTestInput(item, index));
-      console.log('[getTestInputs] Mapped testInputs count:', testInputs.length);
 
       // Determine if there are more results to fetch
       // If we received fewer sources than the limit, we've reached the end

@@ -256,8 +256,9 @@ window.__RUNTIME_CONFIG__ = ${JSON.stringify({ API_BASE_URL: frontendApiUrl }, n
 
     // Proxy API requests to backend (when apiUrl is a full URL)
     if (urlPath.startsWith('/api/') && config.apiUrl.startsWith('http')) {
-      // Strip /api prefix and forward to backend
-      const targetPath = urlPath.replace(/^\/api/, '');
+      // Strip /api prefix and forward to backend, preserving query string
+      const queryString = req.url.includes('?') ? req.url.substring(req.url.indexOf('?')) : '';
+      const targetPath = urlPath.replace(/^\/api/, '') + queryString;
       proxyToBackend(config.apiUrl, targetPath, req, res);
       return;
     }
