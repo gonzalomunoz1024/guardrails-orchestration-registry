@@ -22,6 +22,7 @@ import {
   Layers,
   Shield,
   Zap,
+  Info,
 } from 'lucide-react';
 import { BlastRadiusExecutionModal } from '@/components/modals/BlastRadiusExecutionModal';
 import { useUIStore, usePolicyStore, useEvaluationStore } from '@/store';
@@ -646,13 +647,20 @@ export function CreatePolicy() {
 
                   {/* Configuration / Data */}
                   <div className="flex-1 flex flex-col min-h-0">
-                    <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center gap-2 mb-2">
                       <label className="text-sm font-medium text-[var(--color-text-primary)]">
                         Configuration
                       </label>
-                      <span className="text-xs text-[var(--color-text-tertiary)]">
-                        Static data available as "data"
-                      </span>
+                      <div className="relative group">
+                        <Info className="w-4 h-4 text-[var(--color-text-tertiary)] cursor-help" />
+                        <div className="absolute left-1/2 -translate-x-1/2 bottom-full mb-2 px-3 py-2 rounded-lg bg-[var(--color-text-primary)] text-[var(--color-surface)] text-xs w-64 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-10 shadow-lg">
+                          <p className="font-medium mb-1">Dynamic Runtime Data</p>
+                          <p className="text-[var(--color-surface)]/80">
+                            Configuration can be modified at runtime via the Configuration Registry. Use <code className="px-1 py-0.5 rounded bg-[var(--color-surface)]/20 font-mono">input.configuration</code> to access in your Rego policy.
+                          </p>
+                          <div className="absolute left-1/2 -translate-x-1/2 top-full w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-[var(--color-text-primary)]" />
+                        </div>
+                      </div>
                     </div>
                     <div className="flex-1 rounded-[var(--radius-lg)] border border-[var(--color-border-light)] overflow-hidden shadow-[var(--shadow-card)]">
                       <Editor
