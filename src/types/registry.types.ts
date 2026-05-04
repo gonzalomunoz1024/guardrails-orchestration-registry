@@ -109,14 +109,19 @@ export interface DashboardStats {
 export type TimeRange = '1h' | '6h' | '24h' | '7d' | '30d';
 
 export interface RegistryStats {
-  totalPolicies: number;
-  activePolicies: number;
-  draftPolicies: number;
-  pendingReview: number;
+  totalGuardrails: number;
+  activeGuardrails: number;
+  inactiveGuardrails: number;
+  guardrailsByStatus: Record<string, number>;
+  guardrailsByEnforcementType: Record<string, number>;
   totalEvaluations: number;
+  allowedEvaluations: number;
+  deniedEvaluations: number;
+  errorEvaluations: number;
   avgAllowRate: number;
-  recentBlastRadiusTests: number;
-  timeRange: TimeRange;
+  avgDenyRate: number;
+  avgErrorRate: number;
+  timeRange: string;
 }
 
 export interface User {

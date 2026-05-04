@@ -100,13 +100,13 @@ export function Dashboard() {
   // Use backend stats if available, otherwise compute from policies
   const computedStats: DashboardStats = backendStats
     ? {
-        totalPolicies: backendStats.totalPolicies,
-        activePolicies: backendStats.activePolicies,
-        draftPolicies: backendStats.draftPolicies,
-        pendingReview: backendStats.pendingReview,
+        totalPolicies: backendStats.totalGuardrails,
+        activePolicies: backendStats.activeGuardrails,
+        draftPolicies: backendStats.guardrailsByStatus?.DRAFT ?? 0,
+        pendingReview: backendStats.guardrailsByStatus?.REVIEW ?? 0,
         totalEvaluationsToday: backendStats.totalEvaluations,
         avgAllowRate: backendStats.avgAllowRate,
-        recentBlastRadiusTests: backendStats.recentBlastRadiusTests,
+        recentBlastRadiusTests: 0, // Not provided by backend yet
       }
     : {
         totalPolicies: policies.length,
