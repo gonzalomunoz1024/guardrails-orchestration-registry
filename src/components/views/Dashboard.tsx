@@ -13,8 +13,8 @@ import {
   Zap,
 } from 'lucide-react';
 import { useRegistryStore } from '@/store/registryStore';
-import { usePolicies } from '@/hooks';
-import { mockDashboardStats, mockActivityEvents, mockPolicies } from '@/data/mockData';
+import { usePolicies, useStats } from '@/hooks';
+import { mockActivityEvents, mockPolicies } from '@/data/mockData';
 import { cn } from '@/utils';
 import type { ActivityEvent, DashboardStats } from '@/types';
 
@@ -91,20 +91,32 @@ export function Dashboard() {
   // Fetch policies from backend with fallback to mock data
   const { data: backendPolicies } = usePolicies();
 
+  // Fetch stats from backend
+  const { data: backendStats } = useStats('24h');
+
   // Use backend data if available, otherwise fall back to mock data
   const policies = backendPolicies && backendPolicies.length > 0 ? backendPolicies : mockPolicies;
 
-  // Compute stats from actual policies
-  const computedStats: DashboardStats = {
-    totalPolicies: policies.length,
-    activePolicies: policies.filter((p) => p.status === 'active').length,
-    draftPolicies: policies.filter((p) => p.status === 'draft').length,
-    pendingReview: policies.filter((p) => p.status === 'review').length,
-    // These would come from a backend stats endpoint - using mock for now
-    totalEvaluationsToday: mockDashboardStats.totalEvaluationsToday,
-    avgAllowRate: mockDashboardStats.avgAllowRate,
-    recentBlastRadiusTests: mockDashboardStats.recentBlastRadiusTests,
-  };
+  // Use backend stats if available, otherwise compute from policies
+  const computedStats: DashboardStats = backendStats
+    ? {
+        totalPolicies: backendStats.totalPolicies,
+        activePolicies: backendStats.activePolicies,
+        draftPolicies: backendStats.draftPolicies,
+        pendingReview: backendStats.pendingReview,
+        totalEvaluationsToday: backendStats.totalEvaluations,
+        avgAllowRate: backendStats.avgAllowRate,
+        recentBlastRadiusTests: backendStats.recentBlastRadiusTests,
+      }
+    : {
+        totalPolicies: policies.length,
+        activePolicies: policies.filter((p) => p.status === 'active').length,
+        draftPolicies: policies.filter((p) => p.status === 'draft').length,
+        pendingReview: policies.filter((p) => p.status === 'review').length,
+        totalEvaluationsToday: 0,
+        avgAllowRate: 0,
+        recentBlastRadiusTests: 0,
+      };
 
   const recentPolicies = policies.slice(0, 3);
   // Filter active policies (was previously filtered by severity='critical')

@@ -20,3 +20,4 @@ export {
   useEvaluationsByApp,
   evaluationKeys,
 } from './useEvaluations';
+export { useStats, statsKeys } from './useStats';

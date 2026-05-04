@@ -16,7 +16,7 @@ import type {
   EvaluationRecord,
   PaginatedResponse,
 } from '@/types/guardrail.types';
-import type { RegistryPolicy } from '@/types/registry.types';
+import type { RegistryPolicy, RegistryStats, TimeRange } from '@/types/registry.types';
 import {
   mapGuardrailToPolicy,
   mapPolicyToCreateGuardrailRequest,
@@ -28,6 +28,7 @@ import {
 const GUARDRAILS_PATH = '/v1/registry/guardrails';
 const CONFIGURATIONS_PATH = '/v1/registry/configurations';
 const EVALUATIONS_PATH = '/v1/evaluations';
+const STATS_PATH = '/v1/registry/stats';
 
 /**
  * Error class for API errors with additional context
@@ -311,6 +312,30 @@ export const guardrailsApi = {
         `Failed to fetch evaluations for app: ${appId}`,
         (error as { response?: { status?: number } })?.response?.status,
         `${EVALUATIONS_PATH}/app/${appId}`,
+        error
+      );
+    }
+  },
+
+  // ============================================
+  // STATS ENDPOINTS
+  // ============================================
+
+  /**
+   * Get registry statistics for a given time range
+   */
+  getStats: async (timeRange: TimeRange = '24h'): Promise<RegistryStats> => {
+    try {
+      const response = await apiClient.get<RegistryStats>(STATS_PATH, {
+        params: { timeRange },
+      });
+      return response.data;
+    } catch (error) {
+      console.error(`[guardrailsApi] Failed to get stats for timeRange ${timeRange}:`, error);
+      throw new GuardrailsApiError(
+        `Failed to fetch registry stats`,
+        (error as { response?: { status?: number } })?.response?.status,
+        STATS_PATH,
         error
       );
     }

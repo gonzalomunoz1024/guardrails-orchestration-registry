@@ -106,6 +106,19 @@ export interface DashboardStats {
   recentBlastRadiusTests: number;
 }
 
+export type TimeRange = '1h' | '6h' | '24h' | '7d' | '30d';
+
+export interface RegistryStats {
+  totalPolicies: number;
+  activePolicies: number;
+  draftPolicies: number;
+  pendingReview: number;
+  totalEvaluations: number;
+  avgAllowRate: number;
+  recentBlastRadiusTests: number;
+  timeRange: TimeRange;
+}
+
 export interface User {
   id: string;
   name: string;
