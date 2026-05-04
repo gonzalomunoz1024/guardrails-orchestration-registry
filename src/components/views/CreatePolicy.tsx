@@ -23,8 +23,9 @@ import {
   Shield,
   Zap,
   Info,
+  Expand,
 } from 'lucide-react';
-import { BlastRadiusExecutionModal } from '@/components/modals/BlastRadiusExecutionModal';
+import { BlastRadiusExecutionModal, EditorModal } from '@/components/modals';
 import { useUIStore, usePolicyStore, useEvaluationStore } from '@/store';
 import { useRegistryStore } from '@/store/registryStore';
 import { useEvaluate, useTestInputs } from '@/hooks';
@@ -87,6 +88,7 @@ export function CreatePolicy() {
   const [shouldFetchTestInputs, setShouldFetchTestInputs] = useState(false);
   const [expandedTestCase, setExpandedTestCase] = useState<string | null>(null);
   const [isExecutionModalOpen, setIsExecutionModalOpen] = useState(false);
+  const [expandedEditor, setExpandedEditor] = useState<'input' | 'config' | 'output' | null>(null);
 
   // Stabilize filter object to prevent React Query cache key instability
   const testInputFilters = useMemo(() => ({
@@ -629,11 +631,15 @@ export function CreatePolicy() {
                       <label className="text-sm font-medium text-[var(--color-text-primary)]">
                         Input
                       </label>
-                      <span className="text-xs text-[var(--color-text-tertiary)]">
-                        Runtime data passed to policy
-                      </span>
+                      <button
+                        onClick={() => setExpandedEditor('input')}
+                        className="flex items-center gap-1.5 px-2 py-1 rounded-md text-xs text-[var(--color-text-tertiary)] hover:text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-secondary)] transition-all"
+                      >
+                        <Expand className="w-3.5 h-3.5" />
+                        Expand
+                      </button>
                     </div>
-                    <div className="flex-1 rounded-[var(--radius-lg)] border border-[var(--color-border-light)] overflow-hidden shadow-[var(--shadow-card)]">
+                    <div className="flex-1 rounded-[var(--radius-lg)] border border-[var(--color-border-light)] overflow-hidden shadow-[var(--shadow-card)] relative group">
                       <Editor
                         height="100%"
                         language="json"
@@ -647,20 +653,29 @@ export function CreatePolicy() {
 
                   {/* Configuration / Data */}
                   <div className="flex-1 flex flex-col min-h-0">
-                    <div className="flex items-center gap-2 mb-2">
-                      <label className="text-sm font-medium text-[var(--color-text-primary)]">
-                        Configuration
-                      </label>
-                      <div className="relative group">
-                        <Info className="w-4 h-4 text-[var(--color-text-tertiary)] cursor-help" />
-                        <div className="absolute left-1/2 -translate-x-1/2 bottom-full mb-2 px-3 py-2 rounded-lg bg-[var(--color-text-primary)] text-[var(--color-surface)] text-xs w-64 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-10 shadow-lg">
-                          <p className="font-medium mb-1">Dynamic Runtime Data</p>
-                          <p className="text-[var(--color-surface)]/80">
-                            Configuration can be modified at runtime via the Configuration Registry. Use <code className="px-1 py-0.5 rounded bg-[var(--color-surface)]/20 font-mono">input.configuration</code> to access in your Rego policy.
-                          </p>
-                          <div className="absolute left-1/2 -translate-x-1/2 top-full w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-[var(--color-text-primary)]" />
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center gap-2">
+                        <label className="text-sm font-medium text-[var(--color-text-primary)]">
+                          Configuration
+                        </label>
+                        <div className="relative group/tooltip">
+                          <Info className="w-4 h-4 text-[var(--color-text-tertiary)] cursor-help" />
+                          <div className="absolute left-1/2 -translate-x-1/2 bottom-full mb-2 px-3 py-2 rounded-lg bg-[var(--color-text-primary)] text-[var(--color-surface)] text-xs w-64 opacity-0 invisible group-hover/tooltip:opacity-100 group-hover/tooltip:visible transition-all duration-200 z-10 shadow-lg">
+                            <p className="font-medium mb-1">Dynamic Runtime Data</p>
+                            <p className="text-[var(--color-surface)]/80">
+                              Configuration can be modified at runtime via the Configuration Registry. Use <code className="px-1 py-0.5 rounded bg-[var(--color-surface)]/20 font-mono">input.configuration</code> to access in your Rego policy.
+                            </p>
+                            <div className="absolute left-1/2 -translate-x-1/2 top-full w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-[var(--color-text-primary)]" />
+                          </div>
                         </div>
                       </div>
+                      <button
+                        onClick={() => setExpandedEditor('config')}
+                        className="flex items-center gap-1.5 px-2 py-1 rounded-md text-xs text-[var(--color-text-tertiary)] hover:text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-secondary)] transition-all"
+                      >
+                        <Expand className="w-3.5 h-3.5" />
+                        Expand
+                      </button>
                     </div>
                     <div className="flex-1 rounded-[var(--radius-lg)] border border-[var(--color-border-light)] overflow-hidden shadow-[var(--shadow-card)]">
                       <Editor
@@ -677,14 +692,25 @@ export function CreatePolicy() {
                   {/* Output */}
                   <div className="flex-[0.8] flex flex-col min-h-0">
                     <div className="flex items-center justify-between mb-2">
-                      <label className="text-sm font-medium text-[var(--color-text-primary)]">
-                        Output
-                      </label>
-                      {result?.success && (
-                        <span className="flex items-center gap-1 text-xs text-[var(--color-success)]">
-                          <CheckCircle className="w-3 h-3" />
-                          Evaluation successful
-                        </span>
+                      <div className="flex items-center gap-2">
+                        <label className="text-sm font-medium text-[var(--color-text-primary)]">
+                          Output
+                        </label>
+                        {result?.success && (
+                          <span className="flex items-center gap-1 text-xs text-[var(--color-success)]">
+                            <CheckCircle className="w-3 h-3" />
+                            Success
+                          </span>
+                        )}
+                      </div>
+                      {result && (
+                        <button
+                          onClick={() => setExpandedEditor('output')}
+                          className="flex items-center gap-1.5 px-2 py-1 rounded-md text-xs text-[var(--color-text-tertiary)] hover:text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-secondary)] transition-all"
+                        >
+                          <Expand className="w-3.5 h-3.5" />
+                          Expand
+                        </button>
                       )}
                     </div>
                     <div
@@ -1041,6 +1067,38 @@ export function CreatePolicy() {
               version: '1.0.0',
               enforcementType,
             }}
+          />
+
+          {/* Editor Modals */}
+          <EditorModal
+            isOpen={expandedEditor === 'input'}
+            onClose={() => setExpandedEditor(null)}
+            title="Input"
+            subtitle="Runtime data passed to your policy"
+            language="json"
+            value={inputJson}
+            onChange={setInputJson}
+            theme={resolvedTheme}
+          />
+          <EditorModal
+            isOpen={expandedEditor === 'config'}
+            onClose={() => setExpandedEditor(null)}
+            title="Configuration"
+            subtitle="Dynamic data accessible via input.configuration"
+            language="json"
+            value={configJson}
+            onChange={setConfigJson}
+            theme={resolvedTheme}
+          />
+          <EditorModal
+            isOpen={expandedEditor === 'output'}
+            onClose={() => setExpandedEditor(null)}
+            title="Output"
+            subtitle="Policy evaluation result"
+            language="json"
+            value={result ? JSON.stringify(result.result || result.error, null, 2) : '{}'}
+            readOnly
+            theme={resolvedTheme}
           />
 
           {/* Step 4: Review */}
