@@ -748,7 +748,7 @@ GET /api/v1/registry/test-inputs?scrollId=DXF1ZXJ5QW5kRmV0Y2gBAAAAAA...
 {
   "scrollId": "FGluY2x1ZGVfY29udGV4dF91dWlkDXF1ZXJ5QW5kRmV0Y2gBFm...",
   "total": 120,
-  "sources": [
+  "hits": [
     {
       "_source": {
         "apiVersion": "policy.lightspeed.wellsfargo.net/v1",
@@ -796,7 +796,7 @@ GET /api/v1/registry/test-inputs?scrollId=DXF1ZXJ5QW5kRmV0Y2gBAAAAAA...
 {
   "scrollId": "FGluY2x1ZGVfY29udGV4dF91dWlkDXF1ZXJ5QW5kRmV0Y2gBFn...",
   "total": 120,
-  "sources": [
+  "hits": [
     {
       "_source": {
         "apiVersion": "policy.lightspeed.wellsfargo.net/v1",
@@ -813,7 +813,7 @@ GET /api/v1/registry/test-inputs?scrollId=DXF1ZXJ5QW5kRmV0Y2gBAAAAAA...
 {
   "scrollId": null,
   "total": 120,
-  "sources": []
+  "hits": []
 }
 ```
 
@@ -822,7 +822,7 @@ GET /api/v1/registry/test-inputs?scrollId=DXF1ZXJ5QW5kRmV0Y2gBAAAAAA...
 {
   "scrollId": null,
   "total": 0,
-  "sources": []
+  "hits": []
 }
 ```
 

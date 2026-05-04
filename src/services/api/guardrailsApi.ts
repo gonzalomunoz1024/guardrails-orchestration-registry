@@ -468,12 +468,14 @@ export const guardrailsApi = {
       console.log('[getTestInputs] Response received:', {
         scrollId: rawResponse.scrollId,
         total: rawResponse.total,
+        hitsCount: rawResponse.hits?.length ?? 0,
         sourcesCount: rawResponse.sources?.length ?? 0,
         rawKeys: Object.keys(rawResponse),
       });
 
       // Map raw OpenSearch response to normalized format
-      const sources = rawResponse.sources || [];
+      // Backend may return either 'hits' or 'sources' array
+      const sources = rawResponse.hits || rawResponse.sources || [];
       console.log('[getTestInputs] Sources array length:', sources.length);
 
       const testInputs = sources.map((item, index) => guardrailsApi._mapSourceToTestInput(item, index));

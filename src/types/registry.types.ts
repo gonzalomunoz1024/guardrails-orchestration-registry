@@ -166,11 +166,13 @@ export interface TestInputFilters {
 
 /**
  * Raw response from backend (OpenSearch format)
+ * Note: Backend may return either 'hits' or 'sources' array
  */
 export interface TestInputsRawResponse {
   scrollId: string | null;
   total: number;
-  sources: TestInputSource[];
+  hits?: TestInputSource[];
+  sources?: TestInputSource[];
 }
 
 /**
