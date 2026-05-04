@@ -376,22 +376,22 @@ export const guardrailsApi = {
     const appId =
       (specMetadata.appId as string) ||
       (specMetadata.applicationId as string) ||
-      (source.appId as string) ||
+      (source?.appId as string) ||
       undefined;
     const org =
       (specMetadata.organization as string) ||
-      (source.organization as string) ||
+      (source?.organization as string) ||
       undefined;
     const env =
       (specMetadata.environment as string) ||
-      (source.environment as string) ||
+      (source?.environment as string) ||
       undefined;
     const resType =
       (specMetadata.resourceType as string) ||
-      (source.resourceType as string) ||
+      (source?.resourceType as string) ||
       undefined;
     const resKind =
-      (source.kind as string) ||
+      (source?.kind as string) ||
       (specMetadata.resourceKind as string) ||
       undefined;
 
@@ -404,19 +404,19 @@ export const guardrailsApi = {
     // Generate a name from available fields
     const name =
       (specMetadata.name as string) ||
-      (source.name as string) ||
+      (source?.name as string) ||
       (topMetadata.eventId as string) ||
       `Test Input ${id.slice(0, 12)}`;
 
     // Description from source or generate one
-    const guardrailId = specMetadata.guardrailId || source.guardrailId;
+    const guardrailId = specMetadata.guardrailId || source?.guardrailId;
     const description =
-      (source.description as string) ||
+      (source?.description as string) ||
       (guardrailId ? `Evaluation for guardrail: ${guardrailId}` : undefined);
 
     // The actual input to use for policy testing - use the entire _source as the input
     // This allows the full evaluation context to be used when testing policies
-    const input = source;
+    const input = source || {};
 
     return {
       id,
