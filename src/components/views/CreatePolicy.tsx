@@ -24,6 +24,7 @@ import {
   Zap,
   Info,
   Expand,
+  Wand2,
 } from 'lucide-react';
 import { BlastRadiusExecutionModal, EditorModal } from '@/components/modals';
 import { useUIStore, usePolicyStore, useEvaluationStore } from '@/store';
@@ -135,6 +136,15 @@ export function CreatePolicy() {
   const handleUseTestInput = (testInput: TestInput) => {
     setInputJson(JSON.stringify(testInput.input, null, 2));
     setCurrentStep('code');
+  };
+
+  const beautifyJson = (json: string, setter: (value: string) => void) => {
+    try {
+      const parsed = JSON.parse(json);
+      setter(JSON.stringify(parsed, null, 2));
+    } catch {
+      // Invalid JSON, do nothing
+    }
   };
 
   const canProceed = () => {
@@ -631,13 +641,23 @@ export function CreatePolicy() {
                       <label className="text-sm font-medium text-[var(--color-text-primary)]">
                         Input
                       </label>
-                      <button
-                        onClick={() => setExpandedEditor('input')}
-                        className="flex items-center gap-1.5 px-2 py-1 rounded-md text-xs text-[var(--color-text-tertiary)] hover:text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-secondary)] transition-all"
-                      >
-                        <Expand className="w-3.5 h-3.5" />
-                        Expand
-                      </button>
+                      <div className="flex items-center gap-1">
+                        <button
+                          onClick={() => beautifyJson(inputJson, setInputJson)}
+                          className="flex items-center gap-1.5 px-2 py-1 rounded-md text-xs text-[var(--color-text-tertiary)] hover:text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-secondary)] transition-all"
+                          title="Format JSON"
+                        >
+                          <Wand2 className="w-3.5 h-3.5" />
+                          Beautify
+                        </button>
+                        <button
+                          onClick={() => setExpandedEditor('input')}
+                          className="flex items-center gap-1.5 px-2 py-1 rounded-md text-xs text-[var(--color-text-tertiary)] hover:text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-secondary)] transition-all"
+                        >
+                          <Expand className="w-3.5 h-3.5" />
+                          Expand
+                        </button>
+                      </div>
                     </div>
                     <div className="flex-1 rounded-[var(--radius-lg)] border border-[var(--color-border-light)] overflow-hidden shadow-[var(--shadow-card)] relative group">
                       <Editor
@@ -669,13 +689,23 @@ export function CreatePolicy() {
                           </div>
                         </div>
                       </div>
-                      <button
-                        onClick={() => setExpandedEditor('config')}
-                        className="flex items-center gap-1.5 px-2 py-1 rounded-md text-xs text-[var(--color-text-tertiary)] hover:text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-secondary)] transition-all"
-                      >
-                        <Expand className="w-3.5 h-3.5" />
-                        Expand
-                      </button>
+                      <div className="flex items-center gap-1">
+                        <button
+                          onClick={() => beautifyJson(configJson, setConfigJson)}
+                          className="flex items-center gap-1.5 px-2 py-1 rounded-md text-xs text-[var(--color-text-tertiary)] hover:text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-secondary)] transition-all"
+                          title="Format JSON"
+                        >
+                          <Wand2 className="w-3.5 h-3.5" />
+                          Beautify
+                        </button>
+                        <button
+                          onClick={() => setExpandedEditor('config')}
+                          className="flex items-center gap-1.5 px-2 py-1 rounded-md text-xs text-[var(--color-text-tertiary)] hover:text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-secondary)] transition-all"
+                        >
+                          <Expand className="w-3.5 h-3.5" />
+                          Expand
+                        </button>
+                      </div>
                     </div>
                     <div className="flex-1 rounded-[var(--radius-lg)] border border-[var(--color-border-light)] overflow-hidden shadow-[var(--shadow-card)]">
                       <Editor
@@ -913,18 +943,13 @@ export function CreatePolicy() {
                             >
                               <div className="flex-1">
                                 <div className="flex items-center gap-3 mb-1">
-                                  <h4 className="font-medium text-[var(--color-text-primary)]">
-                                    {testInput.name}
+                                  <h4 className="font-medium text-[var(--color-text-primary)] font-mono text-sm">
+                                    {(testInput.metadata?.correlationId as string) || testInput.name}
                                   </h4>
                                   <div className="flex gap-2">
                                     {testInput.applicationId && (
                                       <span className="px-2 py-0.5 rounded-full text-xs bg-[var(--color-surface-secondary)] text-[var(--color-text-secondary)]">
                                         {testInput.applicationId}
-                                      </span>
-                                    )}
-                                    {testInput.environment && (
-                                      <span className="px-2 py-0.5 rounded-full text-xs bg-[var(--color-info-bg)] text-[var(--color-info)]">
-                                        {testInput.environment}
                                       </span>
                                     )}
                                   </div>

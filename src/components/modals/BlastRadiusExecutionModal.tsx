@@ -313,8 +313,8 @@ export function BlastRadiusExecutionModal({
                     {/* Test Case Info */}
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
-                        <h4 className="font-medium text-[var(--color-text-primary)] truncate">
-                          {testInput.name}
+                        <h4 className="font-medium text-[var(--color-text-primary)] truncate font-mono text-sm">
+                          {(testInput.metadata?.correlationId as string) || testInput.name}
                         </h4>
                         {testInput.applicationId && (
                           <span className="px-2 py-0.5 rounded-full text-xs bg-[var(--color-surface-secondary)] text-[var(--color-text-secondary)] flex-shrink-0">
@@ -343,13 +343,43 @@ export function BlastRadiusExecutionModal({
 
                   {/* Expanded Result */}
                   {isExpanded && result && (
-                    <div className="px-4 pb-4">
-                      <div className="p-4 rounded-lg bg-[var(--color-surface-secondary)] font-mono text-sm overflow-auto max-h-48">
-                        <pre className="text-[var(--color-text-primary)]">
-                          {result.error
-                            ? result.error
-                            : JSON.stringify(result.result, null, 2)}
-                        </pre>
+                    <div className="px-4 pb-4 space-y-3">
+                      {/* Input Section - For triage */}
+                      <div>
+                        <label className="block text-xs font-medium text-[var(--color-text-tertiary)] mb-1.5 uppercase tracking-wide">
+                          Input
+                        </label>
+                        <div className="p-3 rounded-lg bg-[var(--color-surface)] border border-[var(--color-border-light)] font-mono text-xs overflow-auto max-h-32">
+                          <pre className="text-[var(--color-text-secondary)]">
+                            {JSON.stringify(testInput.input, null, 2)}
+                          </pre>
+                        </div>
+                      </div>
+                      {/* Output Section */}
+                      <div>
+                        <label className="block text-xs font-medium text-[var(--color-text-tertiary)] mb-1.5 uppercase tracking-wide">
+                          {result.error ? 'Error' : 'Output'}
+                        </label>
+                        <div className={cn(
+                          "p-3 rounded-lg font-mono text-xs overflow-auto max-h-32",
+                          result.status === 'passed'
+                            ? 'bg-[var(--color-success-bg)] border border-[var(--color-success)]/30'
+                            : result.status === 'failed'
+                              ? 'bg-[var(--color-error-bg)] border border-[var(--color-error)]/30'
+                              : 'bg-[var(--color-warning-bg)] border border-[var(--color-warning)]/30'
+                        )}>
+                          <pre className={cn(
+                            result.status === 'passed'
+                              ? 'text-[var(--color-success)]'
+                              : result.status === 'failed'
+                                ? 'text-[var(--color-error)]'
+                                : 'text-[var(--color-warning)]'
+                          )}>
+                            {result.error
+                              ? result.error
+                              : JSON.stringify(result.result, null, 2)}
+                          </pre>
+                        </div>
                       </div>
                     </div>
                   )}
