@@ -92,11 +92,13 @@ export function CreatePolicy() {
   const [expandedEditor, setExpandedEditor] = useState<'input' | 'config' | 'output' | null>(null);
 
   // Stabilize filter object to prevent React Query cache key instability
+  // resourceKind is pre-populated from Step 1
   const testInputFilters = useMemo(() => ({
     applicationId: applicationId || undefined,
     organization: organization || undefined,
     environment: environment || undefined,
-  }), [applicationId, organization, environment]);
+    resourceKind: resourceKind || undefined,
+  }), [applicationId, organization, environment, resourceKind]);
 
   // Use the real test inputs hook with scroll-based pagination
   const {
@@ -812,12 +814,33 @@ export function CreatePolicy() {
                     </div>
                     <div>
                       <h3 className="font-semibold text-[var(--color-text-primary)]">Filter Test Cases</h3>
-                      <p className="text-sm text-[var(--color-text-secondary)]">All fields are optional. Leave empty to fetch all test cases.</p>
+                      <p className="text-sm text-[var(--color-text-secondary)]">Resource Kind is pre-filled from Step 1. Other filters are optional.</p>
                     </div>
                   </div>
                 </div>
                 <div className="p-6">
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                    {/* Resource Kind - Pre-filled from Step 1 */}
+                    <div>
+                      <label className="flex items-center gap-2 text-sm font-medium text-[var(--color-text-primary)] mb-2">
+                        <Layers className="w-4 h-4 text-[var(--color-text-tertiary)]" />
+                        Resource Kind
+                      </label>
+                      <div
+                        className={cn(
+                          'w-full px-4 py-3 rounded-[var(--radius-lg)]',
+                          'bg-[var(--color-info-bg)] text-[var(--color-info)]',
+                          'border border-[var(--color-info)]/30',
+                          'font-medium'
+                        )}
+                      >
+                        {resourceKind || 'Not specified'}
+                      </div>
+                      <p className="mt-1 text-xs text-[var(--color-text-tertiary)]">
+                        From Step 1
+                      </p>
+                    </div>
+
                     {/* Application ID */}
                     <div>
                       <label className="flex items-center gap-2 text-sm font-medium text-[var(--color-text-primary)] mb-2">
@@ -884,8 +907,8 @@ export function CreatePolicy() {
 
                   <div className="mt-6 flex items-center justify-between">
                     <p className="text-sm text-[var(--color-text-tertiary)]">
-                      {applicationId || organization || environment
-                        ? `Filtering by: ${[applicationId && 'Application', organization && 'Organization', environment && 'Environment'].filter(Boolean).join(', ')}`
+                      {resourceKind || applicationId || organization || environment
+                        ? `Filtering by: ${[resourceKind && 'Resource Kind', applicationId && 'Application', organization && 'Organization', environment && 'Environment'].filter(Boolean).join(', ')}`
                         : 'No filters applied - will fetch all test cases'}
                     </p>
                     <button
