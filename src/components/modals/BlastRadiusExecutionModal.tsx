@@ -106,11 +106,7 @@ export function BlastRadiusExecutionModal({
       const resource = testInput.input || {};
       const inputBundle = buildInputBundle(resource, guardrailInfo, configuration);
 
-      const response = await evaluationApi.evaluate(
-        regoCode,
-        inputBundle,
-        configuration
-      );
+      const response = await evaluationApi.evaluate(regoCode, inputBundle);
 
       const executionTimeMs = performance.now() - startTime;
 

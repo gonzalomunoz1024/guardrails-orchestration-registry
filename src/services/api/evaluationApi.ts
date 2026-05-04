@@ -9,20 +9,19 @@ import type { EvaluateResponse } from '@/types';
  */
 export const evaluationApi = {
   /**
-   * Evaluate a policy with given input and data
+   * Evaluate a policy with given input
    * Uses backend passthrough: POST /v1/opa/evaluate
+   * Input should contain: guardrail, configuration, resource
    */
   evaluate: async (
     policy: string,
-    input: Record<string, unknown>,
-    data?: Record<string, unknown>
+    input: Record<string, unknown>
   ): Promise<EvaluateResponse> => {
     const response = await apiClient.post<{ result: unknown; metrics?: object }>(
       '/v1/opa/evaluate',
       {
         policy,
         input,
-        data,
       }
     );
 

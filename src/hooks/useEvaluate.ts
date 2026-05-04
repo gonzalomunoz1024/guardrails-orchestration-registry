@@ -57,11 +57,7 @@ export function useEvaluate(options: UseEvaluateOptions = {}) {
       const inputBundle = buildInputBundle(resource, configuration, guardrailInfo);
 
       const startTime = performance.now();
-      const response = await evaluationApi.evaluate(
-        regoCode,
-        inputBundle,
-        configuration
-      );
+      const response = await evaluationApi.evaluate(regoCode, inputBundle);
       const executionTime = performance.now() - startTime;
 
       return {
