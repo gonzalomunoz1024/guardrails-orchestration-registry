@@ -14,14 +14,15 @@ interface GuardrailInfo {
 
 /**
  * Build the inputBundle for OPA evaluation
- * Contains: guardrail metadata, configuration, and resource (test input data)
+ * Merges user input with guardrail metadata and configuration
  */
 function buildInputBundle(
-  resource: Record<string, unknown>,
+  userInput: Record<string, unknown>,
   configuration: Record<string, unknown>,
   guardrailInfo: GuardrailInfo
 ): Record<string, unknown> {
   return {
+    ...userInput,
     guardrail: {
       id: guardrailInfo.id || 'test-policy',
       name: guardrailInfo.name || 'Test Policy',
@@ -29,7 +30,6 @@ function buildInputBundle(
       enforcementType: guardrailInfo.enforcementType || 'MANDATORY',
     },
     configuration: configuration,
-    resource: resource,
   };
 }
 

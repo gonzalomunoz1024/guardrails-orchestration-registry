@@ -39,13 +39,19 @@ function proxyToBackend(backendUrl, targetPath, req, res) {
   let body = '';
   req.on('data', chunk => { body += chunk; });
   req.on('end', () => {
+    // Copy headers but remove CORS-triggering ones
+    const headers = { ...req.headers };
+    delete headers['origin'];
+    delete headers['referer'];
+    delete headers['host'];
+
     const options = {
       hostname: url.hostname,
       port: url.port || (isHttps ? 443 : 80),
       path: fullPath,
       method: req.method,
       headers: {
-        ...req.headers,
+        ...headers,
         host: url.hostname,
       },
       rejectUnauthorized: false,

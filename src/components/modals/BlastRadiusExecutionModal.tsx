@@ -44,14 +44,15 @@ interface ExecutionResult {
 
 /**
  * Build the inputBundle for OPA evaluation
- * Contains: guardrail metadata, configuration, and resource (test input data)
+ * Merges test input with guardrail metadata and configuration
  */
 function buildInputBundle(
-  resource: Record<string, unknown>,
+  testInputData: Record<string, unknown>,
   guardrailInfo: GuardrailInfo,
   configuration: Record<string, unknown>
 ): Record<string, unknown> {
   return {
+    ...testInputData,
     guardrail: {
       id: guardrailInfo.id,
       name: guardrailInfo.name,
@@ -59,7 +60,6 @@ function buildInputBundle(
       enforcementType: guardrailInfo.enforcementType,
     },
     configuration: configuration,
-    resource: resource,
   };
 }
 
@@ -102,9 +102,9 @@ export function BlastRadiusExecutionModal({
     const startTime = performance.now();
 
     try {
-      // Use the test input's data as the resource
-      const resource = testInput.input || {};
-      const inputBundle = buildInputBundle(resource, guardrailInfo, configuration);
+      // Merge the test input's data with guardrail and configuration
+      const testInputData = testInput.input || {};
+      const inputBundle = buildInputBundle(testInputData, guardrailInfo, configuration);
 
       const response = await evaluationApi.evaluate(regoCode, inputBundle);
 

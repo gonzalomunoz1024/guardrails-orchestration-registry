@@ -29,9 +29,9 @@ const defaultRegoCode = `package policy
 
 default allow := false
 
-# Example: Check resource data
+# Example: Check input data directly
 allow if {
-    input.resource.user.role == "admin"
+    input.user.role == "admin"
 }
 
 # Example: Use configuration data
