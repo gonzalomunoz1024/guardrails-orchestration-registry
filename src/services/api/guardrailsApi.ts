@@ -24,7 +24,7 @@ import type {
   TestInputsResponse,
   TestInputsRawResponse,
   TestInput,
-  TestInputHit,
+  TestInputSource,
 } from '@/types/registry.types';
 import {
   mapGuardrailToPolicy,
@@ -356,37 +356,62 @@ export const guardrailsApi = {
   // ============================================
 
   /**
-   * Map a raw OpenSearch hit to a normalized TestInput
+   * Map a raw OpenSearch source to a normalized TestInput
+   * Handles nested structure: _source.spec.metadata contains appId, organization, etc.
    */
-  _mapHitToTestInput: (hit: TestInputHit): TestInput => {
-    const source = hit._source;
+  _mapSourceToTestInput: (item: TestInputSource, index: number): TestInput => {
+    const source = item._source;
 
-    // Extract common fields from _source, handling various field naming conventions
-    const id = hit._id;
-    const appId = (source.appId || source.applicationId || source.app_id) as string | undefined;
-    const org = (source.organization || source.org || source.lob) as string | undefined;
-    const env = (source.environment || source.env) as string | undefined;
-    const resType = (source.resourceType || source.resource_type) as string | undefined;
-    const resKind = (source.resourceKind || source.resource_kind) as string | undefined;
+    // The structure is: _source.spec.metadata.{appId, organization, ...}
+    const spec = (source.spec as Record<string, unknown>) || {};
+    const specMetadata = (spec.metadata as Record<string, unknown>) || {};
+    const topMetadata = (source.metadata as Record<string, unknown>) || {};
+
+    // Extract fields from spec.metadata (primary) or fallback to top-level
+    const appId =
+      (specMetadata.appId as string) ||
+      (specMetadata.applicationId as string) ||
+      (source.appId as string) ||
+      undefined;
+    const org =
+      (specMetadata.organization as string) ||
+      (source.organization as string) ||
+      undefined;
+    const env =
+      (specMetadata.environment as string) ||
+      (source.environment as string) ||
+      undefined;
+    const resType =
+      (specMetadata.resourceType as string) ||
+      (source.resourceType as string) ||
+      undefined;
+    const resKind =
+      (source.kind as string) ||
+      (specMetadata.resourceKind as string) ||
+      undefined;
+
+    // Generate an ID from metadata or use index
+    const id =
+      (topMetadata.eventId as string) ||
+      (topMetadata.correlationId as string) ||
+      `test-input-${index}`;
 
     // Generate a name from available fields
     const name =
+      (specMetadata.name as string) ||
       (source.name as string) ||
-      (source.eventId as string) ||
-      (source.correlationId as string) ||
-      `Test Input ${id.slice(0, 8)}`;
+      (topMetadata.eventId as string) ||
+      `Test Input ${id.slice(0, 12)}`;
 
     // Description from source or generate one
+    const guardrailId = specMetadata.guardrailId || source.guardrailId;
     const description =
       (source.description as string) ||
-      (source.guardrailId ? `Evaluation for guardrail: ${source.guardrailId}` : undefined);
+      (guardrailId ? `Evaluation for guardrail: ${guardrailId}` : undefined);
 
     // The actual input to use for policy testing - use the entire _source as the input
     // This allows the full evaluation context to be used when testing policies
     const input = source;
-
-    // Extract metadata if present
-    const metadata = (source.metadata as Record<string, unknown>) || undefined;
 
     return {
       id,
@@ -398,7 +423,7 @@ export const guardrailsApi = {
       resourceType: resType,
       resourceKind: resKind,
       input,
-      metadata,
+      metadata: topMetadata,
     };
   },
 
@@ -434,11 +459,12 @@ export const guardrailsApi = {
       const rawResponse = response.data;
 
       // Map raw OpenSearch response to normalized format
-      const testInputs = rawResponse.hits.map(guardrailsApi._mapHitToTestInput);
+      const sources = rawResponse.sources || [];
+      const testInputs = sources.map((item, index) => guardrailsApi._mapSourceToTestInput(item, index));
 
       // Determine if there are more results to fetch
-      // If we received fewer hits than the limit, we've reached the end
-      const hasMore = rawResponse.hits.length >= limit && rawResponse.scrollId !== null;
+      // If we received fewer sources than the limit, we've reached the end
+      const hasMore = sources.length >= limit && rawResponse.scrollId !== null;
 
       return {
         scrollId: rawResponse.scrollId,

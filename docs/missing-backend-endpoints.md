@@ -747,48 +747,42 @@ GET /api/v1/registry/test-inputs?scrollId=DXF1ZXJ5QW5kRmV0Y2gBAAAAAA...
 ```json
 {
   "scrollId": "FGluY2x1ZGVfY29udGV4dF91dWlkDXF1ZXJ5QW5kRmV0Y2gBFm...",
-  "total": 156,
-  "hits": [
+  "total": 120,
+  "sources": [
     {
-      "_id": "6JU7V2ZGVY7905bAb9r645c-0997-72233559V9ZX",
       "_source": {
-        "appId": "DCTRN-LIGHTSPEED",
-        "organization": "wfigitas-CHIEF-TECH-OFC-NonProd",
-        "environment": "dev",
-        "correlationId": "c1d2e3f4-5678-90ab-cdef-1234567890ab",
-        "eventId": "evt-001-abc123",
-        "guardrailId": "vm-size-limit",
+        "apiVersion": "policy.lightspeed.wellsfargo.net/v1",
+        "kind": "ResourceGuardrailsRequestedEvent",
         "metadata": {
-          "correlationId": "c1d2e3f4-5678-90ab-cdef-1234567890ab",
-          "requestId": "req-12345",
-          "timestamp": "2024-03-15T10:30:00Z"
+          "correlationId": "abcd12345",
+          "eventId": "c1",
+          "timestamp": "2026-04-14T18:15:10Z"
         },
-        "version": "1.0.0",
-        "request": {
-          "action": "provision",
-          "resource": {
-            "type": "virtual_machine",
-            "size": "large"
+        "spec": {
+          "metadata": {
+            "organization": "CTO",
+            "appId": "CLAUT",
+            "environment": "dev",
+            "cluster": "compute.lightspeed.wellsfargo.net/vialab",
+            "namespace": "claut-ns"
           },
-          "user": {
-            "id": "user-456",
-            "role": "developer"
-          }
-        }
-      }
-    },
-    {
-      "_id": "7KV8W3AHWZ8016cBc0s756d-1098-83344660W0AY",
-      "_source": {
-        "appId": "DCTRN-LIGHTSPEED",
-        "organization": "wfigitas-CHIEF-TECH-OFC-NonProd",
-        "environment": "staging",
-        "correlationId": "d2e3f4g5-6789-01bc-defg-2345678901bc",
-        "eventId": "evt-002-def456",
-        "guardrailId": "api-rate-limit",
-        "metadata": {
-          "correlationId": "d2e3f4g5-6789-01bc-defg-2345678901bc",
-          "requestId": "req-67890"
+          "source": "github-actions",
+          "trigger": {
+            "type": "pull-request",
+            "ref": "commit5ha",
+            "pullRequestId": 18
+          },
+          "workflow": {
+            "name": "lightspeed-pr-workflow",
+            "runId": "e01",
+            "jobId": "e02"
+          },
+          "resources": [
+            {
+              "id": "93507061-53bc-41ce-90a1-4fa7293c4a8f",
+              "kind": "VirtualMachine"
+            }
+          ]
         },
         "version": "1.0.0"
       }
@@ -801,13 +795,12 @@ GET /api/v1/registry/test-inputs?scrollId=DXF1ZXJ5QW5kRmV0Y2gBAAAAAA...
 ```json
 {
   "scrollId": "FGluY2x1ZGVfY29udGV4dF91dWlkDXF1ZXJ5QW5kRmV0Y2gBFn...",
-  "total": 156,
-  "hits": [
+  "total": 120,
+  "sources": [
     {
-      "_id": "8LW9X4BIXA9127dCd1t867e-2109-94455771X1BZ",
       "_source": {
-        "appId": "DCTRN-VMFORGE",
-        "environment": "production",
+        "apiVersion": "policy.lightspeed.wellsfargo.net/v1",
+        "kind": "ResourceGuardrailsRequestedEvent",
         ...
       }
     }
@@ -819,8 +812,8 @@ GET /api/v1/registry/test-inputs?scrollId=DXF1ZXJ5QW5kRmV0Y2gBAAAAAA...
 ```json
 {
   "scrollId": null,
-  "total": 156,
-  "hits": []
+  "total": 120,
+  "sources": []
 }
 ```
 
@@ -829,7 +822,7 @@ GET /api/v1/registry/test-inputs?scrollId=DXF1ZXJ5QW5kRmV0Y2gBAAAAAA...
 {
   "scrollId": null,
   "total": 0,
-  "hits": []
+  "sources": []
 }
 ```
 

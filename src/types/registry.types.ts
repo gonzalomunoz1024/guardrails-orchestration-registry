@@ -134,10 +134,9 @@ export interface User {
 // Test Inputs (Scope-Based Test Cases)
 
 /**
- * Raw hit from OpenSearch response
+ * Raw source item from backend response
  */
-export interface TestInputHit {
-  _id: string;
+export interface TestInputSource {
   _source: Record<string, unknown>;
 }
 
@@ -171,7 +170,7 @@ export interface TestInputFilters {
 export interface TestInputsRawResponse {
   scrollId: string | null;
   total: number;
-  hits: TestInputHit[];
+  sources: TestInputSource[];
 }
 
 /**
