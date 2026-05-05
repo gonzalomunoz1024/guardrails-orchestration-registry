@@ -50,6 +50,12 @@ interface SubmitPolicyModalProps {
 
 type SubmitStatus = 'idle' | 'creating' | 'success' | 'error';
 
+interface StepLog {
+  step: string;
+  status: 'pending' | 'running' | 'success' | 'error';
+  message?: string;
+}
+
 export function SubmitPolicyModal({
   isOpen,
   onClose,
@@ -61,9 +67,22 @@ export function SubmitPolicyModal({
   const { accessToken, user } = useAuthStore();
   const [githubStatus, setGithubStatus] = useState<SubmitStatus>('idle');
   const [githubError, setGithubError] = useState<string | null>(null);
-  const [progressMessage, setProgressMessage] = useState<string>('');
+  const [stepLogs, setStepLogs] = useState<StepLog[]>([]);
   const [prUrl, setPrUrl] = useState<string | null>(null);
   const [copiedPrUrl, setCopiedPrUrl] = useState(false);
+
+  // Helper to update step log
+  const updateStep = (step: string, status: StepLog['status'], message?: string) => {
+    setStepLogs(prev => {
+      const existing = prev.findIndex(s => s.step === step);
+      if (existing >= 0) {
+        const updated = [...prev];
+        updated[existing] = { step, status, message };
+        return updated;
+      }
+      return [...prev, { step, status, message }];
+    });
+  };
 
   // Handle escape key
   useEffect(() => {
@@ -85,7 +104,7 @@ export function SubmitPolicyModal({
     if (isOpen) {
       setGithubStatus('idle');
       setGithubError(null);
-      setProgressMessage('');
+      setStepLogs([]);
       setPrUrl(null);
       setCopiedPrUrl(false);
     }
@@ -143,64 +162,7 @@ export function SubmitPolicyModal({
     saveAs(content, `${policyId}-policy.zip`);
   };
 
-  // Helper: Wait for fork to be ready (GitHub creates forks asynchronously)
-  const waitForFork = async (octokit: Octokit, owner: string, repo: string, maxAttempts = 30): Promise<boolean> => {
-    for (let i = 0; i < maxAttempts; i++) {
-      try {
-        const { data } = await octokit.rest.repos.get({ owner, repo });
-        // Fork is ready when it's not empty (has commits)
-        if (data.size > 0 || data.pushed_at) {
-          return true;
-        }
-      } catch {
-        // Fork not ready yet
-      }
-      // Wait 2 seconds before retry
-      await new Promise(resolve => setTimeout(resolve, 2000));
-      setProgressMessage(`Waiting for fork to be ready... (${i + 1}/${maxAttempts})`);
-    }
-    return false;
-  };
-
-  // Helper: Get or create fork
-  const getOrCreateFork = async (octokit: Octokit, userLogin: string): Promise<{ owner: string; repo: string }> => {
-    // Check if user already has a fork
-    try {
-      setProgressMessage('Checking for existing fork...');
-      const { data: fork } = await octokit.rest.repos.get({
-        owner: userLogin,
-        repo: UPSTREAM_REPO,
-      });
-
-      // Verify it's actually a fork of our target repo
-      if (fork.fork && fork.parent?.full_name === `${UPSTREAM_OWNER}/${UPSTREAM_REPO}`) {
-        setProgressMessage('Found existing fork');
-        return { owner: userLogin, repo: UPSTREAM_REPO };
-      }
-    } catch {
-      // No fork exists, will create one
-    }
-
-    // Create a new fork
-    setProgressMessage('Creating fork of repository...');
-    await octokit.rest.repos.createFork({
-      owner: UPSTREAM_OWNER,
-      repo: UPSTREAM_REPO,
-    });
-
-    // Wait for fork to be ready
-    setProgressMessage('Fork created, waiting for it to be ready...');
-    const isReady = await waitForFork(octokit, userLogin, UPSTREAM_REPO);
-
-    if (!isReady) {
-      throw new Error('Fork creation timed out. Please try again in a few moments.');
-    }
-
-    return { owner: userLogin, repo: UPSTREAM_REPO };
-  };
-
-  // Create GitHub PR using fork-based workflow
-  // This bypasses org OAuth restrictions by writing to user's fork
+  // Create GitHub PR using fork-based workflow with detailed step logging
   const handleCreatePR = async () => {
     if (!accessToken || !user) {
       setGithubError('Not authenticated. Please log in with GitHub first.');
@@ -210,87 +172,207 @@ export function SubmitPolicyModal({
 
     setGithubStatus('creating');
     setGithubError(null);
-    setProgressMessage('Initializing...');
+    setStepLogs([]);
 
+    const octokit = new Octokit({ auth: accessToken });
+    const branchName = `policy/${policyId}-${Date.now()}`;
+    let defaultBranch = 'main';
+    let baseSha = '';
+    let forkOwner = user.login;
+
+    // Step 1: Check for existing fork
+    updateStep('Check for existing fork', 'running');
     try {
-      const octokit = new Octokit({ auth: accessToken });
-      const branchName = `policy/${policyId}-${Date.now()}`;
+      const { data: fork } = await octokit.rest.repos.get({
+        owner: user.login,
+        repo: UPSTREAM_REPO,
+      });
 
-      // Step 1: Get or create user's fork
-      const fork = await getOrCreateFork(octokit, user.login);
+      if (fork.fork && fork.parent?.full_name === `${UPSTREAM_OWNER}/${UPSTREAM_REPO}`) {
+        updateStep('Check for existing fork', 'success', `Found: ${user.login}/${UPSTREAM_REPO}`);
+        forkOwner = user.login;
+      } else {
+        updateStep('Check for existing fork', 'success', 'Not a fork of target repo, will create new');
+        throw new Error('Not a valid fork');
+      }
+    } catch (error) {
+      // No fork exists, need to create one
+      updateStep('Check for existing fork', 'success', 'No existing fork found');
 
-      // Step 2: Get the default branch and latest SHA from upstream
-      setProgressMessage('Getting upstream repository info...');
+      // Step 2: Create fork
+      updateStep('Create fork', 'running');
+      try {
+        await octokit.rest.repos.createFork({
+          owner: UPSTREAM_OWNER,
+          repo: UPSTREAM_REPO,
+        });
+        updateStep('Create fork', 'success', 'Fork creation initiated');
+
+        // Wait for fork to be ready
+        updateStep('Wait for fork ready', 'running');
+        let forkReady = false;
+        for (let i = 0; i < 30; i++) {
+          try {
+            const { data } = await octokit.rest.repos.get({
+              owner: user.login,
+              repo: UPSTREAM_REPO,
+            });
+            if (data.size > 0 || data.pushed_at) {
+              forkReady = true;
+              break;
+            }
+          } catch {
+            // Not ready yet
+          }
+          await new Promise(resolve => setTimeout(resolve, 2000));
+          updateStep('Wait for fork ready', 'running', `Attempt ${i + 1}/30...`);
+        }
+
+        if (forkReady) {
+          updateStep('Wait for fork ready', 'success', 'Fork is ready');
+        } else {
+          updateStep('Wait for fork ready', 'error', 'Fork creation timed out');
+          throw new Error('Fork creation timed out');
+        }
+      } catch (forkError) {
+        const msg = forkError instanceof Error ? forkError.message : 'Unknown error';
+        updateStep('Create fork', 'error', msg);
+        setGithubError(`Failed to create fork: ${msg}`);
+        setGithubStatus('error');
+        return;
+      }
+    }
+
+    // Step 3: Get upstream repo info (default branch)
+    updateStep('Get upstream repo info', 'running');
+    try {
       const { data: upstreamRepo } = await octokit.rest.repos.get({
         owner: UPSTREAM_OWNER,
         repo: UPSTREAM_REPO,
       });
-      const defaultBranch = upstreamRepo.default_branch;
+      defaultBranch = upstreamRepo.default_branch;
+      updateStep('Get upstream repo info', 'success', `Default branch: ${defaultBranch}`);
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : 'Unknown error';
+      updateStep('Get upstream repo info', 'error', msg);
+      setGithubError(`Failed to get upstream repo: ${msg}`);
+      setGithubStatus('error');
+      return;
+    }
 
-      // Get the latest commit SHA from upstream's default branch
-      const { data: upstreamRef } = await octokit.rest.git.getRef({
-        owner: UPSTREAM_OWNER,
+    // Step 4: Get latest commit SHA from fork's default branch
+    updateStep('Get latest commit SHA', 'running');
+    try {
+      const { data: ref } = await octokit.rest.git.getRef({
+        owner: forkOwner,
         repo: UPSTREAM_REPO,
         ref: `heads/${defaultBranch}`,
       });
-      const baseSha = upstreamRef.object.sha;
+      baseSha = ref.object.sha;
+      updateStep('Get latest commit SHA', 'success', `SHA: ${baseSha.substring(0, 7)}`);
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : 'Unknown error';
+      updateStep('Get latest commit SHA', 'error', msg);
+      setGithubError(`Failed to get commit SHA: ${msg}`);
+      setGithubStatus('error');
+      return;
+    }
 
-      // Step 3: Sync fork's default branch with upstream (to avoid conflicts)
-      setProgressMessage('Syncing fork with upstream...');
-      try {
-        await octokit.rest.repos.mergeUpstream({
-          owner: fork.owner,
-          repo: fork.repo,
-          branch: defaultBranch,
-        });
-      } catch {
-        // May fail if already up to date, that's fine
-      }
+    // Step 5: Sync fork with upstream
+    updateStep('Sync fork with upstream', 'running');
+    try {
+      await octokit.rest.repos.mergeUpstream({
+        owner: forkOwner,
+        repo: UPSTREAM_REPO,
+        branch: defaultBranch,
+      });
+      updateStep('Sync fork with upstream', 'success', 'Synced');
+    } catch {
+      // May fail if already up to date, that's OK
+      updateStep('Sync fork with upstream', 'success', 'Already up to date');
+    }
 
-      // Step 4: Create branch in user's fork
-      setProgressMessage('Creating branch in your fork...');
+    // Step 6: Create branch in fork
+    updateStep('Create branch in fork', 'running', branchName);
+    try {
       await octokit.rest.git.createRef({
-        owner: fork.owner,
-        repo: fork.repo,
+        owner: forkOwner,
+        repo: UPSTREAM_REPO,
         ref: `refs/heads/${branchName}`,
         sha: baseSha,
       });
+      updateStep('Create branch in fork', 'success', branchName);
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : 'Unknown error';
+      updateStep('Create branch in fork', 'error', msg);
+      setGithubError(`Failed to create branch: ${msg}`);
+      setGithubStatus('error');
+      return;
+    }
 
-      // Step 5: Create files in user's fork
-      setProgressMessage('Adding policy files...');
-
-      // Create the rego policy file
+    // Step 7: Add rego file
+    updateStep('Add rego file', 'running', `rego/${policyId}.rego`);
+    try {
       await octokit.rest.repos.createOrUpdateFileContents({
-        owner: fork.owner,
-        repo: fork.repo,
+        owner: forkOwner,
+        repo: UPSTREAM_REPO,
         path: `rego/${policyId}.rego`,
         message: `Add rego policy: ${policyId}`,
-        content: btoa(unescape(encodeURIComponent(regoCode))), // Handle UTF-8
+        content: btoa(unescape(encodeURIComponent(regoCode))),
         branch: branchName,
       });
+      updateStep('Add rego file', 'success', `rego/${policyId}.rego`);
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : 'Unknown error';
+      updateStep('Add rego file', 'error', msg);
+      setGithubError(`Failed to add rego file: ${msg}`);
+      setGithubStatus('error');
+      return;
+    }
 
-      // Create the guardrail metadata file
+    // Step 8: Add guardrail metadata file
+    updateStep('Add guardrail metadata', 'running', `guardrails/${policyId}.yaml`);
+    try {
       await octokit.rest.repos.createOrUpdateFileContents({
-        owner: fork.owner,
-        repo: fork.repo,
+        owner: forkOwner,
+        repo: UPSTREAM_REPO,
         path: `guardrails/${policyId}.yaml`,
         message: `Add guardrail metadata: ${policyId}`,
         content: btoa(unescape(encodeURIComponent(generateMetadataYaml()))),
         branch: branchName,
       });
+      updateStep('Add guardrail metadata', 'success', `guardrails/${policyId}.yaml`);
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : 'Unknown error';
+      updateStep('Add guardrail metadata', 'error', msg);
+      setGithubError(`Failed to add metadata file: ${msg}`);
+      setGithubStatus('error');
+      return;
+    }
 
-      // Create the configuration file
+    // Step 9: Add configuration file
+    updateStep('Add configuration', 'running', `configurations/${policyId}.yaml`);
+    try {
       await octokit.rest.repos.createOrUpdateFileContents({
-        owner: fork.owner,
-        repo: fork.repo,
+        owner: forkOwner,
+        repo: UPSTREAM_REPO,
         path: `configurations/${policyId}.yaml`,
         message: `Add configuration for: ${policyId}`,
         content: btoa(unescape(encodeURIComponent(generateConfigYaml()))),
         branch: branchName,
       });
+      updateStep('Add configuration', 'success', `configurations/${policyId}.yaml`);
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : 'Unknown error';
+      updateStep('Add configuration', 'error', msg);
+      setGithubError(`Failed to add config file: ${msg}`);
+      setGithubStatus('error');
+      return;
+    }
 
-      // Step 6: Create Pull Request from fork to upstream
-      setProgressMessage('Creating pull request...');
+    // Step 10: Create Pull Request
+    updateStep('Create Pull Request', 'running');
+    try {
       const prBody = `## New Policy: ${metadata.name}
 
 ${metadata.description}
@@ -317,25 +399,22 @@ ${metadata.resourceKind ? `| **Resource Kind** | ${metadata.resourceKind} |` : '
 ---
 *Created via OPA Policy Registry by @${user.login}*`;
 
-      // Create PR from fork to upstream
-      // head format: "username:branch" for cross-repo PRs
       const { data: pr } = await octokit.rest.pulls.create({
         owner: UPSTREAM_OWNER,
         repo: UPSTREAM_REPO,
         title: `[Policy] Add ${metadata.name}`,
         body: prBody,
-        head: `${fork.owner}:${branchName}`,
+        head: `${forkOwner}:${branchName}`,
         base: defaultBranch,
       });
 
+      updateStep('Create Pull Request', 'success', `PR #${pr.number}`);
       setPrUrl(pr.html_url);
-      setProgressMessage('');
       setGithubStatus('success');
     } catch (error) {
-      console.error('Failed to create PR:', error);
-      const errorMessage = error instanceof Error ? error.message : 'Failed to create pull request';
-      setGithubError(errorMessage);
-      setProgressMessage('');
+      const msg = error instanceof Error ? error.message : 'Unknown error';
+      updateStep('Create Pull Request', 'error', msg);
+      setGithubError(`Failed to create PR: ${msg}`);
       setGithubStatus('error');
     }
   };
@@ -510,8 +589,38 @@ ${metadata.resourceKind ? `| **Resource Kind** | ${metadata.resourceKind} |` : '
                 <div className="space-y-3">
                   <div className="flex items-center gap-2 text-sm text-[var(--color-error)]">
                     <AlertCircle className="w-4 h-4" />
-                    <span>{githubError || 'Failed to create PR'}</span>
+                    <span className="break-all">{githubError || 'Failed to create PR'}</span>
                   </div>
+                  {/* Step logs for debugging */}
+                  {stepLogs.length > 0 && (
+                    <div className="mt-3 p-3 rounded-lg bg-[var(--color-surface)] border border-[var(--color-border-light)] max-h-48 overflow-y-auto">
+                      <p className="text-xs font-medium text-[var(--color-text-secondary)] mb-2">Step Details:</p>
+                      <div className="space-y-1.5">
+                        {stepLogs.map((log, i) => (
+                          <div key={i} className="flex items-start gap-2 text-xs">
+                            {log.status === 'success' && <CheckCircle className="w-3.5 h-3.5 text-[var(--color-success)] flex-shrink-0 mt-0.5" />}
+                            {log.status === 'error' && <AlertCircle className="w-3.5 h-3.5 text-[var(--color-error)] flex-shrink-0 mt-0.5" />}
+                            {log.status === 'running' && <Loader2 className="w-3.5 h-3.5 text-[var(--color-info)] animate-spin flex-shrink-0 mt-0.5" />}
+                            {log.status === 'pending' && <div className="w-3.5 h-3.5 rounded-full border border-[var(--color-border)] flex-shrink-0 mt-0.5" />}
+                            <div className="min-w-0">
+                              <span className={cn(
+                                'font-medium',
+                                log.status === 'success' && 'text-[var(--color-success)]',
+                                log.status === 'error' && 'text-[var(--color-error)]',
+                                log.status === 'running' && 'text-[var(--color-info)]',
+                                log.status === 'pending' && 'text-[var(--color-text-tertiary)]'
+                              )}>
+                                {log.step}
+                              </span>
+                              {log.message && (
+                                <p className="text-[var(--color-text-tertiary)] break-all">{log.message}</p>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                   <button
                     onClick={handleCreatePR}
                     className={cn(
@@ -524,36 +633,54 @@ ${metadata.resourceKind ? `| **Resource Kind** | ${metadata.resourceKind} |` : '
                     Try Again
                   </button>
                 </div>
-              ) : (
+              ) : githubStatus === 'creating' ? (
                 <div className="space-y-3">
-                  <button
-                    onClick={handleCreatePR}
-                    disabled={githubStatus === 'creating'}
-                    className={cn(
-                      'w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg',
-                      'bg-[#24292f] text-white font-medium text-sm',
-                      'hover:bg-[#32383f] transition-all',
-                      'disabled:opacity-50 disabled:cursor-not-allowed'
-                    )}
-                  >
-                    {githubStatus === 'creating' ? (
-                      <>
-                        <Loader2 className="w-4 h-4 animate-spin" />
-                        Creating PR...
-                      </>
-                    ) : (
-                      <>
-                        <GitFork className="w-4 h-4" />
-                        Create Pull Request
-                      </>
-                    )}
-                  </button>
-                  {githubStatus === 'creating' && progressMessage && (
-                    <p className="text-xs text-center text-[var(--color-text-tertiary)]">
-                      {progressMessage}
-                    </p>
-                  )}
+                  {/* Step logs during creation */}
+                  <div className="p-3 rounded-lg bg-[var(--color-surface-secondary)] max-h-48 overflow-y-auto">
+                    <div className="space-y-1.5">
+                      {stepLogs.map((log, i) => (
+                        <div key={i} className="flex items-start gap-2 text-xs">
+                          {log.status === 'success' && <CheckCircle className="w-3.5 h-3.5 text-[var(--color-success)] flex-shrink-0 mt-0.5" />}
+                          {log.status === 'error' && <AlertCircle className="w-3.5 h-3.5 text-[var(--color-error)] flex-shrink-0 mt-0.5" />}
+                          {log.status === 'running' && <Loader2 className="w-3.5 h-3.5 text-[var(--color-info)] animate-spin flex-shrink-0 mt-0.5" />}
+                          {log.status === 'pending' && <div className="w-3.5 h-3.5 rounded-full border border-[var(--color-border)] flex-shrink-0 mt-0.5" />}
+                          <div className="min-w-0">
+                            <span className={cn(
+                              'font-medium',
+                              log.status === 'success' && 'text-[var(--color-success)]',
+                              log.status === 'error' && 'text-[var(--color-error)]',
+                              log.status === 'running' && 'text-[var(--color-info)]',
+                              log.status === 'pending' && 'text-[var(--color-text-tertiary)]'
+                            )}>
+                              {log.step}
+                            </span>
+                            {log.message && (
+                              <p className="text-[var(--color-text-tertiary)] break-all">{log.message}</p>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                      {stepLogs.length === 0 && (
+                        <div className="flex items-center gap-2 text-xs text-[var(--color-text-tertiary)]">
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          <span>Initializing...</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
                 </div>
+              ) : (
+                <button
+                  onClick={handleCreatePR}
+                  className={cn(
+                    'w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg',
+                    'bg-[#24292f] text-white font-medium text-sm',
+                    'hover:bg-[#32383f] transition-all'
+                  )}
+                >
+                  <GitFork className="w-4 h-4" />
+                  Create Pull Request
+                </button>
               )}
             </div>
 
