@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import Editor from '@monaco-editor/react';
 import {
   Save,
@@ -26,7 +26,7 @@ import {
   Expand,
   Wand2,
 } from 'lucide-react';
-import { BlastRadiusExecutionModal, EditorModal } from '@/components/modals';
+import { BlastRadiusExecutionModal, EditorModal, SubmitPolicyModal } from '@/components/modals';
 import { useUIStore, usePolicyStore, useEvaluationStore } from '@/store';
 import { useRegistryStore } from '@/store/registryStore';
 import { useEvaluate, useTestInputs } from '@/hooks';
@@ -62,7 +62,7 @@ export function CreatePolicy() {
   const { resolvedTheme } = useUIStore();
   const { regoCode, setRegoCode, inputJson, setInputJson, configJson, setConfigJson, metadata, updateMetadata } = usePolicyStore();
   const { result, isEvaluating } = useEvaluationStore();
-  const { setView } = useRegistryStore();
+  useRegistryStore(); // Keep hook for future use
 
   const [currentStep, setCurrentStep] = useState<Step>('metadata');
   const [policyId, setPolicyId] = useState('');
@@ -89,7 +89,45 @@ export function CreatePolicy() {
   const [shouldFetchTestInputs, setShouldFetchTestInputs] = useState(false);
   const [expandedTestCase, setExpandedTestCase] = useState<string | null>(null);
   const [isExecutionModalOpen, setIsExecutionModalOpen] = useState(false);
+  const [isSubmitModalOpen, setIsSubmitModalOpen] = useState(false);
   const [expandedEditor, setExpandedEditor] = useState<'input' | 'config' | 'output' | null>(null);
+
+  // Extract package name from Rego code
+  const getPackageNameFromRego = (code: string): string | null => {
+    const match = code.match(/^package\s+([a-z0-9_]+)/m);
+    return match ? match[1] : null;
+  };
+
+  // Check if package name matches policy ID
+  const packageNameMatchesPolicyId = (): boolean => {
+    const packageName = getPackageNameFromRego(regoCode);
+    // Convert policyId to valid package name (replace hyphens with underscores)
+    const expectedPackageName = policyId;
+    return packageName === expectedPackageName;
+  };
+
+  // Pre-populate Rego code with package declaration when policyId changes
+  useEffect(() => {
+    if (policyId) {
+      // Convert policyId to valid Rego package name (replace hyphens with underscores)
+      const packageName = policyId;
+      const packageDeclaration = `package ${packageName}`;
+
+      // Only update if regoCode is empty or only has a package declaration
+      const trimmedCode = regoCode.trim();
+      const isEmptyOrOnlyPackage = !trimmedCode || /^package\s+[a-z0-9_]*\s*$/m.test(trimmedCode);
+
+      if (isEmptyOrOnlyPackage) {
+        setRegoCode(`${packageDeclaration}\n\n`);
+      } else {
+        // Update existing package declaration if present
+        const hasPackage = /^package\s+[a-z0-9_]+/m.test(regoCode);
+        if (hasPackage) {
+          setRegoCode(regoCode.replace(/^package\s+[a-z0-9_]+/m, packageDeclaration));
+        }
+      }
+    }
+  }, [policyId]);
 
   // Stabilize filter object to prevent React Query cache key instability
   // resourceKind is pre-populated from Step 1 (only for Lightspeed)
@@ -156,7 +194,7 @@ export function CreatePolicy() {
         // Only require resourceKind for Lightspeed
         return resourceType === 'lightspeed' ? baseValid && resourceKind.trim() : baseValid;
       case 'code':
-        return regoCode.trim().length > 0;
+        return regoCode.trim().length > 0 && packageNameMatchesPolicyId();
       case 'blastradius':
         return true;
       case 'review':
@@ -166,71 +204,8 @@ export function CreatePolicy() {
     }
   };
 
-  const handleSubmit = async () => {
-    // Map frontend resourceType to backend format (uppercase)
-    const backendResourceType = resourceType.toUpperCase() as 'LIGHTSPEED' | 'VMFORGE';
-
-    // Prepare the guardrail definition payload
-    // POST /api/v1/registry/guardrails
-    const createGuardrailPayload = {
-      id: policyId,
-      name: metadata.name,
-      description: metadata.description,
-      version: '1.0.0', // Implicit: always start with 1.0.0
-      status: 'DRAFT' as const, // Implicit: new policies start as draft
-      enforcementType: enforcementType,
-      kind: DEFAULT_GUARDRAIL_KIND,
-      resourceType: backendResourceType,
-      // resourceKind only applies to Lightspeed
-      ...(resourceType === 'lightspeed' && { resourceKind }),
-      owner: metadata.author || 'current-user', // TODO: Get from auth context
-      // createdAt and updatedAt are set by the backend
-    };
-
-    console.log('Creating guardrail with payload:', createGuardrailPayload);
-    console.log('POST /api/v1/registry/guardrails');
-
-    // TODO: Implement actual API call
-    // const guardrailResponse = await fetch('/api/v1/registry/guardrails', {
-    //   method: 'POST',
-    //   headers: { 'Content-Type': 'application/json' },
-    //   body: JSON.stringify(createGuardrailPayload),
-    // });
-
-    // Configuration is optional - only save if provided
-    const hasConfiguration = configJson && configJson.trim() !== '' && configJson.trim() !== '{}';
-
-    if (hasConfiguration) {
-      // Parse and prepare configuration payload
-      let parsedConfig = {};
-      try {
-        parsedConfig = JSON.parse(configJson);
-      } catch (e) {
-        console.error('Invalid configuration JSON:', e);
-      }
-
-      // PUT /api/v1/registry/configurations/{guardrailId} - For new configurations
-      // PATCH /api/v1/registry/configurations/{guardrailId} - For partial updates (edits)
-      const configPayload = {
-        global: parsedConfig,
-        lobOverrides: {},
-      };
-
-      console.log('Saving configuration:', configPayload);
-      console.log(`PUT /api/v1/registry/configurations/${policyId}`);
-
-      // TODO: Implement actual API call
-      // const configResponse = await fetch(`/api/v1/registry/configurations/${policyId}`, {
-      //   method: 'PUT', // Use PATCH for partial updates during edits
-      //   headers: { 'Content-Type': 'application/json' },
-      //   body: JSON.stringify(configPayload),
-      // });
-    } else {
-      console.log('No configuration provided - skipping configuration save');
-    }
-
-    alert('Policy submitted for review!');
-    setView('policies');
+  const handleSubmit = () => {
+    setIsSubmitModalOpen(true);
   };
 
   return (
@@ -317,8 +292,8 @@ export function CreatePolicy() {
                       <input
                         type="text"
                         value={policyId}
-                        onChange={(e) => setPolicyId(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '-'))}
-                        placeholder="e.g., vm-size-limit"
+                        onChange={(e) => setPolicyId(e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, ''))}
+                        placeholder="e.g., vm_size_limit"
                         className={cn(
                           'w-full px-4 py-3 rounded-[var(--radius-lg)]',
                           'bg-[var(--color-surface-secondary)] text-[var(--color-text-primary)]',
@@ -329,7 +304,7 @@ export function CreatePolicy() {
                         )}
                       />
                       <p className="mt-1.5 text-xs text-[var(--color-text-tertiary)]">
-                        Unique identifier (lowercase, hyphens allowed)
+                        Unique identifier (lowercase letters, numbers, underscores)
                       </p>
                     </div>
                     <div>
@@ -620,14 +595,32 @@ export function CreatePolicy() {
                 {/* Policy Editor - Takes 60% */}
                 <div className="flex-[3] flex flex-col min-w-0">
                   <div className="flex items-center justify-between mb-2">
-                    <label className="text-sm font-medium text-[var(--color-text-primary)]">
-                      Rego Policy
-                    </label>
+                    <div className="flex items-center gap-2">
+                      <label className="text-sm font-medium text-[var(--color-text-primary)]">
+                        Rego Policy
+                      </label>
+                      <span className="text-xs text-[var(--color-text-tertiary)] font-mono bg-[var(--color-surface-secondary)] px-2 py-0.5 rounded">
+                        package {policyId}
+                      </span>
+                    </div>
                     <span className="text-xs text-[var(--color-text-tertiary)]">
                       {regoCode.split('\n').length} lines
                     </span>
                   </div>
-                  <div className="flex-1 rounded-[var(--radius-lg)] border border-[var(--color-border-light)] overflow-hidden shadow-[var(--shadow-card)]">
+                  {regoCode.trim() && !packageNameMatchesPolicyId() && (
+                    <div className="mb-2 flex items-center gap-2 px-3 py-2 rounded-[var(--radius-md)] bg-[var(--color-error-bg)] border border-[var(--color-error)]/20">
+                      <AlertCircle className="w-4 h-4 text-[var(--color-error)]" />
+                      <span className="text-sm text-[var(--color-error)]">
+                        Package name must be <code className="font-mono font-semibold">{policyId}</code> to match the Policy ID
+                      </span>
+                    </div>
+                  )}
+                  <div className={cn(
+                    "flex-1 rounded-[var(--radius-lg)] overflow-hidden shadow-[var(--shadow-card)]",
+                    regoCode.trim() && !packageNameMatchesPolicyId()
+                      ? "border-2 border-[var(--color-error)]"
+                      : "border border-[var(--color-border-light)]"
+                  )}>
                     <Editor
                       height="100%"
                       language="rego"
@@ -1423,6 +1416,28 @@ export function CreatePolicy() {
           </div>
         </div>
       </div>
+
+      {/* Submit Policy Modal */}
+      <SubmitPolicyModal
+        isOpen={isSubmitModalOpen}
+        onClose={() => setIsSubmitModalOpen(false)}
+        policyId={policyId}
+        regoCode={regoCode}
+        configJson={configJson}
+        metadata={{
+          id: policyId,
+          name: metadata.name,
+          description: metadata.description,
+          version: '1.0.0',
+          status: 'DRAFT',
+          enforcementType,
+          kind: DEFAULT_GUARDRAIL_KIND,
+          resourceType: resourceType.toUpperCase() as 'LIGHTSPEED' | 'VMFORGE',
+          resourceKind: resourceType === 'lightspeed' ? resourceKind : undefined,
+          owner: metadata.author || 'current-user',
+          tags,
+        }}
+      />
     </div>
   );
 }
