@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import {
   X,
   GitBranch,
+  GitFork,
   Download,
   ExternalLink,
   CheckCircle,
@@ -20,8 +21,9 @@ import { cn } from '@/utils';
 import { useAuthStore } from '@/store/authStore';
 import type { EnforcementType, GuardrailKind } from '@/types/guardrail.types';
 
-const GITHUB_REPO_OWNER = 'my_org';
-const GITHUB_REPO_NAME = 'my_repo';
+// Upstream repository (the org repo where PRs will be merged)
+const UPSTREAM_OWNER = 'wftgitsas-CHIEF-TECH-OFC';
+const UPSTREAM_REPO = 'App-claut-schema-registry';
 
 interface PolicyMetadata {
   id: string;
@@ -59,6 +61,7 @@ export function SubmitPolicyModal({
   const { accessToken, user } = useAuthStore();
   const [githubStatus, setGithubStatus] = useState<SubmitStatus>('idle');
   const [githubError, setGithubError] = useState<string | null>(null);
+  const [progressMessage, setProgressMessage] = useState<string>('');
   const [prUrl, setPrUrl] = useState<string | null>(null);
   const [copiedPrUrl, setCopiedPrUrl] = useState(false);
 
@@ -82,6 +85,7 @@ export function SubmitPolicyModal({
     if (isOpen) {
       setGithubStatus('idle');
       setGithubError(null);
+      setProgressMessage('');
       setPrUrl(null);
       setCopiedPrUrl(false);
     }
@@ -139,9 +143,66 @@ export function SubmitPolicyModal({
     saveAs(content, `${policyId}-policy.zip`);
   };
 
-  // Create GitHub PR
+  // Helper: Wait for fork to be ready (GitHub creates forks asynchronously)
+  const waitForFork = async (octokit: Octokit, owner: string, repo: string, maxAttempts = 30): Promise<boolean> => {
+    for (let i = 0; i < maxAttempts; i++) {
+      try {
+        const { data } = await octokit.rest.repos.get({ owner, repo });
+        // Fork is ready when it's not empty (has commits)
+        if (data.size > 0 || data.pushed_at) {
+          return true;
+        }
+      } catch {
+        // Fork not ready yet
+      }
+      // Wait 2 seconds before retry
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      setProgressMessage(`Waiting for fork to be ready... (${i + 1}/${maxAttempts})`);
+    }
+    return false;
+  };
+
+  // Helper: Get or create fork
+  const getOrCreateFork = async (octokit: Octokit, userLogin: string): Promise<{ owner: string; repo: string }> => {
+    // Check if user already has a fork
+    try {
+      setProgressMessage('Checking for existing fork...');
+      const { data: fork } = await octokit.rest.repos.get({
+        owner: userLogin,
+        repo: UPSTREAM_REPO,
+      });
+
+      // Verify it's actually a fork of our target repo
+      if (fork.fork && fork.parent?.full_name === `${UPSTREAM_OWNER}/${UPSTREAM_REPO}`) {
+        setProgressMessage('Found existing fork');
+        return { owner: userLogin, repo: UPSTREAM_REPO };
+      }
+    } catch {
+      // No fork exists, will create one
+    }
+
+    // Create a new fork
+    setProgressMessage('Creating fork of repository...');
+    await octokit.rest.repos.createFork({
+      owner: UPSTREAM_OWNER,
+      repo: UPSTREAM_REPO,
+    });
+
+    // Wait for fork to be ready
+    setProgressMessage('Fork created, waiting for it to be ready...');
+    const isReady = await waitForFork(octokit, userLogin, UPSTREAM_REPO);
+
+    if (!isReady) {
+      throw new Error('Fork creation timed out. Please try again in a few moments.');
+    }
+
+    return { owner: userLogin, repo: UPSTREAM_REPO };
+  };
+
+  // Create GitHub PR using fork-based workflow
+  // This bypasses org OAuth restrictions by writing to user's fork
   const handleCreatePR = async () => {
-    if (!accessToken) {
+    if (!accessToken || !user) {
       setGithubError('Not authenticated. Please log in with GitHub first.');
       setGithubStatus('error');
       return;
@@ -149,66 +210,87 @@ export function SubmitPolicyModal({
 
     setGithubStatus('creating');
     setGithubError(null);
+    setProgressMessage('Initializing...');
 
     try {
       const octokit = new Octokit({ auth: accessToken });
       const branchName = `policy/${policyId}-${Date.now()}`;
 
-      // Get the default branch SHA
-      const { data: repo } = await octokit.rest.repos.get({
-        owner: GITHUB_REPO_OWNER,
-        repo: GITHUB_REPO_NAME,
+      // Step 1: Get or create user's fork
+      const fork = await getOrCreateFork(octokit, user.login);
+
+      // Step 2: Get the default branch and latest SHA from upstream
+      setProgressMessage('Getting upstream repository info...');
+      const { data: upstreamRepo } = await octokit.rest.repos.get({
+        owner: UPSTREAM_OWNER,
+        repo: UPSTREAM_REPO,
       });
+      const defaultBranch = upstreamRepo.default_branch;
 
-      const defaultBranch = repo.default_branch;
-
-      const { data: ref } = await octokit.rest.git.getRef({
-        owner: GITHUB_REPO_OWNER,
-        repo: GITHUB_REPO_NAME,
+      // Get the latest commit SHA from upstream's default branch
+      const { data: upstreamRef } = await octokit.rest.git.getRef({
+        owner: UPSTREAM_OWNER,
+        repo: UPSTREAM_REPO,
         ref: `heads/${defaultBranch}`,
       });
+      const baseSha = upstreamRef.object.sha;
 
-      const baseSha = ref.object.sha;
+      // Step 3: Sync fork's default branch with upstream (to avoid conflicts)
+      setProgressMessage('Syncing fork with upstream...');
+      try {
+        await octokit.rest.repos.mergeUpstream({
+          owner: fork.owner,
+          repo: fork.repo,
+          branch: defaultBranch,
+        });
+      } catch {
+        // May fail if already up to date, that's fine
+      }
 
-      // Create a new branch
+      // Step 4: Create branch in user's fork
+      setProgressMessage('Creating branch in your fork...');
       await octokit.rest.git.createRef({
-        owner: GITHUB_REPO_OWNER,
-        repo: GITHUB_REPO_NAME,
+        owner: fork.owner,
+        repo: fork.repo,
         ref: `refs/heads/${branchName}`,
         sha: baseSha,
       });
 
+      // Step 5: Create files in user's fork
+      setProgressMessage('Adding policy files...');
+
       // Create the rego policy file
       await octokit.rest.repos.createOrUpdateFileContents({
-        owner: GITHUB_REPO_OWNER,
-        repo: GITHUB_REPO_NAME,
+        owner: fork.owner,
+        repo: fork.repo,
         path: `rego/${policyId}.rego`,
         message: `Add rego policy: ${policyId}`,
-        content: btoa(regoCode),
+        content: btoa(unescape(encodeURIComponent(regoCode))), // Handle UTF-8
         branch: branchName,
       });
 
       // Create the guardrail metadata file
       await octokit.rest.repos.createOrUpdateFileContents({
-        owner: GITHUB_REPO_OWNER,
-        repo: GITHUB_REPO_NAME,
+        owner: fork.owner,
+        repo: fork.repo,
         path: `guardrails/${policyId}.yaml`,
         message: `Add guardrail metadata: ${policyId}`,
-        content: btoa(generateMetadataYaml()),
+        content: btoa(unescape(encodeURIComponent(generateMetadataYaml()))),
         branch: branchName,
       });
 
       // Create the configuration file
       await octokit.rest.repos.createOrUpdateFileContents({
-        owner: GITHUB_REPO_OWNER,
-        repo: GITHUB_REPO_NAME,
+        owner: fork.owner,
+        repo: fork.repo,
         path: `configurations/${policyId}.yaml`,
         message: `Add configuration for: ${policyId}`,
-        content: btoa(generateConfigYaml()),
+        content: btoa(unescape(encodeURIComponent(generateConfigYaml()))),
         branch: branchName,
       });
 
-      // Create the Pull Request
+      // Step 6: Create Pull Request from fork to upstream
+      setProgressMessage('Creating pull request...');
       const prBody = `## New Policy: ${metadata.name}
 
 ${metadata.description}
@@ -229,26 +311,31 @@ ${metadata.description}
 | **Kind** | ${metadata.kind} |
 | **Resource Type** | ${metadata.resourceType} |
 ${metadata.resourceKind ? `| **Resource Kind** | ${metadata.resourceKind} |` : ''}
-| **Owner** | @${user?.login || metadata.owner} |
+| **Owner** | @${user.login} |
 | **Tags** | ${metadata.tags.length > 0 ? metadata.tags.join(', ') : 'None'} |
 
 ---
-*Created via OPA Policy Registry by @${user?.login}*`;
+*Created via OPA Policy Registry by @${user.login}*`;
 
+      // Create PR from fork to upstream
+      // head format: "username:branch" for cross-repo PRs
       const { data: pr } = await octokit.rest.pulls.create({
-        owner: GITHUB_REPO_OWNER,
-        repo: GITHUB_REPO_NAME,
+        owner: UPSTREAM_OWNER,
+        repo: UPSTREAM_REPO,
         title: `[Policy] Add ${metadata.name}`,
         body: prBody,
-        head: branchName,
+        head: `${fork.owner}:${branchName}`,
         base: defaultBranch,
       });
 
       setPrUrl(pr.html_url);
+      setProgressMessage('');
       setGithubStatus('success');
     } catch (error) {
       console.error('Failed to create PR:', error);
-      setGithubError(error instanceof Error ? error.message : 'Failed to create pull request');
+      const errorMessage = error instanceof Error ? error.message : 'Failed to create pull request';
+      setGithubError(errorMessage);
+      setProgressMessage('');
       setGithubStatus('error');
     }
   };
@@ -363,7 +450,7 @@ ${metadata.resourceKind ? `| **Resource Kind** | ${metadata.resourceKind} |` : '
                       Publish to GitHub
                     </h3>
                     <p className="text-xs text-[var(--color-text-tertiary)]">
-                      {GITHUB_REPO_OWNER}/{GITHUB_REPO_NAME}
+                      {UPSTREAM_OWNER}/{UPSTREAM_REPO}
                     </p>
                   </div>
                 </div>
@@ -438,28 +525,35 @@ ${metadata.resourceKind ? `| **Resource Kind** | ${metadata.resourceKind} |` : '
                   </button>
                 </div>
               ) : (
-                <button
-                  onClick={handleCreatePR}
-                  disabled={githubStatus === 'creating'}
-                  className={cn(
-                    'w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg',
-                    'bg-[#24292f] text-white font-medium text-sm',
-                    'hover:bg-[#32383f] transition-all',
-                    'disabled:opacity-50 disabled:cursor-not-allowed'
+                <div className="space-y-3">
+                  <button
+                    onClick={handleCreatePR}
+                    disabled={githubStatus === 'creating'}
+                    className={cn(
+                      'w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg',
+                      'bg-[#24292f] text-white font-medium text-sm',
+                      'hover:bg-[#32383f] transition-all',
+                      'disabled:opacity-50 disabled:cursor-not-allowed'
+                    )}
+                  >
+                    {githubStatus === 'creating' ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        Creating PR...
+                      </>
+                    ) : (
+                      <>
+                        <GitFork className="w-4 h-4" />
+                        Create Pull Request
+                      </>
+                    )}
+                  </button>
+                  {githubStatus === 'creating' && progressMessage && (
+                    <p className="text-xs text-center text-[var(--color-text-tertiary)]">
+                      {progressMessage}
+                    </p>
                   )}
-                >
-                  {githubStatus === 'creating' ? (
-                    <>
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                      Creating PR...
-                    </>
-                  ) : (
-                    <>
-                      <GitBranch className="w-4 h-4" />
-                      Create Pull Request
-                    </>
-                  )}
-                </button>
+                </div>
               )}
             </div>
 
