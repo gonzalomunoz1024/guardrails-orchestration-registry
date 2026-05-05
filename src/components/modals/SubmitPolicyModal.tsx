@@ -125,14 +125,14 @@ export function SubmitPolicyModal({
     const zip = new JSZip();
 
     // Create folder structure
+    const regoFolder = zip.folder('rego');
     const guardrailsFolder = zip.folder('guardrails');
     const configurationsFolder = zip.folder('configurations');
-    const metadataFolder = zip.folder('metadata');
 
     // Add files
-    guardrailsFolder?.file(`${policyId}.rego`, regoCode);
+    regoFolder?.file(`${policyId}.rego`, regoCode);
+    guardrailsFolder?.file(`${policyId}.yaml`, generateMetadataYaml());
     configurationsFolder?.file(`${policyId}.yaml`, generateConfigYaml());
-    metadataFolder?.file(`${policyId}.yaml`, generateMetadataYaml());
 
     // Generate and download
     const content = await zip.generateAsync({ type: 'blob' });
@@ -178,13 +178,23 @@ export function SubmitPolicyModal({
         sha: baseSha,
       });
 
-      // Create the guardrail file (Rego)
+      // Create the rego policy file
       await octokit.rest.repos.createOrUpdateFileContents({
         owner: GITHUB_REPO_OWNER,
         repo: GITHUB_REPO_NAME,
-        path: `guardrails/${policyId}.rego`,
-        message: `Add guardrail: ${policyId}`,
+        path: `rego/${policyId}.rego`,
+        message: `Add rego policy: ${policyId}`,
         content: btoa(regoCode),
+        branch: branchName,
+      });
+
+      // Create the guardrail metadata file
+      await octokit.rest.repos.createOrUpdateFileContents({
+        owner: GITHUB_REPO_OWNER,
+        repo: GITHUB_REPO_NAME,
+        path: `guardrails/${policyId}.yaml`,
+        message: `Add guardrail metadata: ${policyId}`,
+        content: btoa(generateMetadataYaml()),
         branch: branchName,
       });
 
@@ -198,25 +208,15 @@ export function SubmitPolicyModal({
         branch: branchName,
       });
 
-      // Create the metadata file
-      await octokit.rest.repos.createOrUpdateFileContents({
-        owner: GITHUB_REPO_OWNER,
-        repo: GITHUB_REPO_NAME,
-        path: `metadata/${policyId}.yaml`,
-        message: `Add metadata for: ${policyId}`,
-        content: btoa(generateMetadataYaml()),
-        branch: branchName,
-      });
-
       // Create the Pull Request
       const prBody = `## New Policy: ${metadata.name}
 
 ${metadata.description}
 
 ### Files Added
-- \`guardrails/${policyId}.rego\` - Rego policy
+- \`rego/${policyId}.rego\` - Rego policy code
+- \`guardrails/${policyId}.yaml\` - Guardrail metadata
 - \`configurations/${policyId}.yaml\` - Policy configuration
-- \`metadata/${policyId}.yaml\` - Policy metadata
 
 ### Policy Details
 | Field | Value |
@@ -315,15 +315,15 @@ ${metadata.resourceKind ? `| **Resource Kind** | ${metadata.resourceKind} |` : '
             </div>
             <div className="space-y-1 font-mono text-sm text-[var(--color-text-secondary)]">
               <div className="flex items-center gap-2">
-                <span className="text-[var(--color-info)]">guardrails/</span>
+                <span className="text-[var(--color-info)]">rego/</span>
                 <span>{policyId}.rego</span>
               </div>
               <div className="flex items-center gap-2">
-                <span className="text-[var(--color-success)]">configurations/</span>
+                <span className="text-[var(--color-success)]">guardrails/</span>
                 <span>{policyId}.yaml</span>
               </div>
               <div className="flex items-center gap-2">
-                <span className="text-[var(--color-warning)]">metadata/</span>
+                <span className="text-[var(--color-warning)]">configurations/</span>
                 <span>{policyId}.yaml</span>
               </div>
             </div>
