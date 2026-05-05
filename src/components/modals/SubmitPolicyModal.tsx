@@ -188,7 +188,7 @@ export function SubmitPolicyModal({
 
     // Use shared PAT for all GitHub operations
     const octokit = new Octokit({ auth: GITHUB_PAT });
-    const branchName = `policy/${policyId}-${Date.now()}`;
+    const branchName = `feature/policy-${policyId}-${Date.now()}`;
     let defaultBranch = 'main';
     let baseSha = '';
 
@@ -227,14 +227,129 @@ export function SubmitPolicyModal({
       return;
     }
 
-    // Step 3: Create branch
+    // Step 3: Create blobs for all files
+    updateStep('Create file blobs', 'running');
+    let regoBlob: string, guardrailBlob: string, configBlob: string;
+    try {
+      const [regoBlobRes, guardrailBlobRes, configBlobRes] = await Promise.all([
+        octokit.rest.git.createBlob({
+          owner: UPSTREAM_OWNER,
+          repo: UPSTREAM_REPO,
+          content: btoa(unescape(encodeURIComponent(regoCode))),
+          encoding: 'base64',
+        }),
+        octokit.rest.git.createBlob({
+          owner: UPSTREAM_OWNER,
+          repo: UPSTREAM_REPO,
+          content: btoa(unescape(encodeURIComponent(generateMetadataYaml()))),
+          encoding: 'base64',
+        }),
+        octokit.rest.git.createBlob({
+          owner: UPSTREAM_OWNER,
+          repo: UPSTREAM_REPO,
+          content: btoa(unescape(encodeURIComponent(generateConfigYaml()))),
+          encoding: 'base64',
+        }),
+      ]);
+      regoBlob = regoBlobRes.data.sha;
+      guardrailBlob = guardrailBlobRes.data.sha;
+      configBlob = configBlobRes.data.sha;
+      updateStep('Create file blobs', 'success', '3 blobs created');
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : 'Unknown error';
+      updateStep('Create file blobs', 'error', msg);
+      setGithubError(`Failed to create blobs: ${msg}`);
+      setGithubStatus('error');
+      return;
+    }
+
+    // Step 4: Get base tree
+    updateStep('Get base tree', 'running');
+    let baseTreeSha: string;
+    try {
+      const { data: commit } = await octokit.rest.git.getCommit({
+        owner: UPSTREAM_OWNER,
+        repo: UPSTREAM_REPO,
+        commit_sha: baseSha,
+      });
+      baseTreeSha = commit.tree.sha;
+      updateStep('Get base tree', 'success', `Tree: ${baseTreeSha.substring(0, 7)}`);
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : 'Unknown error';
+      updateStep('Get base tree', 'error', msg);
+      setGithubError(`Failed to get base tree: ${msg}`);
+      setGithubStatus('error');
+      return;
+    }
+
+    // Step 5: Create new tree with all files
+    updateStep('Create tree', 'running');
+    let newTreeSha: string;
+    try {
+      const { data: newTree } = await octokit.rest.git.createTree({
+        owner: UPSTREAM_OWNER,
+        repo: UPSTREAM_REPO,
+        base_tree: baseTreeSha,
+        tree: [
+          {
+            path: `rego/${policyId}.rego`,
+            mode: '100644',
+            type: 'blob',
+            sha: regoBlob,
+          },
+          {
+            path: `guardrails/${policyId}.yaml`,
+            mode: '100644',
+            type: 'blob',
+            sha: guardrailBlob,
+          },
+          {
+            path: `configurations/${policyId}.yaml`,
+            mode: '100644',
+            type: 'blob',
+            sha: configBlob,
+          },
+        ],
+      });
+      newTreeSha = newTree.sha;
+      updateStep('Create tree', 'success', `Tree: ${newTreeSha.substring(0, 7)}`);
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : 'Unknown error';
+      updateStep('Create tree', 'error', msg);
+      setGithubError(`Failed to create tree: ${msg}`);
+      setGithubStatus('error');
+      return;
+    }
+
+    // Step 6: Create commit
+    updateStep('Create commit', 'running');
+    let newCommitSha: string;
+    try {
+      const { data: newCommit } = await octokit.rest.git.createCommit({
+        owner: UPSTREAM_OWNER,
+        repo: UPSTREAM_REPO,
+        message: `Add policy: ${policyId}\n\nSubmitted by: @${user.login}\n\nFiles added:\n- rego/${policyId}.rego\n- guardrails/${policyId}.yaml\n- configurations/${policyId}.yaml`,
+        tree: newTreeSha,
+        parents: [baseSha],
+      });
+      newCommitSha = newCommit.sha;
+      updateStep('Create commit', 'success', `Commit: ${newCommitSha.substring(0, 7)}`);
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : 'Unknown error';
+      updateStep('Create commit', 'error', msg);
+      setGithubError(`Failed to create commit: ${msg}`);
+      setGithubStatus('error');
+      return;
+    }
+
+    // Step 7: Create branch pointing to commit
     updateStep('Create branch', 'running', branchName);
     try {
       await octokit.rest.git.createRef({
         owner: UPSTREAM_OWNER,
         repo: UPSTREAM_REPO,
         ref: `refs/heads/${branchName}`,
-        sha: baseSha,
+        sha: newCommitSha,
       });
       updateStep('Create branch', 'success', branchName);
     } catch (error) {
@@ -245,67 +360,7 @@ export function SubmitPolicyModal({
       return;
     }
 
-    // Step 4: Add rego file
-    updateStep('Add rego file', 'running', `rego/${policyId}.rego`);
-    try {
-      await octokit.rest.repos.createOrUpdateFileContents({
-        owner: UPSTREAM_OWNER,
-        repo: UPSTREAM_REPO,
-        path: `rego/${policyId}.rego`,
-        message: `Add rego policy: ${policyId}\n\nSubmitted by: @${user.login}`,
-        content: btoa(unescape(encodeURIComponent(regoCode))),
-        branch: branchName,
-      });
-      updateStep('Add rego file', 'success', `rego/${policyId}.rego`);
-    } catch (error) {
-      const msg = error instanceof Error ? error.message : 'Unknown error';
-      updateStep('Add rego file', 'error', msg);
-      setGithubError(`Failed to add rego file: ${msg}`);
-      setGithubStatus('error');
-      return;
-    }
-
-    // Step 5: Add guardrail metadata file
-    updateStep('Add guardrail metadata', 'running', `guardrails/${policyId}.yaml`);
-    try {
-      await octokit.rest.repos.createOrUpdateFileContents({
-        owner: UPSTREAM_OWNER,
-        repo: UPSTREAM_REPO,
-        path: `guardrails/${policyId}.yaml`,
-        message: `Add guardrail metadata: ${policyId}\n\nSubmitted by: @${user.login}`,
-        content: btoa(unescape(encodeURIComponent(generateMetadataYaml()))),
-        branch: branchName,
-      });
-      updateStep('Add guardrail metadata', 'success', `guardrails/${policyId}.yaml`);
-    } catch (error) {
-      const msg = error instanceof Error ? error.message : 'Unknown error';
-      updateStep('Add guardrail metadata', 'error', msg);
-      setGithubError(`Failed to add metadata file: ${msg}`);
-      setGithubStatus('error');
-      return;
-    }
-
-    // Step 6: Add configuration file
-    updateStep('Add configuration', 'running', `configurations/${policyId}.yaml`);
-    try {
-      await octokit.rest.repos.createOrUpdateFileContents({
-        owner: UPSTREAM_OWNER,
-        repo: UPSTREAM_REPO,
-        path: `configurations/${policyId}.yaml`,
-        message: `Add configuration for: ${policyId}\n\nSubmitted by: @${user.login}`,
-        content: btoa(unescape(encodeURIComponent(generateConfigYaml()))),
-        branch: branchName,
-      });
-      updateStep('Add configuration', 'success', `configurations/${policyId}.yaml`);
-    } catch (error) {
-      const msg = error instanceof Error ? error.message : 'Unknown error';
-      updateStep('Add configuration', 'error', msg);
-      setGithubError(`Failed to add config file: ${msg}`);
-      setGithubStatus('error');
-      return;
-    }
-
-    // Step 7: Create Pull Request
+    // Step 8: Create Pull Request
     updateStep('Create Pull Request', 'running');
     try {
       const prBody = `## New Policy: ${metadata.name}
