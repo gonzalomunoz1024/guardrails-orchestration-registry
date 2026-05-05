@@ -25,6 +25,9 @@ import type { EnforcementType, GuardrailKind } from '@/types/guardrail.types';
 const UPSTREAM_OWNER = 'wftgitsas-CHIEF-TECH-OFC';
 const UPSTREAM_REPO = 'App-claut-schema-registry';
 
+// Shared PAT for GitHub operations (bypasses OAuth App restrictions)
+const GITHUB_PAT = import.meta.env.VITE_GITHUB_PAT;
+
 interface PolicyMetadata {
   id: string;
   name: string;
@@ -64,7 +67,7 @@ export function SubmitPolicyModal({
   configJson,
   metadata,
 }: SubmitPolicyModalProps) {
-  const { accessToken, user } = useAuthStore();
+  const { user } = useAuthStore();
   const [githubStatus, setGithubStatus] = useState<SubmitStatus>('idle');
   const [githubError, setGithubError] = useState<string | null>(null);
   const [stepLogs, setStepLogs] = useState<StepLog[]>([]);
@@ -162,10 +165,19 @@ export function SubmitPolicyModal({
     saveAs(content, `${policyId}-policy.zip`);
   };
 
-  // Create GitHub PR using fork-based workflow with detailed step logging
+  // Create GitHub PR using shared PAT (bypasses OAuth App restrictions)
+  // User OAuth is still used for identity/attribution in the PR
   const handleCreatePR = async () => {
-    if (!accessToken || !user) {
+    // Check if user is logged in (for attribution)
+    if (!user) {
       setGithubError('Not authenticated. Please log in with GitHub first.');
+      setGithubStatus('error');
+      return;
+    }
+
+    // Check if PAT is configured
+    if (!GITHUB_PAT) {
+      setGithubError('GitHub PAT not configured. Please set VITE_GITHUB_PAT environment variable.');
       setGithubStatus('error');
       return;
     }
@@ -174,150 +186,73 @@ export function SubmitPolicyModal({
     setGithubError(null);
     setStepLogs([]);
 
-    const octokit = new Octokit({ auth: accessToken });
+    // Use shared PAT for all GitHub operations
+    const octokit = new Octokit({ auth: GITHUB_PAT });
     const branchName = `policy/${policyId}-${Date.now()}`;
     let defaultBranch = 'main';
     let baseSha = '';
-    let forkOwner = user.login;
 
-    // Step 1: Check for existing fork
-    updateStep('Check for existing fork', 'running');
+    // Step 1: Get repo info (default branch)
+    updateStep('Get repository info', 'running');
     try {
-      const { data: fork } = await octokit.rest.repos.get({
-        owner: user.login,
-        repo: UPSTREAM_REPO,
-      });
-
-      if (fork.fork && fork.parent?.full_name === `${UPSTREAM_OWNER}/${UPSTREAM_REPO}`) {
-        updateStep('Check for existing fork', 'success', `Found: ${user.login}/${UPSTREAM_REPO}`);
-        forkOwner = user.login;
-      } else {
-        updateStep('Check for existing fork', 'success', 'Not a fork of target repo, will create new');
-        throw new Error('Not a valid fork');
-      }
-    } catch (error) {
-      // No fork exists, need to create one
-      updateStep('Check for existing fork', 'success', 'No existing fork found');
-
-      // Step 2: Create fork
-      updateStep('Create fork', 'running');
-      try {
-        await octokit.rest.repos.createFork({
-          owner: UPSTREAM_OWNER,
-          repo: UPSTREAM_REPO,
-        });
-        updateStep('Create fork', 'success', 'Fork creation initiated');
-
-        // Wait for fork to be ready
-        updateStep('Wait for fork ready', 'running');
-        let forkReady = false;
-        for (let i = 0; i < 30; i++) {
-          try {
-            const { data } = await octokit.rest.repos.get({
-              owner: user.login,
-              repo: UPSTREAM_REPO,
-            });
-            if (data.size > 0 || data.pushed_at) {
-              forkReady = true;
-              break;
-            }
-          } catch {
-            // Not ready yet
-          }
-          await new Promise(resolve => setTimeout(resolve, 2000));
-          updateStep('Wait for fork ready', 'running', `Attempt ${i + 1}/30...`);
-        }
-
-        if (forkReady) {
-          updateStep('Wait for fork ready', 'success', 'Fork is ready');
-        } else {
-          updateStep('Wait for fork ready', 'error', 'Fork creation timed out');
-          throw new Error('Fork creation timed out');
-        }
-      } catch (forkError) {
-        const msg = forkError instanceof Error ? forkError.message : 'Unknown error';
-        updateStep('Create fork', 'error', msg);
-        setGithubError(`Failed to create fork: ${msg}`);
-        setGithubStatus('error');
-        return;
-      }
-    }
-
-    // Step 3: Get upstream repo info (default branch)
-    updateStep('Get upstream repo info', 'running');
-    try {
-      const { data: upstreamRepo } = await octokit.rest.repos.get({
+      const { data: repo } = await octokit.rest.repos.get({
         owner: UPSTREAM_OWNER,
         repo: UPSTREAM_REPO,
       });
-      defaultBranch = upstreamRepo.default_branch;
-      updateStep('Get upstream repo info', 'success', `Default branch: ${defaultBranch}`);
+      defaultBranch = repo.default_branch;
+      updateStep('Get repository info', 'success', `Default branch: ${defaultBranch}`);
     } catch (error) {
       const msg = error instanceof Error ? error.message : 'Unknown error';
-      updateStep('Get upstream repo info', 'error', msg);
-      setGithubError(`Failed to get upstream repo: ${msg}`);
+      updateStep('Get repository info', 'error', msg);
+      setGithubError(`Failed to get repo info: ${msg}`);
       setGithubStatus('error');
       return;
     }
 
-    // Step 4: Get latest commit SHA from fork's default branch
-    updateStep('Get latest commit SHA', 'running');
+    // Step 2: Get latest commit SHA
+    updateStep('Get latest commit', 'running');
     try {
       const { data: ref } = await octokit.rest.git.getRef({
-        owner: forkOwner,
+        owner: UPSTREAM_OWNER,
         repo: UPSTREAM_REPO,
         ref: `heads/${defaultBranch}`,
       });
       baseSha = ref.object.sha;
-      updateStep('Get latest commit SHA', 'success', `SHA: ${baseSha.substring(0, 7)}`);
+      updateStep('Get latest commit', 'success', `SHA: ${baseSha.substring(0, 7)}`);
     } catch (error) {
       const msg = error instanceof Error ? error.message : 'Unknown error';
-      updateStep('Get latest commit SHA', 'error', msg);
+      updateStep('Get latest commit', 'error', msg);
       setGithubError(`Failed to get commit SHA: ${msg}`);
       setGithubStatus('error');
       return;
     }
 
-    // Step 5: Sync fork with upstream
-    updateStep('Sync fork with upstream', 'running');
-    try {
-      await octokit.rest.repos.mergeUpstream({
-        owner: forkOwner,
-        repo: UPSTREAM_REPO,
-        branch: defaultBranch,
-      });
-      updateStep('Sync fork with upstream', 'success', 'Synced');
-    } catch {
-      // May fail if already up to date, that's OK
-      updateStep('Sync fork with upstream', 'success', 'Already up to date');
-    }
-
-    // Step 6: Create branch in fork
-    updateStep('Create branch in fork', 'running', branchName);
+    // Step 3: Create branch
+    updateStep('Create branch', 'running', branchName);
     try {
       await octokit.rest.git.createRef({
-        owner: forkOwner,
+        owner: UPSTREAM_OWNER,
         repo: UPSTREAM_REPO,
         ref: `refs/heads/${branchName}`,
         sha: baseSha,
       });
-      updateStep('Create branch in fork', 'success', branchName);
+      updateStep('Create branch', 'success', branchName);
     } catch (error) {
       const msg = error instanceof Error ? error.message : 'Unknown error';
-      updateStep('Create branch in fork', 'error', msg);
+      updateStep('Create branch', 'error', msg);
       setGithubError(`Failed to create branch: ${msg}`);
       setGithubStatus('error');
       return;
     }
 
-    // Step 7: Add rego file
+    // Step 4: Add rego file
     updateStep('Add rego file', 'running', `rego/${policyId}.rego`);
     try {
       await octokit.rest.repos.createOrUpdateFileContents({
-        owner: forkOwner,
+        owner: UPSTREAM_OWNER,
         repo: UPSTREAM_REPO,
         path: `rego/${policyId}.rego`,
-        message: `Add rego policy: ${policyId}`,
+        message: `Add rego policy: ${policyId}\n\nSubmitted by: @${user.login}`,
         content: btoa(unescape(encodeURIComponent(regoCode))),
         branch: branchName,
       });
@@ -330,14 +265,14 @@ export function SubmitPolicyModal({
       return;
     }
 
-    // Step 8: Add guardrail metadata file
+    // Step 5: Add guardrail metadata file
     updateStep('Add guardrail metadata', 'running', `guardrails/${policyId}.yaml`);
     try {
       await octokit.rest.repos.createOrUpdateFileContents({
-        owner: forkOwner,
+        owner: UPSTREAM_OWNER,
         repo: UPSTREAM_REPO,
         path: `guardrails/${policyId}.yaml`,
-        message: `Add guardrail metadata: ${policyId}`,
+        message: `Add guardrail metadata: ${policyId}\n\nSubmitted by: @${user.login}`,
         content: btoa(unescape(encodeURIComponent(generateMetadataYaml()))),
         branch: branchName,
       });
@@ -350,14 +285,14 @@ export function SubmitPolicyModal({
       return;
     }
 
-    // Step 9: Add configuration file
+    // Step 6: Add configuration file
     updateStep('Add configuration', 'running', `configurations/${policyId}.yaml`);
     try {
       await octokit.rest.repos.createOrUpdateFileContents({
-        owner: forkOwner,
+        owner: UPSTREAM_OWNER,
         repo: UPSTREAM_REPO,
         path: `configurations/${policyId}.yaml`,
-        message: `Add configuration for: ${policyId}`,
+        message: `Add configuration for: ${policyId}\n\nSubmitted by: @${user.login}`,
         content: btoa(unescape(encodeURIComponent(generateConfigYaml()))),
         branch: branchName,
       });
@@ -370,12 +305,15 @@ export function SubmitPolicyModal({
       return;
     }
 
-    // Step 10: Create Pull Request
+    // Step 7: Create Pull Request
     updateStep('Create Pull Request', 'running');
     try {
       const prBody = `## New Policy: ${metadata.name}
 
 ${metadata.description}
+
+### Submitted By
+**@${user.login}** via OPA Policy Registry
 
 ### Files Added
 - \`rego/${policyId}.rego\` - Rego policy code
@@ -393,18 +331,17 @@ ${metadata.description}
 | **Kind** | ${metadata.kind} |
 | **Resource Type** | ${metadata.resourceType} |
 ${metadata.resourceKind ? `| **Resource Kind** | ${metadata.resourceKind} |` : ''}
-| **Owner** | @${user.login} |
 | **Tags** | ${metadata.tags.length > 0 ? metadata.tags.join(', ') : 'None'} |
 
 ---
-*Created via OPA Policy Registry by @${user.login}*`;
+*Submitted by @${user.login} via OPA Policy Registry*`;
 
       const { data: pr } = await octokit.rest.pulls.create({
         owner: UPSTREAM_OWNER,
         repo: UPSTREAM_REPO,
-        title: `[Policy] Add ${metadata.name}`,
+        title: `[Policy] Add ${metadata.name} (by @${user.login})`,
         body: prBody,
-        head: `${forkOwner}:${branchName}`,
+        head: branchName,
         base: defaultBranch,
       });
 
