@@ -131,18 +131,31 @@ export function SubmitPolicyModal({
 
   // Generate YAML content for metadata
   const generateMetadataYaml = (): string => {
+    // Format version as major.minor only (e.g., 1.0, 1.1)
+    const formatVersion = (version: string): string => {
+      const parts = version.split('.');
+      if (parts.length >= 2) {
+        return `${parts[0]}.${parts[1]}`;
+      }
+      return version;
+    };
+
+    const now = new Date().toISOString();
+
     const metadataObj = {
       id: metadata.id,
       name: metadata.name,
       description: metadata.description,
-      version: metadata.version,
+      version: formatVersion(metadata.version),
       status: metadata.status,
       enforcementType: metadata.enforcementType,
       kind: metadata.kind,
       resourceType: metadata.resourceType,
       ...(metadata.resourceKind && { resourceKind: metadata.resourceKind }),
-      owner: metadata.owner,
+      owner: user?.name || user?.login || metadata.owner,
       tags: metadata.tags,
+      createdAt: now,
+      updatedAt: now,
     };
     return yaml.dump(metadataObj, { indent: 2, lineWidth: -1 });
   };
