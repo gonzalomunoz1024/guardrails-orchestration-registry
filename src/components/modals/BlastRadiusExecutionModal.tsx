@@ -10,6 +10,7 @@ import {
   Zap,
   ChevronDown,
   ChevronUp,
+  Download,
 } from 'lucide-react';
 import { cn } from '@/utils';
 import { evaluationApi } from '@/services/api';
@@ -167,6 +168,49 @@ export function BlastRadiusExecutionModal({
   const errorCount = Array.from(results.values()).filter(r => r.status === 'error').length;
   const completedCount = passedCount + failedCount + errorCount;
   const passRate = completedCount > 0 ? Math.round((passedCount / completedCount) * 100) : 0;
+
+  // Download results as JSON
+  const handleDownloadResults = useCallback(() => {
+    const exportData = {
+      summary: {
+        guardrailId: guardrailInfo.id,
+        guardrailName: guardrailInfo.name,
+        guardrailVersion: guardrailInfo.version,
+        enforcementType: guardrailInfo.enforcementType,
+        totalTests: testInputs.length,
+        passed: passedCount,
+        failed: failedCount,
+        errors: errorCount,
+        passRate: `${passRate}%`,
+        executedAt: new Date().toISOString(),
+      },
+      configuration: configuration,
+      testResults: testInputs.map(testInput => {
+        const result = results.get(testInput.id);
+        return {
+          testId: testInput.id,
+          testName: testInput.name,
+          correlationId: testInput.metadata?.correlationId || null,
+          applicationId: testInput.applicationId || null,
+          status: result?.status || 'pending',
+          executionTimeMs: result?.executionTimeMs || null,
+          input: testInput.input,
+          output: result?.result || null,
+          error: result?.error || null,
+        };
+      }),
+    };
+
+    const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `blast-radius-${guardrailInfo.id}-${Date.now()}.json`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  }, [testInputs, results, guardrailInfo, configuration, passedCount, failedCount, errorCount, passRate]);
 
   if (!isOpen) return null;
 
@@ -427,18 +471,31 @@ export function BlastRadiusExecutionModal({
                 </span>
               </div>
             ) : (
-              <button
-                onClick={runAllTests}
-                className={cn(
-                  'flex items-center gap-3 px-8 py-3 rounded-xl',
-                  'bg-[var(--color-surface-secondary)] text-[var(--color-text-primary)]',
-                  'border border-[var(--color-border-light)]',
-                  'font-medium transition-all hover:bg-[var(--color-border-light)]'
-                )}
-              >
-                <Play className="w-5 h-5" />
-                Run Again
-              </button>
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={handleDownloadResults}
+                  className={cn(
+                    'flex items-center gap-2 px-6 py-3 rounded-xl',
+                    'bg-[var(--color-info)] text-white',
+                    'font-medium transition-all hover:opacity-90'
+                  )}
+                >
+                  <Download className="w-4 h-4" />
+                  Download Results
+                </button>
+                <button
+                  onClick={runAllTests}
+                  className={cn(
+                    'flex items-center gap-2 px-6 py-3 rounded-xl',
+                    'bg-[var(--color-surface-secondary)] text-[var(--color-text-primary)]',
+                    'border border-[var(--color-border-light)]',
+                    'font-medium transition-all hover:bg-[var(--color-border-light)]'
+                  )}
+                >
+                  <Play className="w-4 h-4" />
+                  Run Again
+                </button>
+              </div>
             )}
           </div>
         </div>

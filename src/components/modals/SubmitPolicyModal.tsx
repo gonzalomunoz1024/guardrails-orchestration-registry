@@ -19,11 +19,10 @@ import yaml from 'js-yaml';
 import { Octokit } from 'octokit';
 import { cn } from '@/utils';
 import { useAuthStore } from '@/store/authStore';
+import { useResourceTypeConfig } from '@/hooks/useResourceTypeConfig';
+import { ComingSoonBanner } from '@/components/common/ComingSoonBanner';
 import type { EnforcementType, GuardrailKind } from '@/types/guardrail.types';
-
-// Upstream repository (the org repo where PRs will be merged)
-const UPSTREAM_OWNER = 'wftgitsas-CHIEF-TECH-OFC';
-const UPSTREAM_REPO = 'App-claut-schema-registry';
+import type { FrontendResourceType } from '@/types/registry.types';
 
 // Shared PAT for GitHub operations (bypasses OAuth App restrictions)
 const GITHUB_PAT = import.meta.env.VITE_GITHUB_PAT;
@@ -49,6 +48,8 @@ interface SubmitPolicyModalProps {
   regoCode: string;
   configJson: string;
   metadata: PolicyMetadata;
+  /** Resource type for determining PR creation availability */
+  resourceType: FrontendResourceType;
 }
 
 type SubmitStatus = 'idle' | 'creating' | 'success' | 'error';
@@ -66,8 +67,14 @@ export function SubmitPolicyModal({
   regoCode,
   configJson,
   metadata,
+  resourceType,
 }: SubmitPolicyModalProps) {
   const { user } = useAuthStore();
+  const { config, prCreationEnabled, prCreationDisabledMessage } = useResourceTypeConfig(resourceType);
+
+  // Get GitHub repo config from resource type config
+  const UPSTREAM_OWNER = config.prCreation.github?.owner ?? '';
+  const UPSTREAM_REPO = config.prCreation.github?.repo ?? '';
   const [githubStatus, setGithubStatus] = useState<SubmitStatus>('idle');
   const [githubError, setGithubError] = useState<string | null>(null);
   const [stepLogs, setStepLogs] = useState<StepLog[]>([]);
@@ -493,11 +500,13 @@ ${metadata.resourceKind ? `| **Resource Kind** | ${metadata.resourceKind} |` : '
             <div
               className={cn(
                 'rounded-xl border-2 p-5 transition-all',
-                githubStatus === 'success'
-                  ? 'border-[var(--color-success)] bg-[var(--color-success-bg)]'
-                  : githubStatus === 'error'
-                    ? 'border-[var(--color-error)] bg-[var(--color-error-bg)]'
-                    : 'border-[var(--color-border-light)] bg-[var(--color-surface)]'
+                !prCreationEnabled
+                  ? 'border-[var(--color-border-light)] bg-[var(--color-surface)]'
+                  : githubStatus === 'success'
+                    ? 'border-[var(--color-success)] bg-[var(--color-success-bg)]'
+                    : githubStatus === 'error'
+                      ? 'border-[var(--color-error)] bg-[var(--color-error-bg)]'
+                      : 'border-[var(--color-border-light)] bg-[var(--color-surface)]'
               )}
             >
               <div className="flex items-center justify-between mb-4">
@@ -505,9 +514,11 @@ ${metadata.resourceKind ? `| **Resource Kind** | ${metadata.resourceKind} |` : '
                   <div
                     className={cn(
                       'p-2.5 rounded-xl',
-                      githubStatus === 'success'
-                        ? 'bg-[var(--color-success)]'
-                        : 'bg-[#24292f]'
+                      !prCreationEnabled
+                        ? 'bg-[var(--color-text-tertiary)]'
+                        : githubStatus === 'success'
+                          ? 'bg-[var(--color-success)]'
+                          : 'bg-[#24292f]'
                     )}
                   >
                     {githubStatus === 'success' ? (
@@ -520,12 +531,14 @@ ${metadata.resourceKind ? `| **Resource Kind** | ${metadata.resourceKind} |` : '
                     <h3 className="font-semibold text-[var(--color-text-primary)]">
                       Publish to GitHub
                     </h3>
-                    <p className="text-xs text-[var(--color-text-tertiary)]">
-                      {UPSTREAM_OWNER}/{UPSTREAM_REPO}
-                    </p>
+                    {prCreationEnabled && UPSTREAM_OWNER && UPSTREAM_REPO && (
+                      <p className="text-xs text-[var(--color-text-tertiary)]">
+                        {UPSTREAM_OWNER}/{UPSTREAM_REPO}
+                      </p>
+                    )}
                   </div>
                 </div>
-                {user && (
+                {prCreationEnabled && user && (
                   <div className="flex items-center gap-2">
                     <img
                       src={user.avatar_url}
@@ -539,7 +552,12 @@ ${metadata.resourceKind ? `| **Resource Kind** | ${metadata.resourceKind} |` : '
                 )}
               </div>
 
-              {githubStatus === 'success' && prUrl ? (
+              {/* Show Coming Soon banner if PR creation is disabled */}
+              {!prCreationEnabled ? (
+                <ComingSoonBanner
+                  message={prCreationDisabledMessage || 'GitHub PR creation is not available for this resource type.'}
+                />
+              ) : githubStatus === 'success' && prUrl ? (
                 <div className="space-y-3">
                   <div className="flex items-center gap-2 text-sm text-[var(--color-success)]">
                     <CheckCircle className="w-4 h-4" />

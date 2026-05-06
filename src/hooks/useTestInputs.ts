@@ -1,91 +1,72 @@
-/**
- * Test Inputs Hook
- *
- * React Query hook for fetching test inputs from the backend using OpenSearch scroll pagination.
- * Supports infinite scrolling / "Load More" pattern.
- */
-
 import { useInfiniteQuery } from '@tanstack/react-query';
 import { guardrailsApi } from '@/services/api';
-import type { TestInputFilters, TestInput } from '@/types/registry.types';
+import { getResourceTypeConfig } from '@/config/resourceTypes';
+import type { TestInputFilters, TestInput, FrontendResourceType } from '@/types/registry.types';
 
-// Query keys for cache management
 export const testInputsKeys = {
   all: ['testInputs'] as const,
-  list: (filters?: TestInputFilters) => [...testInputsKeys.all, 'list', filters] as const,
+  list: (filters?: TestInputFilters, resourceType?: FrontendResourceType) =>
+    [...testInputsKeys.all, 'list', filters, resourceType] as const,
 };
 
 interface UseTestInputsOptions {
   filters?: TestInputFilters;
   limit?: number;
   enabled?: boolean;
+  resourceType?: FrontendResourceType;
 }
 
 interface UseTestInputsResult {
-  /** All test inputs loaded so far (flattened from all pages) */
   testInputs: TestInput[];
-  /** Total number of hits from OpenSearch */
   totalHits: number;
-  /** Whether more results are available */
   hasMore: boolean;
-  /** Loading state for initial fetch */
   isLoading: boolean;
-  /** Loading state for fetching next page */
   isFetchingNextPage: boolean;
-  /** Error state */
   error: Error | null;
-  /** Fetch the next page of results */
   fetchNextPage: () => void;
-  /** Refetch from the beginning with current filters */
   refetch: () => void;
+  isDisabled: boolean;
+  disabledMessage?: string;
 }
 
-/**
- * Fetch test inputs with OpenSearch scroll-based pagination
- *
- * @example
- * ```tsx
- * const { testInputs, hasMore, fetchNextPage, isLoading } = useTestInputs({
- *   filters: { applicationId: 'app-123', environment: 'production' },
- *   limit: 50,
- * });
- *
- * // Render list with "Load More" button
- * return (
- *   <>
- *     {testInputs.map(input => <TestInputCard key={input.id} input={input} />)}
- *     {hasMore && <button onClick={fetchNextPage}>Load More</button>}
- *   </>
- * );
- * ```
- */
 export function useTestInputs(options: UseTestInputsOptions = {}): UseTestInputsResult {
-  const { filters, limit = 50, enabled = true } = options;
+  const { filters, limit = 50, enabled = true, resourceType = 'lightspeed' } = options;
+
+  const resourceTypeConfig = getResourceTypeConfig(resourceType);
+  const isResourceTypeEnabled = resourceTypeConfig.testInputs.enabled;
 
   const query = useInfiniteQuery({
-    queryKey: testInputsKeys.list(filters),
+    queryKey: testInputsKeys.list(filters, resourceType),
     queryFn: async ({ pageParam }) => {
-      // pageParam is the scrollId from previous page, undefined for first page
       return guardrailsApi.getTestInputs(filters, pageParam as string | undefined, limit);
     },
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (lastPage) => {
-      // Return scrollId if there are more results, otherwise undefined to stop pagination
       return lastPage.hasMore ? lastPage.scrollId : undefined;
     },
-    enabled,
-    staleTime: 2 * 60 * 1000, // 2 minutes
+    enabled: enabled && isResourceTypeEnabled,
+    staleTime: 2 * 60 * 1000,
     retry: 2,
   });
 
-  // Flatten all pages into a single array of test inputs
-  const testInputs = query.data?.pages.flatMap((page) => page.testInputs) ?? [];
+  if (!isResourceTypeEnabled) {
+    return {
+      testInputs: [],
+      totalHits: 0,
+      hasMore: false,
+      isLoading: false,
+      isFetchingNextPage: false,
+      error: null,
+      fetchNextPage: () => {},
+      refetch: () => {},
+      isDisabled: true,
+      disabledMessage: resourceTypeConfig.testInputs.disabledMessage,
+    };
+  }
 
-  // Get metadata from first page
+  const testInputs = query.data?.pages.flatMap((page) => page.testInputs) ?? [];
   const firstPage = query.data?.pages[0];
   const totalHits = firstPage?.total ?? 0;
-
-  // Check if there are more results to load
   const lastPage = query.data?.pages[query.data.pages.length - 1];
   const hasMore = lastPage?.hasMore ?? false;
 
@@ -98,5 +79,7 @@ export function useTestInputs(options: UseTestInputsOptions = {}): UseTestInputs
     error: query.error,
     fetchNextPage: () => query.fetchNextPage(),
     refetch: () => query.refetch(),
+    isDisabled: false,
+    disabledMessage: undefined,
   };
 }

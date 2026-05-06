@@ -27,9 +27,10 @@ import {
   Wand2,
 } from 'lucide-react';
 import { BlastRadiusExecutionModal, EditorModal, SubmitPolicyModal } from '@/components/modals';
+import { ComingSoonBanner } from '@/components/common/ComingSoonBanner';
 import { useUIStore, usePolicyStore, useEvaluationStore } from '@/store';
 import { useRegistryStore } from '@/store/registryStore';
-import { useEvaluate, useTestInputs } from '@/hooks';
+import { useEvaluate, useTestInputs, useResourceTypeConfig } from '@/hooks';
 import { initializeMonaco, defaultEditorOptions } from '@/monaco/config';
 import { cn } from '@/utils';
 import type { ResourceType, TestInput } from '@/types/registry.types';
@@ -69,6 +70,9 @@ export function CreatePolicy() {
   const [resourceType, setResourceType] = useState<ResourceType>('lightspeed');
   const [resourceKind, setResourceKind] = useState('');
   const [enforcementType, setEnforcementType] = useState<EnforcementType>('MANDATORY');
+
+  // Get resource type configuration for feature flags
+  const { supportsBlastRadius, testInputsDisabledMessage } = useResourceTypeConfig(resourceType);
 
   // Pass guardrail info to evaluate hook
   const { evaluate } = useEvaluate({
@@ -139,6 +143,7 @@ export function CreatePolicy() {
   }), [applicationId, organization, environment, resourceKind, resourceType]);
 
   // Use the real test inputs hook with scroll-based pagination
+  // Test inputs are disabled for some resource types (e.g., VMForge)
   const {
     testInputs,
     totalHits,
@@ -149,7 +154,8 @@ export function CreatePolicy() {
     refetch,
   } = useTestInputs({
     filters: testInputFilters,
-    enabled: shouldFetchTestInputs,
+    enabled: shouldFetchTestInputs && supportsBlastRadius,
+    resourceType,
   });
 
   const handleAddTag = () => {
@@ -803,6 +809,18 @@ export function CreatePolicy() {
                 </p>
               </div>
 
+              {/* Show Coming Soon banner if blast radius is disabled for this resource type */}
+              {!supportsBlastRadius ? (
+                <div className="space-y-4">
+                  <ComingSoonBanner
+                    message={testInputsDisabledMessage || 'Blast radius testing is not available for this resource type.'}
+                  />
+                  <p className="text-sm text-[var(--color-text-secondary)]">
+                    You can still proceed to the Review step and submit your policy for review.
+                  </p>
+                </div>
+              ) : (
+              <>
               {/* Filter Card */}
               <div className="rounded-[var(--radius-xl)] bg-[var(--color-surface)] shadow-[var(--shadow-card)] border border-[var(--color-border-light)] overflow-hidden">
                 <div className="px-6 py-4 border-b border-[var(--color-border-light)] bg-[var(--color-surface-secondary)]/50">
@@ -1126,6 +1144,8 @@ export function CreatePolicy() {
                   </div>
                 </div>
               </div>
+              </>
+              )}
             </div>
           )}
 
@@ -1424,6 +1444,7 @@ export function CreatePolicy() {
         policyId={policyId}
         regoCode={regoCode}
         configJson={configJson}
+        resourceType={resourceType}
         metadata={{
           id: policyId,
           name: metadata.name,

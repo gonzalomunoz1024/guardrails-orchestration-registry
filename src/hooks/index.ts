@@ -22,3 +22,4 @@ export {
 } from './useEvaluations';
 export { useStats, statsKeys } from './useStats';
 export { useTestInputs, testInputsKeys } from './useTestInputs';
+export { useResourceTypeConfig } from './useResourceTypeConfig';
