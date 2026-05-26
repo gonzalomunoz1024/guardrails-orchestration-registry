@@ -210,6 +210,42 @@ export function buildRequestUrl(
   return `${base}${resolvedPath}${qs ? `?${qs}` : ''}`;
 }
 
+/** Read a dotted path (supports numeric array indices) out of a value. */
+export function getByPath(obj: unknown, path: string): unknown {
+  if (!path) return undefined;
+  return path.split('.').reduce<unknown>((acc, key) => {
+    if (acc == null || typeof acc !== 'object') return undefined;
+    return (acc as Record<string, unknown>)[key];
+  }, obj);
+}
+
+/** Flatten an object/array into dotted paths to primitive leaves. */
+export function flattenLeafPaths(
+  value: unknown,
+  prefix = '',
+  out: string[] = [],
+  depth = 0
+): string[] {
+  if (depth > 6 || value == null) {
+    if (prefix && value == null) out.push(prefix);
+    return out;
+  }
+  if (Array.isArray(value)) {
+    value.forEach((v, i) =>
+      flattenLeafPaths(v, prefix ? `${prefix}.${i}` : String(i), out, depth + 1)
+    );
+    return out;
+  }
+  if (typeof value === 'object') {
+    for (const [k, v] of Object.entries(value)) {
+      flattenLeafPaths(v, prefix ? `${prefix}.${k}` : k, out, depth + 1);
+    }
+    return out;
+  }
+  if (prefix) out.push(prefix);
+  return out;
+}
+
 /** Fetch data for a configured external dependency. */
 export async function fetchExternalData(url: string): Promise<unknown> {
   const res = await fetch(url, { headers: { Accept: 'application/json' } });

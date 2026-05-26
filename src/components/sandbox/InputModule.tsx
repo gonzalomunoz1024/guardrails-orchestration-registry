@@ -11,6 +11,7 @@ import {
   ChevronDown,
   ChevronRight,
   ChevronUp,
+  Layers,
 } from 'lucide-react';
 import { usePolicyStore, useUIStore } from '@/store';
 import { useInputShape } from '@/hooks';
@@ -155,6 +156,8 @@ export function InputModule({ guardrailInfo, onExpandInput, onExpandConfig }: In
   } = usePolicyStore();
   const { resolvedTheme } = useUIStore();
 
+  // 'sources' = edit document/config/external; 'combined' = view merged input.
+  const [viewMode, setViewMode] = useState<'sources' | 'combined'>('sources');
   // Per-section collapse state. All open by default.
   const [open, setOpen] = useState({ document: true, configuration: true, external: true });
   const toggle = (key: keyof typeof open) =>
@@ -190,23 +193,42 @@ export function InputModule({ guardrailInfo, onExpandInput, onExpandConfig }: In
             <code className="font-mono">input</code>
           </p>
         </div>
-        <button
-          onClick={() => setAll(!anyOpen)}
-          className="flex items-center gap-1 shrink-0 px-2 py-1 rounded-md text-[11px] font-medium text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-surface-secondary)] transition-all"
-        >
-          {anyOpen ? (
-            <>
-              <ChevronUp className="w-3.5 h-3.5" /> Collapse all
-            </>
-          ) : (
-            <>
-              <ChevronDown className="w-3.5 h-3.5" /> Expand all
-            </>
+        <div className="flex items-center gap-1 shrink-0">
+          {viewMode === 'sources' && (
+            <button
+              onClick={() => setAll(!anyOpen)}
+              className="flex items-center gap-1 px-2 py-1 rounded-md text-[11px] font-medium text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-surface-secondary)] transition-all"
+            >
+              {anyOpen ? (
+                <>
+                  <ChevronUp className="w-3.5 h-3.5" /> Collapse all
+                </>
+              ) : (
+                <>
+                  <ChevronDown className="w-3.5 h-3.5" /> Expand all
+                </>
+              )}
+            </button>
           )}
-        </button>
+          <button
+            onClick={() => setViewMode((m) => (m === 'combined' ? 'sources' : 'combined'))}
+            title="Toggle combined input view"
+            aria-pressed={viewMode === 'combined'}
+            className={cn(
+              'flex items-center gap-1 px-2 py-1 rounded-md text-[11px] font-medium transition-all',
+              viewMode === 'combined'
+                ? 'bg-[var(--color-info)] text-white'
+                : 'text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-surface-secondary)]'
+            )}
+          >
+            <Layers className="w-3.5 h-3.5" />
+            Combined input
+          </button>
+        </div>
       </div>
 
-      <div className="min-h-0 shrink overflow-y-auto space-y-2.5 pr-1">
+      {viewMode === 'sources' ? (
+        <div className="flex-1 min-h-0 overflow-y-auto space-y-2.5 pr-1">
         {/* 1. Document */}
         <CollapsibleSection
           icon={<FileText className="w-4 h-4" />}
@@ -321,12 +343,12 @@ export function InputModule({ guardrailInfo, onExpandInput, onExpandConfig }: In
             <ExternalDependenciesSection />
           </div>
         </CollapsibleSection>
-      </div>
-
-      {/* Combined input — grows to fill the space freed when sources collapse. */}
-      <div className="flex-1 min-h-[140px] pt-2.5">
-        <CombinedInputPreview input={shape} />
-      </div>
+        </div>
+      ) : (
+        <div className="flex-1 min-h-0">
+          <CombinedInputPreview input={shape} />
+        </div>
+      )}
     </div>
   );
 }

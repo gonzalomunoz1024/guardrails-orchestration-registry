@@ -62,6 +62,19 @@ export interface ParsedSpec {
 
 export type ExternalDepStatus = 'idle' | 'loading' | 'success' | 'error';
 
+/** Where a request parameter's value comes from. */
+export type ParamSource = 'static' | 'document' | 'configuration';
+
+/**
+ * A configured value for a request parameter. For `static`, `value` is the
+ * literal. For `document`/`configuration`, `value` is a dotted path resolved
+ * against the current document / configuration JSON at fetch time.
+ */
+export interface ExternalParam {
+  source: ParamSource;
+  value: string;
+}
+
 /**
  * A configured external dependency stored in the policy store. The fetched
  * `data` becomes `input.external[name]` during evaluation.
@@ -80,8 +93,8 @@ export interface ExternalDependency {
   operationId?: string;
   method: string;
   path: string;
-  /** User-supplied path/query parameter values keyed by param name. */
-  params: Record<string, string>;
+  /** Request parameter configuration keyed by param name. */
+  params: Record<string, ExternalParam>;
   /** Last fetched response payload. */
   data: unknown | null;
   status: ExternalDepStatus;
