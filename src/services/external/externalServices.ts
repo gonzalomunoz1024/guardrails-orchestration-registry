@@ -12,9 +12,9 @@ import type {
  */
 export const EXTERNAL_SERVICES: ExternalService[] = [
   {
-    id: 'release-gatekeeper',
-    name: 'Release Gatekeeper',
-    description: 'Is an application enabled / eligible to go to production?',
+    id: 'repo-registry',
+    name: 'Repository Registry',
+    description: 'Is a repository registered, and what is its registration metadata?',
     baseUrl: 'http://localhost:4001',
     specUrl: 'http://localhost:4001/openapi.json',
     docsUrl: 'http://localhost:4001/docs',

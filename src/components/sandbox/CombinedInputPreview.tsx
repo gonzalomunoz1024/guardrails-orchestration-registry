@@ -18,10 +18,10 @@ export function CombinedInputPreview({ input }: CombinedInputPreviewProps) {
   const topKeys = Object.keys(input);
 
   return (
-    <div className="rounded-[var(--radius-lg)] border border-[var(--color-border-light)] bg-[var(--color-surface)] overflow-hidden shadow-[var(--shadow-card)]">
+    <div className="h-full min-h-0 flex flex-col rounded-[var(--radius-lg)] border border-[var(--color-border-light)] bg-[var(--color-surface)] overflow-hidden shadow-[var(--shadow-card)]">
       <button
         onClick={() => setOpen((v) => !v)}
-        className="w-full flex items-center justify-between px-3 py-2 bg-[var(--color-surface-secondary)] hover:bg-[var(--color-border-light)] transition-colors"
+        className="shrink-0 w-full flex items-center justify-between px-3 py-2 bg-[var(--color-surface-secondary)] hover:bg-[var(--color-border-light)] transition-colors"
       >
         <span className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-[var(--color-text-secondary)]">
           <Layers className="w-3.5 h-3.5" />
@@ -39,7 +39,7 @@ export function CombinedInputPreview({ input }: CombinedInputPreviewProps) {
       {open && (
         <pre
           className={cn(
-            'max-h-48 overflow-auto px-3 py-2 text-xs font-mono leading-relaxed',
+            'flex-1 min-h-0 overflow-auto px-3 py-2 text-xs font-mono leading-relaxed',
             'text-[var(--color-text-secondary)]'
           )}
         >

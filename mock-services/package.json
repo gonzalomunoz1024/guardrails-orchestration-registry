@@ -5,8 +5,8 @@
   "type": "commonjs",
   "description": "Mock external dependency services (with Swagger pages) for the OPA Policy Sandbox demo",
   "scripts": {
-    "start": "concurrently -n gatekeeper,vmorder -c cyan,magenta \"node release-gatekeeper.js\" \"node vm-order.js\"",
-    "gatekeeper": "node release-gatekeeper.js",
+    "start": "concurrently -n repo-registry,vmorder -c cyan,magenta \"node repo-registry.js\" \"node vm-order.js\"",
+    "repo-registry": "node repo-registry.js",
     "vm-order": "node vm-order.js"
   },
   "dependencies": {

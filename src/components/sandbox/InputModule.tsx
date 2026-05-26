@@ -206,7 +206,7 @@ export function InputModule({ guardrailInfo, onExpandInput, onExpandConfig }: In
         </button>
       </div>
 
-      <div className="flex-1 min-h-0 overflow-y-auto space-y-2.5 pr-1">
+      <div className="min-h-0 shrink overflow-y-auto space-y-2.5 pr-1">
         {/* 1. Document */}
         <CollapsibleSection
           icon={<FileText className="w-4 h-4" />}
@@ -323,8 +323,8 @@ export function InputModule({ guardrailInfo, onExpandInput, onExpandConfig }: In
         </CollapsibleSection>
       </div>
 
-      {/* Combined input — pinned below so it stays visible as sources collapse. */}
-      <div className="pt-2.5 shrink-0">
+      {/* Combined input — grows to fill the space freed when sources collapse. */}
+      <div className="flex-1 min-h-[140px] pt-2.5">
         <CombinedInputPreview input={shape} />
       </div>
     </div>

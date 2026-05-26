@@ -49,14 +49,11 @@ export function Sidebar() {
             <div className="w-8 h-8 shrink-0 rounded-[var(--radius-md)] bg-gradient-to-br from-[var(--color-info)] to-purple-600 flex items-center justify-center">
               <Shield className="w-5 h-5 text-white" />
             </div>
-            <span
-              className={cn(
-                'font-semibold text-[var(--color-text-primary)] whitespace-nowrap transition-opacity duration-200',
-                expanded ? 'opacity-100' : 'opacity-0 pointer-events-none'
-              )}
-            >
-              Policy Registry
-            </span>
+            {expanded && (
+              <span className="font-semibold text-[var(--color-text-primary)] whitespace-nowrap">
+                Policy Registry
+              </span>
+            )}
           </div>
         </div>
 
