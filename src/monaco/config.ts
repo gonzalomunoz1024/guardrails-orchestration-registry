@@ -4,7 +4,8 @@ import { registerRegoInputCompletion } from './regoInputCompletion';
 import { regoLightTheme } from './themes/light';
 import { regoDarkTheme } from './themes/dark';
 
-export { setRegoInputShape } from './regoInputCompletion';
+export { setRegoInputShape } from './regoInputShape';
+export { attachRegoDiagnostics } from './regoInputDiagnostics';
 
 let isInitialized = false;
 

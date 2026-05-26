@@ -1,11 +1,10 @@
+import { useState } from 'react';
 import {
   LayoutDashboard,
   FileText,
   Radius,
   PlusCircle,
   Settings,
-  ChevronLeft,
-  ChevronRight,
   Shield,
 } from 'lucide-react';
 import { useRegistryStore, type ViewType } from '@/store/registryStore';
@@ -26,94 +25,89 @@ const navItems: NavItem[] = [
 ];
 
 export function Sidebar() {
-  const { currentView, setView, sidebarCollapsed, toggleSidebar } = useRegistryStore();
+  const { currentView, setView } = useRegistryStore();
+  // Collapsed to an icon rail by default; expands while hovered.
+  const [expanded, setExpanded] = useState(false);
 
   return (
-    <aside
-      className={cn(
-        'h-full flex flex-col border-r border-[var(--color-border-light)] bg-[var(--color-surface)] transition-all duration-300',
-        sidebarCollapsed ? 'w-16' : 'w-64'
-      )}
-    >
-      {/* Logo */}
-      <div className="h-14 flex items-center justify-between px-4 border-b border-[var(--color-border-light)]">
-        <div className={cn('flex items-center gap-3', sidebarCollapsed && 'justify-center w-full')}>
-          <div className="w-8 h-8 rounded-[var(--radius-md)] bg-gradient-to-br from-[var(--color-info)] to-purple-600 flex items-center justify-center">
-            <Shield className="w-5 h-5 text-white" />
-          </div>
-          {!sidebarCollapsed && (
-            <span className="font-semibold text-[var(--color-text-primary)]">
+    // Fixed-width rail footprint keeps page content from shifting; the panel
+    // overlays on top when expanded.
+    <div className="relative h-full w-16 shrink-0">
+      <aside
+        onMouseEnter={() => setExpanded(true)}
+        onMouseLeave={() => setExpanded(false)}
+        className={cn(
+          'absolute top-0 left-0 z-40 h-full flex flex-col',
+          'border-r border-[var(--color-border-light)] bg-[var(--color-surface)]',
+          'transition-all duration-300 ease-out',
+          expanded ? 'w-64 shadow-[var(--shadow-lg)]' : 'w-16'
+        )}
+      >
+        {/* Logo */}
+        <div className="h-14 flex items-center px-4 border-b border-[var(--color-border-light)]">
+          <div className={cn('flex items-center gap-3', !expanded && 'justify-center w-full')}>
+            <div className="w-8 h-8 shrink-0 rounded-[var(--radius-md)] bg-gradient-to-br from-[var(--color-info)] to-purple-600 flex items-center justify-center">
+              <Shield className="w-5 h-5 text-white" />
+            </div>
+            <span
+              className={cn(
+                'font-semibold text-[var(--color-text-primary)] whitespace-nowrap transition-opacity duration-200',
+                expanded ? 'opacity-100' : 'opacity-0 pointer-events-none'
+              )}
+            >
               Policy Registry
             </span>
-          )}
+          </div>
         </div>
-      </div>
 
-      {/* Navigation */}
-      <nav className="flex-1 p-3 space-y-1">
-        {navItems.map((item) => (
+        {/* Navigation */}
+        <nav className="flex-1 p-3 space-y-1">
+          {navItems.map((item) => (
+            <button
+              key={item.id}
+              onClick={() => setView(item.id)}
+              className={cn(
+                'w-full flex items-center gap-3 px-3 py-2.5 rounded-[var(--radius-md)] transition-all',
+                currentView === item.id
+                  ? 'bg-[var(--color-info)] text-white'
+                  : 'text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-secondary)] hover:text-[var(--color-text-primary)]',
+                !expanded && 'justify-center px-2'
+              )}
+              title={!expanded ? item.label : undefined}
+            >
+              <span className="shrink-0">{item.icon}</span>
+              {expanded && (
+                <>
+                  <span className="flex-1 text-left text-sm font-medium whitespace-nowrap">
+                    {item.label}
+                  </span>
+                  {item.badge && (
+                    <span className="px-2 py-0.5 text-xs rounded-full bg-white/20">
+                      {item.badge}
+                    </span>
+                  )}
+                </>
+              )}
+            </button>
+          ))}
+        </nav>
+
+        {/* Bottom section */}
+        <div className="p-3 border-t border-[var(--color-border-light)]">
           <button
-            key={item.id}
-            onClick={() => setView(item.id)}
+            onClick={() => {}}
             className={cn(
               'w-full flex items-center gap-3 px-3 py-2.5 rounded-[var(--radius-md)] transition-all',
-              currentView === item.id
-                ? 'bg-[var(--color-info)] text-white'
-                : 'text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-secondary)] hover:text-[var(--color-text-primary)]',
-              sidebarCollapsed && 'justify-center px-2'
+              'text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-secondary)] hover:text-[var(--color-text-primary)]',
+              !expanded && 'justify-center px-2'
             )}
-            title={sidebarCollapsed ? item.label : undefined}
+            title={!expanded ? 'Settings' : undefined}
           >
-            {item.icon}
-            {!sidebarCollapsed && (
-              <>
-                <span className="flex-1 text-left text-sm font-medium">{item.label}</span>
-                {item.badge && (
-                  <span className="px-2 py-0.5 text-xs rounded-full bg-white/20">
-                    {item.badge}
-                  </span>
-                )}
-              </>
-            )}
+            <Settings className="w-5 h-5 shrink-0" />
+            {expanded && <span className="text-sm font-medium whitespace-nowrap">Settings</span>}
           </button>
-        ))}
-      </nav>
-
-      {/* Bottom section */}
-      <div className="p-3 border-t border-[var(--color-border-light)]">
-        <button
-          onClick={() => {}}
-          className={cn(
-            'w-full flex items-center gap-3 px-3 py-2.5 rounded-[var(--radius-md)] transition-all',
-            'text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-secondary)] hover:text-[var(--color-text-primary)]',
-            sidebarCollapsed && 'justify-center px-2'
-          )}
-          title={sidebarCollapsed ? 'Settings' : undefined}
-        >
-          <Settings className="w-5 h-5" />
-          {!sidebarCollapsed && (
-            <span className="text-sm font-medium">Settings</span>
-          )}
-        </button>
-
-        <button
-          onClick={toggleSidebar}
-          className={cn(
-            'w-full flex items-center gap-3 px-3 py-2.5 rounded-[var(--radius-md)] transition-all mt-1',
-            'text-[var(--color-text-tertiary)] hover:bg-[var(--color-surface-secondary)] hover:text-[var(--color-text-primary)]',
-            sidebarCollapsed && 'justify-center px-2'
-          )}
-        >
-          {sidebarCollapsed ? (
-            <ChevronRight className="w-5 h-5" />
-          ) : (
-            <>
-              <ChevronLeft className="w-5 h-5" />
-              <span className="text-sm">Collapse</span>
-            </>
-          )}
-        </button>
-      </div>
-    </aside>
+        </div>
+      </aside>
+    </div>
   );
 }

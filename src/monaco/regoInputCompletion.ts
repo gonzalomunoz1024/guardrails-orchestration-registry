@@ -1,4 +1,5 @@
 import type * as Monaco from 'monaco-editor';
+import { getRegoInputShape } from './regoInputShape';
 
 /**
  * Dynamic Rego completion for the OPA evaluation input.
@@ -9,13 +10,7 @@ import type * as Monaco from 'monaco-editor';
  * offers the real available keys, with type and value hints.
  */
 
-let currentShape: Record<string, unknown> = {};
 let registered = false;
-
-/** Update the input shape the autocomplete walks. Called as the user edits. */
-export function setRegoInputShape(shape: Record<string, unknown>): void {
-  currentShape = shape ?? {};
-}
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -24,7 +19,7 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
 /** Walk the shape following dotted path segments (the first must be `input`). */
 function resolvePath(segments: string[]): Record<string, unknown> | null {
   if (segments.length === 0 || segments[0] !== 'input') return null;
-  let node: unknown = currentShape;
+  let node: unknown = getRegoInputShape();
   for (const seg of segments.slice(1)) {
     if (isPlainObject(node)) {
       node = node[seg];

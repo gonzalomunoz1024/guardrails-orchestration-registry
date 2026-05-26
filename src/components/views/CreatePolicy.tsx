@@ -30,7 +30,7 @@ import { ComingSoonBanner } from '@/components/common/ComingSoonBanner';
 import { useUIStore, usePolicyStore, useEvaluationStore } from '@/store';
 import { useRegistryStore } from '@/store/registryStore';
 import { useEvaluate, useTestInputs, useResourceTypeConfig } from '@/hooks';
-import { initializeMonaco, defaultEditorOptions } from '@/monaco/config';
+import { initializeMonaco, attachRegoDiagnostics, defaultEditorOptions } from '@/monaco/config';
 import { cn } from '@/utils';
 import type { ResourceType, TestInput } from '@/types/registry.types';
 import type { EnforcementType, GuardrailKind } from '@/types/guardrail.types';
@@ -57,6 +57,17 @@ const steps: { id: Step; label: string; number: number }[] = [
   { id: 'review', label: 'Review & Submit', number: 4 },
 ];
 
+/**
+ * Derive a stable policy ID (and Rego package name) from the policy name:
+ * lowercase, non-alphanumeric runs collapsed to underscores, trimmed.
+ */
+function slugifyName(name: string): string {
+  return name
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '');
+}
+
 
 export function CreatePolicy() {
   const { resolvedTheme } = useUIStore();
@@ -65,7 +76,8 @@ export function CreatePolicy() {
   useRegistryStore(); // Keep hook for future use
 
   const [currentStep, setCurrentStep] = useState<Step>('metadata');
-  const [policyId, setPolicyId] = useState('');
+  // Policy ID is derived from the policy name (no separate field).
+  const policyId = slugifyName(metadata.name);
   const [resourceType, setResourceType] = useState<ResourceType>('lightspeed');
   const [resourceKind, setResourceKind] = useState('');
   const [enforcementType, setEnforcementType] = useState<EnforcementType>('MANDATORY');
@@ -280,48 +292,31 @@ export function CreatePolicy() {
                   </div>
                 </div>
                 <div className="p-6 space-y-5">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-sm font-medium text-[var(--color-text-primary)] mb-2">
-                        Policy ID
-                      </label>
-                      <input
-                        type="text"
-                        value={policyId}
-                        onChange={(e) => setPolicyId(e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, ''))}
-                        placeholder="e.g., vm_size_limit"
-                        className={cn(
-                          'w-full px-4 py-3 rounded-[var(--radius-lg)]',
-                          'bg-[var(--color-surface-secondary)] text-[var(--color-text-primary)]',
-                          'border border-[var(--color-border-light)]',
-                          'focus:border-[var(--color-info)] focus:ring-4 focus:ring-[var(--color-info)]/10 focus:outline-none',
-                          'placeholder:text-[var(--color-text-tertiary)]',
-                          'transition-all duration-200 font-mono'
-                        )}
-                      />
-                      <p className="mt-1.5 text-xs text-[var(--color-text-tertiary)]">
-                        Unique identifier (lowercase letters, numbers, underscores)
-                      </p>
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-[var(--color-text-primary)] mb-2">
-                        Policy Name
-                      </label>
-                      <input
-                        type="text"
-                        value={metadata.name}
-                        onChange={(e) => updateMetadata({ name: e.target.value })}
-                        placeholder="e.g., VM Size Limit Policy"
-                        className={cn(
-                          'w-full px-4 py-3 rounded-[var(--radius-lg)]',
-                          'bg-[var(--color-surface-secondary)] text-[var(--color-text-primary)]',
-                          'border border-[var(--color-border-light)]',
-                          'focus:border-[var(--color-info)] focus:ring-4 focus:ring-[var(--color-info)]/10 focus:outline-none',
-                          'placeholder:text-[var(--color-text-tertiary)]',
-                          'transition-all duration-200'
-                        )}
-                      />
-                    </div>
+                  <div>
+                    <label className="block text-sm font-medium text-[var(--color-text-primary)] mb-2">
+                      Policy Name
+                    </label>
+                    <input
+                      type="text"
+                      value={metadata.name}
+                      onChange={(e) => updateMetadata({ name: e.target.value })}
+                      placeholder="e.g., VM Size Limit Policy"
+                      className={cn(
+                        'w-full px-4 py-3 rounded-[var(--radius-lg)]',
+                        'bg-[var(--color-surface-secondary)] text-[var(--color-text-primary)]',
+                        'border border-[var(--color-border-light)]',
+                        'focus:border-[var(--color-info)] focus:ring-4 focus:ring-[var(--color-info)]/10 focus:outline-none',
+                        'placeholder:text-[var(--color-text-tertiary)]',
+                        'transition-all duration-200'
+                      )}
+                    />
+                    <p className="mt-1.5 text-xs text-[var(--color-text-tertiary)]">
+                      Policy ID:{' '}
+                      <code className="font-mono text-[var(--color-text-secondary)]">
+                        {policyId || '—'}
+                      </code>{' '}
+                      (auto-generated from the name)
+                    </p>
                   </div>
 
                   <div>
@@ -634,7 +629,10 @@ export function CreatePolicy() {
                       theme={resolvedTheme === 'dark' ? 'vs-dark' : 'vs'}
                       value={regoCode}
                       onChange={(value) => setRegoCode(value || '')}
-                      onMount={(_editor, monaco) => initializeMonaco(monaco)}
+                      onMount={(editor, monaco) => {
+                        initializeMonaco(monaco);
+                        attachRegoDiagnostics(monaco, editor);
+                      }}
                       options={defaultEditorOptions}
                     />
                   </div>
