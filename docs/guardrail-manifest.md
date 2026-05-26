@@ -195,15 +195,29 @@ Independent dependencies may be fetched in parallel; `dependsOn` (or a
 A synthetic infra-failure deny is tagged distinctly from a policy-authored deny so
 operators can tell an outage apart from a real denial.
 
-### Secrets
+### Authentication (custom services)
 
-External calls that need credentials reference a secret — they are **never inlined**:
+Registered services are assumed pre-integrated, so they carry no auth. **Custom**
+services may declare HashiCorp Vault auth. There is a single, org-wide Vault whose
+`address` is a fixed constant (`VITE_VAULT_ADDR`), so the studio only captures the
+secret path and username; the **password is never stored or written to the
+manifest**. At enforcement time the backend reads the credentials from Vault,
+mints a bearer token, and calls the API with it.
 
 ```yaml
-request:
+- name: my_api
+  service: custom
+  baseUrl: https://api.example.com
+  spec: https://api.example.com/openapi.json
   auth:
-    type: bearer                # none | bearer | apiKey | basic
-    secretRef: { name: repo-registry-token, key: token }
+    type: vault
+    vault:
+      address: https://vault.example.com   # Vault location
+      secretPath: secret/data/my-api        # where the credential lives
+      username: svc-guardrails              # password fetched from Vault at runtime
+  request:
+    method: GET
+    path: /things/{id}
 ```
 
 ---
@@ -217,7 +231,7 @@ The backend rejects a manifest unless:
 3. Every `dependsOn` / `from.dependency` reference exists, is acyclic, and resolves earlier.
 4. Each `service` is in the catalog (or `custom` with an inline `baseUrl`/`spec`); required OpenAPI params are bound.
 5. Path bindings are dotted (no JSONPath metacharacters); every `{placeholder}` in a path has a matching `path` parameter.
-6. No secret material is inlined; each `secretRef` exists.
+6. No secret material is inlined; Vault auth references a reachable `vault.address` + `secretPath`.
 7. `external.<name>` keys are unique and valid identifiers (so `input.external.<name>` is addressable).
 
 ---

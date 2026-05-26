@@ -32,6 +32,10 @@ export const EXTERNAL_SERVICES: ExternalService[] = [
 
 export const CUSTOM_SERVICE_ID = 'custom';
 
+/** The single, org-wide HashiCorp Vault address (override via VITE_VAULT_ADDR). */
+export const VAULT_ADDRESS =
+  (import.meta.env.VITE_VAULT_ADDR as string | undefined) || 'https://vault.internal';
+
 // ---------------------------------------------------------------------------
 // OpenAPI parsing
 // ---------------------------------------------------------------------------

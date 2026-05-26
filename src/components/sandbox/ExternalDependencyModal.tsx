@@ -7,13 +7,16 @@ import {
   Copy,
   ExternalLink,
   Loader2,
+  Lock,
   Play,
+  X,
   Zap,
 } from 'lucide-react';
 import { usePolicyStore } from '@/store';
 import {
   EXTERNAL_SERVICES,
   CUSTOM_SERVICE_ID,
+  VAULT_ADDRESS,
   buildRequestUrl,
   fetchSpec,
   getByPath,
@@ -102,15 +105,21 @@ function BindingRow({
 }: BindingRowProps) {
   const listId = `${idPrefix}-${name}`;
   const suggestions = cfg.source === 'document' ? docPaths : configPaths;
+  const isStructured = type === 'object' || type === 'array';
+  const valueClass =
+    'flex-1 px-2.5 py-1.5 rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-[var(--color-surface)] text-xs font-mono text-[var(--color-text-primary)] outline-none focus:border-[var(--color-info)]';
+
   return (
     <div className="space-y-1">
-      <div className="flex items-center gap-2">
-        <div className="w-32 shrink-0">
-          <code className="text-xs font-mono text-[var(--color-text-primary)]">
+      <div className="flex items-start gap-2">
+        <div className="w-32 shrink-0 pt-1.5">
+          <span className="text-xs font-medium text-[var(--color-text-primary)]">
             {name}
             {required && <span className="text-[var(--color-error)]">*</span>}
-          </code>
-          <span className="ml-1 text-[10px] text-[var(--color-text-tertiary)]">{kindLabel}</span>
+          </span>
+          <span className="ml-1 text-[10px] text-[var(--color-text-tertiary)]">
+            {kindLabel} · {type}
+          </span>
         </div>
 
         <select
@@ -124,12 +133,28 @@ function BindingRow({
         </select>
 
         {cfg.source === 'static' ? (
-          <input
-            value={cfg.value}
-            onChange={(e) => onChange({ value: e.target.value })}
-            placeholder={example != null ? String(example) : type}
-            className="flex-1 px-2.5 py-1.5 rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-[var(--color-surface)] text-xs font-mono text-[var(--color-text-primary)] outline-none focus:border-[var(--color-info)]"
-          />
+          isStructured ? (
+            <textarea
+              value={cfg.value}
+              onChange={(e) => onChange({ value: e.target.value })}
+              placeholder={
+                example != null
+                  ? JSON.stringify(example)
+                  : type === 'array'
+                    ? '[ … ]  (JSON)'
+                    : '{ … }  (JSON)'
+              }
+              rows={3}
+              className={cn(valueClass, 'resize-y leading-relaxed')}
+            />
+          ) : (
+            <input
+              value={cfg.value}
+              onChange={(e) => onChange({ value: e.target.value })}
+              placeholder={example != null ? String(example) : type}
+              className={valueClass}
+            />
+          )
         ) : (
           <>
             <input
@@ -137,7 +162,7 @@ function BindingRow({
               value={cfg.value}
               onChange={(e) => onChange({ value: e.target.value })}
               placeholder={`path in ${cfg.source} (e.g. user.role)`}
-              className="flex-1 px-2.5 py-1.5 rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-[var(--color-surface)] text-xs font-mono text-[var(--color-text-primary)] outline-none focus:border-[var(--color-info)]"
+              className={valueClass}
             />
             <datalist id={listId}>
               {suggestions.map((path) => (
@@ -150,7 +175,7 @@ function BindingRow({
 
       {cfg.source !== 'static' && (
         <div className="pl-[8.5rem] text-[10px] text-[var(--color-text-tertiary)]">
-          resolves to{' '}
+          {isStructured ? 'binds the object/array at' : 'resolves to'}{' '}
           {resolvedPreview ? (
             <code className="text-[var(--color-text-secondary)]">{resolvedPreview}</code>
           ) : (
@@ -467,45 +492,43 @@ export function ExternalDependencyModal({ dep, isOpen, onClose }: ExternalDepend
       >
         {/* Header */}
         <div className="shrink-0 flex items-center justify-between gap-4 px-6 py-4 border-b border-[var(--color-border-light)]">
-          <div className="flex items-center gap-4 min-w-0">
-            <div className="flex items-center gap-2">
-              <button
-                onClick={onClose}
-                className="w-3 h-3 rounded-full bg-[#FF5F57] hover:bg-[#FF5F57]/80 transition-colors"
-                title="Close"
-              />
-              <div className="w-3 h-3 rounded-full bg-[#FEBC2E]" />
-              <div className="w-3 h-3 rounded-full bg-[#28C840]" />
-            </div>
-            <div className="h-4 w-px bg-[var(--color-border-light)]" />
-            <div className="min-w-0">
-              <h2 className="text-base font-semibold text-[var(--color-text-primary)] truncate">
-                {spec?.title || 'API Explorer'}
-                {spec?.version && (
-                  <span className="ml-2 text-xs font-normal text-[var(--color-text-tertiary)]">
-                    v{spec.version}
-                  </span>
-                )}
-              </h2>
-              {spec?.description && (
-                <p className="text-xs text-[var(--color-text-tertiary)] truncate">
-                  {spec.description}
-                </p>
+          <div className="min-w-0">
+            <h2 className="text-base font-semibold text-[var(--color-text-primary)] truncate">
+              {spec?.title || 'API Explorer'}
+              {spec?.version && (
+                <span className="ml-2 text-xs font-normal text-[var(--color-text-tertiary)]">
+                  v{spec.version}
+                </span>
               )}
-            </div>
+            </h2>
+            {spec?.description && (
+              <p className="text-xs text-[var(--color-text-tertiary)] truncate">
+                {spec.description}
+              </p>
+            )}
           </div>
-          {dep.specUrl && (
-            <a
-              href={dep.specUrl.replace(/\/openapi\.json$/, '/docs')}
-              target="_blank"
-              rel="noopener noreferrer"
-              title="Open original Swagger docs"
-              className="shrink-0 flex items-center gap-1.5 px-2.5 py-1.5 rounded-[var(--radius-md)] text-xs text-[var(--color-text-secondary)] hover:text-[var(--color-info)] hover:bg-[var(--color-surface-secondary)] transition-colors"
+          <div className="shrink-0 flex items-center gap-1">
+            {dep.specUrl && (
+              <a
+                href={dep.specUrl.replace(/\/openapi\.json$/, '/docs')}
+                target="_blank"
+                rel="noopener noreferrer"
+                title="Open original Swagger docs"
+                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-[var(--radius-md)] text-xs text-[var(--color-text-secondary)] hover:text-[var(--color-info)] hover:bg-[var(--color-surface-secondary)] transition-colors"
+              >
+                <ExternalLink className="w-3.5 h-3.5" />
+                Swagger
+              </a>
+            )}
+            <button
+              onClick={onClose}
+              title="Close"
+              aria-label="Close"
+              className="p-2 rounded-[var(--radius-md)] text-[var(--color-text-tertiary)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-surface-secondary)] transition-colors"
             >
-              <ExternalLink className="w-3.5 h-3.5" />
-              Swagger
-            </a>
-          )}
+              <X className="w-5 h-5" />
+            </button>
+          </div>
         </div>
 
         {/* Service selector + auto-assigned reference */}
@@ -560,6 +583,74 @@ export function ExternalDependencyModal({ dep, isOpen, onClose }: ExternalDepend
               >
                 Load
               </button>
+            </div>
+          )}
+
+          {/* Authentication — custom services only (registered ones are pre-integrated). */}
+          {isCustom && (
+            <div className="space-y-2">
+              <label className="flex items-center gap-2 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={Boolean(dep.auth)}
+                  onChange={(e) =>
+                    updateExternalDep(dep.id, {
+                      auth: e.target.checked
+                        ? { type: 'vault', secretPath: '', username: '', password: '' }
+                        : undefined,
+                    })
+                  }
+                  className="accent-[var(--color-info)]"
+                />
+                <span className="flex items-center gap-1.5 text-xs font-medium text-[var(--color-text-secondary)]">
+                  <Lock className="w-3.5 h-3.5" />
+                  Requires authentication (HashiCorp Vault)
+                </span>
+              </label>
+
+              {dep.auth && (
+                <div className="space-y-2 p-2.5 rounded-[var(--radius-md)] bg-[var(--color-surface)] border border-[var(--color-border-light)]">
+                  <div className="flex items-center gap-1.5 text-[10px] text-[var(--color-text-tertiary)]">
+                    <Lock className="w-3 h-3" />
+                    Vault
+                    <code className="font-mono text-[var(--color-text-secondary)]">{VAULT_ADDRESS}</code>
+                  </div>
+                  <input
+                    value={dep.auth.secretPath}
+                    onChange={(e) =>
+                      updateExternalDep(dep.id, { auth: { ...dep.auth!, secretPath: e.target.value } })
+                    }
+                    placeholder="Secret path (secret/data/my-api)"
+                    className="w-full px-2 py-1.5 rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-[var(--color-surface)] text-xs font-mono text-[var(--color-text-primary)] outline-none focus:border-[var(--color-info)]"
+                  />
+                  <div className="flex gap-2">
+                    <input
+                      value={dep.auth.username}
+                      onChange={(e) =>
+                        updateExternalDep(dep.id, { auth: { ...dep.auth!, username: e.target.value } })
+                      }
+                      placeholder="Username"
+                      autoComplete="off"
+                      className="flex-1 px-2 py-1.5 rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-[var(--color-surface)] text-xs text-[var(--color-text-primary)] outline-none focus:border-[var(--color-info)]"
+                    />
+                    <input
+                      type="password"
+                      value={dep.auth.password}
+                      onChange={(e) =>
+                        updateExternalDep(dep.id, { auth: { ...dep.auth!, password: e.target.value } })
+                      }
+                      placeholder="Password"
+                      autoComplete="new-password"
+                      className="flex-1 px-2 py-1.5 rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-[var(--color-surface)] text-xs text-[var(--color-text-primary)] outline-none focus:border-[var(--color-info)]"
+                    />
+                  </div>
+                  <p className="text-[10px] text-[var(--color-text-tertiary)] leading-relaxed">
+                    Not used in the sandbox yet. At enforcement time the backend will read these
+                    credentials from Vault, mint a bearer token, and call the API with it. The
+                    password is never saved to local storage.
+                  </p>
+                </div>
+              )}
             </div>
           )}
         </div>

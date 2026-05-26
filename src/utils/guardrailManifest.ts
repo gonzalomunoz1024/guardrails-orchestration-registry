@@ -1,4 +1,5 @@
 import yaml from 'js-yaml';
+import { VAULT_ADDRESS } from '@/services/external/externalServices';
 import type { ExternalDependency, ExternalParam, PolicyMetadata } from '@/types';
 import type { ResourceType } from '@/types/registry.types';
 import type { EnforcementType } from '@/types/guardrail.types';
@@ -71,13 +72,28 @@ function encodeDependency(dep: ExternalDependency): Record<string, unknown> {
     request.body = body;
   }
 
-  return {
+  const result: Record<string, unknown> = {
     name: dep.name,
     service: dep.serviceId,
     baseUrl: dep.baseUrl,
     spec: dep.specUrl,
     request,
   };
+
+  // Vault-backed auth (custom services). The password is resolved from Vault at
+  // runtime and is never written into the manifest.
+  if (dep.auth) {
+    result.auth = {
+      type: 'vault',
+      vault: {
+        address: VAULT_ADDRESS,
+        secretPath: dep.auth.secretPath,
+        username: dep.auth.username,
+      },
+    };
+  }
+
+  return result;
 }
 
 export function buildGuardrailManifest(args: GuardrailManifestArgs): Record<string, unknown> {

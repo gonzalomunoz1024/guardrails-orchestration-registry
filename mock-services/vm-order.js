@@ -196,6 +196,17 @@ const openapiSpec = {
           instanceType: { type: 'string', example: 'm5.xlarge' },
           cpu: { type: 'integer', description: 'vCPU count', example: 4 },
           requestedBy: { type: 'string', example: 'jane.doe@example.com' },
+          tags: {
+            type: 'array',
+            description: 'Free-form labels for the VM',
+            items: { type: 'string' },
+            example: ['prod', 'web'],
+          },
+          metadata: {
+            type: 'object',
+            description: 'Arbitrary key/value metadata',
+            example: { team: 'payments', costCenter: 'cc-100' },
+          },
         },
       },
     },
@@ -211,7 +222,7 @@ app.use('/docs', swaggerUi.serveFiles(openapiSpec), swaggerUi.setup(openapiSpec)
 app.get('/orders', (_req, res) => res.json(Object.values(ORDERS)));
 
 app.post('/orders', (req, res) => {
-  const { vmName, region, instanceType, cpu, requestedBy } = req.body || {};
+  const { vmName, region, instanceType, cpu, requestedBy, tags, metadata } = req.body || {};
   if (!vmName || !region) {
     return res.status(400).json({ error: 'vmName and region are required' });
   }
@@ -227,6 +238,8 @@ app.post('/orders', (req, res) => {
     cpu: cpu || 2,
     memoryGb: (cpu || 2) * 4,
     diskGb: 50,
+    tags: Array.isArray(tags) ? tags : [],
+    metadata: metadata && typeof metadata === 'object' ? metadata : {},
     approval: { required: true, approvedBy: null, approvedAt: null },
     costPerHour: 0.0416 * (cpu || 2),
     createdAt: new Date().toISOString(),
