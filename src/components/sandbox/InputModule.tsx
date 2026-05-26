@@ -131,15 +131,15 @@ function ToolbarButton({
     <button
       onClick={onClick}
       title={label}
+      aria-label={label}
       className={cn(
-        'flex items-center gap-1 px-1.5 py-1 rounded-md text-[11px] transition-all',
+        'flex items-center justify-center p-1 rounded-md transition-all',
         danger
           ? 'text-[var(--color-text-tertiary)] hover:text-[var(--color-error)] hover:bg-[var(--color-error-bg)]'
           : 'text-[var(--color-text-tertiary)] hover:text-[var(--color-text-secondary)] hover:bg-[var(--color-surface)]'
       )}
     >
       {icon}
-      {label}
     </button>
   );
 }
