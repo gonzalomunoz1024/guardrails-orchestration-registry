@@ -1,7 +1,10 @@
 import type * as Monaco from 'monaco-editor';
 import { registerRegoLanguage } from './languages/rego';
+import { registerRegoInputCompletion } from './regoInputCompletion';
 import { regoLightTheme } from './themes/light';
 import { regoDarkTheme } from './themes/dark';
+
+export { setRegoInputShape } from './regoInputCompletion';
 
 let isInitialized = false;
 
@@ -9,6 +12,7 @@ export function initializeMonaco(monaco: typeof Monaco) {
   if (isInitialized) return;
 
   registerRegoLanguage(monaco);
+  registerRegoInputCompletion(monaco);
   monaco.editor.defineTheme('rego-light', regoLightTheme);
   monaco.editor.defineTheme('rego-dark', regoDarkTheme);
 

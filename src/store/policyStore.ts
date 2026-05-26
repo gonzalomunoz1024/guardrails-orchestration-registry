@@ -1,17 +1,25 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import type { PolicyMetadata } from '@/types';
+import type { ExternalDependency, PolicyMetadata } from '@/types';
 
 interface PolicyState {
   regoCode: string;
   inputJson: string;
   configJson: string;
+  /** Whether the static configuration block is part of the input. */
+  configEnabled: boolean;
+  /** Dynamic external dependencies injected under input.external.<name>. */
+  externalDeps: ExternalDependency[];
   metadata: PolicyMetadata;
   isDirty: boolean;
 
   setRegoCode: (code: string) => void;
   setInputJson: (json: string) => void;
   setConfigJson: (json: string) => void;
+  setConfigEnabled: (enabled: boolean) => void;
+  addExternalDep: (dep: ExternalDependency) => void;
+  updateExternalDep: (id: string, patch: Partial<ExternalDependency>) => void;
+  removeExternalDep: (id: string) => void;
   updateMetadata: (metadata: Partial<PolicyMetadata>) => void;
   resetPolicy: () => void;
   markClean: () => void;
@@ -61,12 +69,29 @@ export const usePolicyStore = create<PolicyState>()(
       regoCode: defaultRegoCode,
       inputJson: defaultInputJson,
       configJson: defaultConfigJson,
+      configEnabled: false,
+      externalDeps: [],
       metadata: initialMetadata,
       isDirty: false,
 
       setRegoCode: (code) => set({ regoCode: code, isDirty: true }),
       setInputJson: (json) => set({ inputJson: json, isDirty: true }),
       setConfigJson: (json) => set({ configJson: json, isDirty: true }),
+      setConfigEnabled: (enabled) => set({ configEnabled: enabled, isDirty: true }),
+      addExternalDep: (dep) =>
+        set((state) => ({ externalDeps: [...state.externalDeps, dep], isDirty: true })),
+      updateExternalDep: (id, patch) =>
+        set((state) => ({
+          externalDeps: state.externalDeps.map((d) =>
+            d.id === id ? { ...d, ...patch } : d
+          ),
+          isDirty: true,
+        })),
+      removeExternalDep: (id) =>
+        set((state) => ({
+          externalDeps: state.externalDeps.filter((d) => d.id !== id),
+          isDirty: true,
+        })),
       updateMetadata: (metadata) =>
         set((state) => ({
           metadata: { ...state.metadata, ...metadata },
@@ -77,6 +102,8 @@ export const usePolicyStore = create<PolicyState>()(
           regoCode: defaultRegoCode,
           inputJson: defaultInputJson,
           configJson: defaultConfigJson,
+          configEnabled: false,
+          externalDeps: [],
           metadata: initialMetadata,
           isDirty: false,
         }),
@@ -88,6 +115,8 @@ export const usePolicyStore = create<PolicyState>()(
         regoCode: state.regoCode,
         inputJson: state.inputJson,
         configJson: state.configJson,
+        configEnabled: state.configEnabled,
+        externalDeps: state.externalDeps,
         metadata: state.metadata,
       }),
     }

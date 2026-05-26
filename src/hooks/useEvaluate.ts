@@ -2,51 +2,26 @@ import { useCallback } from 'react';
 import { useMutation } from '@tanstack/react-query';
 import { evaluationApi } from '@/services/api';
 import { usePolicyStore, useEvaluationStore } from '@/store';
-import { parseJson } from '@/utils';
+import { parseJson, assembleInput } from '@/utils';
+import type { GuardrailInfo } from '@/utils';
 import type { EvaluationResult } from '@/types';
-
-interface GuardrailInfo {
-  id?: string;
-  name?: string;
-  version?: string;
-  enforcementType?: string;
-}
-
-/**
- * Build the inputBundle for OPA evaluation
- * Merges user input with guardrail metadata and configuration
- */
-function buildInputBundle(
-  userInput: Record<string, unknown>,
-  configuration: Record<string, unknown>,
-  guardrailInfo: GuardrailInfo
-): Record<string, unknown> {
-  return {
-    ...userInput,
-    guardrail: {
-      id: guardrailInfo.id || 'test-policy',
-      name: guardrailInfo.name || 'Test Policy',
-      version: guardrailInfo.version || '1.0.0',
-      enforcementType: guardrailInfo.enforcementType || 'MANDATORY',
-    },
-    configuration: configuration,
-  };
-}
 
 interface UseEvaluateOptions {
   guardrailInfo?: GuardrailInfo;
 }
 
 export function useEvaluate(options: UseEvaluateOptions = {}) {
-  const { regoCode, inputJson, configJson, metadata } = usePolicyStore();
+  const { regoCode, inputJson, configJson, configEnabled, externalDeps, metadata } =
+    usePolicyStore();
   const { setResult, setIsEvaluating } = useEvaluationStore();
 
   const mutation = useMutation({
     mutationFn: async () => {
-      const resource = parseJson(inputJson) || {};
-      const configuration = parseJson(configJson) || {};
+      const resource = (parseJson(inputJson) || {}) as Record<string, unknown>;
+      const configuration = configEnabled
+        ? ((parseJson(configJson) || {}) as Record<string, unknown>)
+        : undefined;
 
-      // Build the inputBundle with guardrail info, configuration, and resource
       const guardrailInfo: GuardrailInfo = {
         id: options.guardrailInfo?.id,
         name: options.guardrailInfo?.name || metadata.name,
@@ -54,7 +29,12 @@ export function useEvaluate(options: UseEvaluateOptions = {}) {
         enforcementType: options.guardrailInfo?.enforcementType || 'MANDATORY',
       };
 
-      const inputBundle = buildInputBundle(resource, configuration, guardrailInfo);
+      const inputBundle = assembleInput({
+        resource,
+        configuration,
+        externalDeps,
+        guardrail: guardrailInfo,
+      });
 
       const startTime = performance.now();
       const response = await evaluationApi.evaluate(regoCode, inputBundle);

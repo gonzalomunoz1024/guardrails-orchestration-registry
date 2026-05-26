@@ -22,11 +22,10 @@ import {
   Layers,
   Shield,
   Zap,
-  Info,
   Expand,
-  Wand2,
 } from 'lucide-react';
 import { BlastRadiusExecutionModal, EditorModal, SubmitPolicyModal } from '@/components/modals';
+import { InputModule } from '@/components/sandbox';
 import { ComingSoonBanner } from '@/components/common/ComingSoonBanner';
 import { useUIStore, usePolicyStore, useEvaluationStore } from '@/store';
 import { useRegistryStore } from '@/store/registryStore';
@@ -182,15 +181,6 @@ export function CreatePolicy() {
   const handleUseTestInput = (testInput: TestInput) => {
     setInputJson(JSON.stringify(testInput.input, null, 2));
     setCurrentStep('code');
-  };
-
-  const beautifyJson = (json: string, setter: (value: string) => void) => {
-    try {
-      const parsed = JSON.parse(json);
-      setter(JSON.stringify(parsed, null, 2));
-    } catch {
-      // Invalid JSON, do nothing
-    }
   };
 
   const canProceed = () => {
@@ -598,8 +588,19 @@ export function CreatePolicy() {
               </div>
 
               <div className="flex gap-4" style={{ height: 'calc(100vh - 340px)', minHeight: '500px' }}>
-                {/* Policy Editor - Takes 60% */}
-                <div className="flex-[3] flex flex-col min-w-0">
+                {/* Left: Input module — document + configuration + external dependencies */}
+                <div className="flex-[4] flex flex-col min-w-0">
+                  <InputModule
+                    guardrailInfo={{ id: policyId, name: metadata.name, version: '1.0.0', enforcementType }}
+                    onExpandInput={() => setExpandedEditor('input')}
+                    onExpandConfig={() => setExpandedEditor('config')}
+                  />
+                </div>
+
+                {/* Right: Rego policy + output */}
+                <div className="flex-[5] flex flex-col gap-3 min-w-0">
+                {/* Policy Editor */}
+                <div className="flex-1 flex flex-col min-w-0">
                   <div className="flex items-center justify-between mb-2">
                     <div className="flex items-center gap-2">
                       <label className="text-sm font-medium text-[var(--color-text-primary)]">
@@ -638,92 +639,6 @@ export function CreatePolicy() {
                     />
                   </div>
                 </div>
-
-                {/* Input, Config & Output - Takes 40% */}
-                <div className="flex-[2] flex flex-col gap-3 min-w-0">
-                  {/* Test Input */}
-                  <div className="flex-1 flex flex-col min-h-0">
-                    <div className="flex items-center justify-between mb-2">
-                      <label className="text-sm font-medium text-[var(--color-text-primary)]">
-                        Input
-                      </label>
-                      <div className="flex items-center gap-1">
-                        <button
-                          onClick={() => beautifyJson(inputJson, setInputJson)}
-                          className="flex items-center gap-1.5 px-2 py-1 rounded-md text-xs text-[var(--color-text-tertiary)] hover:text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-secondary)] transition-all"
-                          title="Format JSON"
-                        >
-                          <Wand2 className="w-3.5 h-3.5" />
-                          Beautify
-                        </button>
-                        <button
-                          onClick={() => setExpandedEditor('input')}
-                          className="flex items-center gap-1.5 px-2 py-1 rounded-md text-xs text-[var(--color-text-tertiary)] hover:text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-secondary)] transition-all"
-                        >
-                          <Expand className="w-3.5 h-3.5" />
-                          Expand
-                        </button>
-                      </div>
-                    </div>
-                    <div className="flex-1 rounded-[var(--radius-lg)] border border-[var(--color-border-light)] overflow-hidden shadow-[var(--shadow-card)] relative group">
-                      <Editor
-                        height="100%"
-                        language="json"
-                        theme={resolvedTheme === 'dark' ? 'vs-dark' : 'vs'}
-                        value={inputJson}
-                        onChange={(value) => setInputJson(value || '{}')}
-                        options={defaultEditorOptions}
-                      />
-                    </div>
-                  </div>
-
-                  {/* Configuration / Data */}
-                  <div className="flex-1 flex flex-col min-h-0">
-                    <div className="flex items-center justify-between mb-2">
-                      <div className="flex items-center gap-2">
-                        <label className="text-sm font-medium text-[var(--color-text-primary)]">
-                          Configuration
-                        </label>
-                        <div className="relative group/tooltip">
-                          <Info className="w-4 h-4 text-[var(--color-text-tertiary)] cursor-help" />
-                          <div className="absolute left-1/2 -translate-x-1/2 bottom-full mb-2 px-3 py-2 rounded-lg bg-[var(--color-text-primary)] text-[var(--color-surface)] text-xs w-64 opacity-0 invisible group-hover/tooltip:opacity-100 group-hover/tooltip:visible transition-all duration-200 z-10 shadow-lg">
-                            <p className="font-medium mb-1">Dynamic Runtime Data</p>
-                            <p className="text-[var(--color-surface)]/80">
-                              Configuration can be modified at runtime via the Configuration Registry. Use <code className="px-1 py-0.5 rounded bg-[var(--color-surface)]/20 font-mono">input.configuration</code> to access in your Rego policy.
-                            </p>
-                            <div className="absolute left-1/2 -translate-x-1/2 top-full w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-[var(--color-text-primary)]" />
-                          </div>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-1">
-                        <button
-                          onClick={() => beautifyJson(configJson, setConfigJson)}
-                          className="flex items-center gap-1.5 px-2 py-1 rounded-md text-xs text-[var(--color-text-tertiary)] hover:text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-secondary)] transition-all"
-                          title="Format JSON"
-                        >
-                          <Wand2 className="w-3.5 h-3.5" />
-                          Beautify
-                        </button>
-                        <button
-                          onClick={() => setExpandedEditor('config')}
-                          className="flex items-center gap-1.5 px-2 py-1 rounded-md text-xs text-[var(--color-text-tertiary)] hover:text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-secondary)] transition-all"
-                        >
-                          <Expand className="w-3.5 h-3.5" />
-                          Expand
-                        </button>
-                      </div>
-                    </div>
-                    <div className="flex-1 rounded-[var(--radius-lg)] border border-[var(--color-border-light)] overflow-hidden shadow-[var(--shadow-card)]">
-                      <Editor
-                        height="100%"
-                        language="json"
-                        theme={resolvedTheme === 'dark' ? 'vs-dark' : 'vs'}
-                        value={configJson}
-                        onChange={(value) => setConfigJson(value || '{}')}
-                        options={defaultEditorOptions}
-                      />
-                    </div>
-                  </div>
 
                   {/* Output */}
                   <div className="flex-[0.8] flex flex-col min-h-0">

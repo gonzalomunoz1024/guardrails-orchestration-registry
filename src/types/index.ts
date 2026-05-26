@@ -2,6 +2,7 @@ export * from './policy.types';
 export * from './evaluation.types';
 export * from './datasource.types';
 export * from './registry.types';
+export * from './external.types';
 // Export guardrail types with explicit names to avoid conflicts with registry.types
 export {
   type GuardrailDefinition,
