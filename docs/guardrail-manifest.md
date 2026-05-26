@@ -149,6 +149,25 @@ syntax the studio and Rego use. Missing **required path params** are an error
 (never templated as an empty string); missing optional query/header params are
 omitted.
 
+#### POST with a JSON body
+
+When an endpoint is a `POST` (or `PUT`) with a request body, its top-level body
+fields are bound the same way — static, from the document, or from the
+configuration — and assembled into a typed JSON body (numbers/booleans coerced
+from the field's schema type). The body bindings live under `request.body`:
+
+```yaml
+- name: vm_order
+  service: vm-order
+  request:
+    method: POST
+    path: /orders
+    body:
+      vmName: { document: order.vmName }   # from the document
+      region: { config: defaultRegion }    # from configuration
+      cpu:    { value: "4" }               # static (coerced to a number)
+```
+
 ---
 
 ## How the backend executes it

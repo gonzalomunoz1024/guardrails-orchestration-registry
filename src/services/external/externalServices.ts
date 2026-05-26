@@ -1,6 +1,7 @@
 import type {
   ExternalService,
   ParsedSpec,
+  SwaggerBodyField,
   SwaggerField,
   SwaggerOperation,
   SwaggerParam,
@@ -126,44 +127,67 @@ export function parseSpec(doc: JsonObject, fallbackBaseUrl: string): ParsedSpec 
   const baseUrl = (servers[0]?.url as string) || fallbackBaseUrl;
   const paths = (doc.paths as JsonObject) || {};
 
+  // Top-level fields of an operation's JSON request body (POST/PUT).
+  const extractBodyFields = (op: JsonObject): SwaggerBodyField[] => {
+    const rb = op.requestBody as JsonObject | undefined;
+    const content = rb?.content as JsonObject | undefined;
+    const json = content?.['application/json'] as JsonObject | undefined;
+    const schema = deref(json?.schema as JsonObject, doc);
+    if (!schema || !schema.properties) return [];
+    const required = (schema.required as string[]) || [];
+    return Object.entries(schema.properties as JsonObject).map(([name, raw]) => {
+      const prop = deref(raw as JsonObject, doc) || {};
+      return {
+        name,
+        type: (prop.type as string) || 'string',
+        required: required.includes(name),
+        description: prop.description as string,
+        example: prop.example,
+      };
+    });
+  };
+
   const operations: SwaggerOperation[] = [];
   for (const [path, pathItem] of Object.entries(paths)) {
     const item = pathItem as JsonObject;
-    // Only surface GET operations — the sandbox reads data, it does not mutate.
-    const op = item.get as JsonObject | undefined;
-    if (!op) continue;
+    // Surface GET (reads) and POST (body-driven queries/lookups).
+    for (const method of ['get', 'post'] as const) {
+      const op = item[method] as JsonObject | undefined;
+      if (!op) continue;
 
-    const rawParams = (op.parameters as JsonObject[]) || [];
-    const parameters: SwaggerParam[] = rawParams.map((p) => {
-      const ps = deref(p.schema as JsonObject, doc) || {};
-      return {
-        name: p.name as string,
-        in: (p.in as SwaggerParam['in']) || 'query',
-        required: Boolean(p.required),
-        type: (ps.type as string) || 'string',
-        description: p.description as string,
-        example: (ps.example as string) ?? (p.example as string),
-      };
-    });
+      const rawParams = (op.parameters as JsonObject[]) || [];
+      const parameters: SwaggerParam[] = rawParams.map((p) => {
+        const ps = deref(p.schema as JsonObject, doc) || {};
+        return {
+          name: p.name as string,
+          in: (p.in as SwaggerParam['in']) || 'query',
+          required: Boolean(p.required),
+          type: (ps.type as string) || 'string',
+          description: p.description as string,
+          example: (ps.example as string) ?? (p.example as string),
+        };
+      });
 
-    const responses = (op.responses as JsonObject) || {};
-    const okSchema = (() => {
-      const ok = (responses['200'] || responses['201']) as JsonObject | undefined;
-      const content = ok?.content as JsonObject | undefined;
-      const json = content?.['application/json'] as JsonObject | undefined;
-      return (json?.schema as JsonObject) || null;
-    })();
+      const responses = (op.responses as JsonObject) || {};
+      const okSchema = (() => {
+        const ok = (responses['200'] || responses['201']) as JsonObject | undefined;
+        const content = ok?.content as JsonObject | undefined;
+        const json = content?.['application/json'] as JsonObject | undefined;
+        return (json?.schema as JsonObject) || null;
+      })();
 
-    operations.push({
-      id: (op.operationId as string) || `get:${path}`,
-      method: 'GET',
-      path,
-      summary: op.summary as string,
-      description: op.description as string,
-      parameters,
-      responseFields: flattenSchema(okSchema, doc),
-      sampleResponse: extractSample(responses, doc),
-    });
+      operations.push({
+        id: (op.operationId as string) || `${method}:${path}`,
+        method: method.toUpperCase(),
+        path,
+        summary: op.summary as string,
+        description: op.description as string,
+        parameters,
+        bodyFields: method === 'post' ? extractBodyFields(op) : [],
+        responseFields: flattenSchema(okSchema, doc),
+        sampleResponse: extractSample(responses, doc),
+      });
+    }
   }
 
   return {

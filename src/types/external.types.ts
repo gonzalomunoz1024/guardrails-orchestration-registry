@@ -37,7 +37,16 @@ export interface SwaggerField {
   example?: unknown;
 }
 
-/** A single GET operation discovered in a spec. */
+/** A single top-level field of a request body (for POST/PUT operations). */
+export interface SwaggerBodyField {
+  name: string;
+  type: string;
+  required: boolean;
+  description?: string;
+  example?: unknown;
+}
+
+/** A single operation discovered in a spec (GET or POST). */
 export interface SwaggerOperation {
   id: string;
   method: string;
@@ -45,6 +54,8 @@ export interface SwaggerOperation {
   summary?: string;
   description?: string;
   parameters: SwaggerParam[];
+  /** Top-level request-body fields (POST/PUT); empty for GET. */
+  bodyFields: SwaggerBodyField[];
   /** Flattened response fields (for the "available fields" browser). */
   responseFields: SwaggerField[];
   /** Example response payload pulled from the spec, if present. */
@@ -93,8 +104,10 @@ export interface ExternalDependency {
   operationId?: string;
   method: string;
   path: string;
-  /** Request parameter configuration keyed by param name. */
+  /** Request parameter configuration keyed by param name (path/query/header). */
   params: Record<string, ExternalParam>;
+  /** Request body field bindings keyed by field name (POST/PUT). */
+  body?: Record<string, ExternalParam>;
   /** Last fetched response payload. */
   data: unknown | null;
   status: ExternalDepStatus;

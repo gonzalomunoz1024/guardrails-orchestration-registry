@@ -101,6 +101,29 @@ const openapiSpec = {
           },
         },
       },
+      post: {
+        operationId: 'createOrder',
+        summary: 'Create a virtual machine order (requires a JSON body)',
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: { $ref: '#/components/schemas/NewOrder' },
+            },
+          },
+        },
+        responses: {
+          201: {
+            description: 'The created VM order',
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/Order' },
+                example: exampleOrder,
+              },
+            },
+          },
+        },
+      },
     },
     '/orders/{orderId}': {
       get: {
@@ -164,6 +187,17 @@ const openapiSpec = {
           approvedAt: { type: 'string', format: 'date-time', nullable: true, example: '2026-05-22T10:05:00Z' },
         },
       },
+      NewOrder: {
+        type: 'object',
+        required: ['vmName', 'region'],
+        properties: {
+          vmName: { type: 'string', description: 'Name for the new VM', example: 'prod-web-02' },
+          region: { type: 'string', description: 'Target region', example: 'us-east-1' },
+          instanceType: { type: 'string', example: 'm5.xlarge' },
+          cpu: { type: 'integer', description: 'vCPU count', example: 4 },
+          requestedBy: { type: 'string', example: 'jane.doe@example.com' },
+        },
+      },
     },
   },
 };
@@ -175,6 +209,32 @@ app.get('/openapi.json', (_req, res) => res.json(openapiSpec));
 app.use('/docs', swaggerUi.serveFiles(openapiSpec), swaggerUi.setup(openapiSpec));
 
 app.get('/orders', (_req, res) => res.json(Object.values(ORDERS)));
+
+app.post('/orders', (req, res) => {
+  const { vmName, region, instanceType, cpu, requestedBy } = req.body || {};
+  if (!vmName || !region) {
+    return res.status(400).json({ error: 'vmName and region are required' });
+  }
+  const orderId = `ord-${Math.floor(1000 + Math.random() * 9000)}`;
+  const order = {
+    orderId,
+    vmName,
+    status: 'pending',
+    requestedBy: requestedBy || 'unknown@example.com',
+    region,
+    instanceType: instanceType || 't3.medium',
+    os: 'ubuntu-22.04',
+    cpu: cpu || 2,
+    memoryGb: (cpu || 2) * 4,
+    diskGb: 50,
+    approval: { required: true, approvedBy: null, approvedAt: null },
+    costPerHour: 0.0416 * (cpu || 2),
+    createdAt: new Date().toISOString(),
+    readyAt: null,
+  };
+  ORDERS[orderId] = order;
+  res.status(201).json(order);
+});
 
 app.get('/orders/:orderId', (req, res) => {
   const order = ORDERS[req.params.orderId];

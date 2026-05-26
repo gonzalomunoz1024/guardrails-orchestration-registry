@@ -64,6 +64,13 @@ function encodeDependency(dep: ExternalDependency): Record<string, unknown> {
     request.parameters = parameters;
   }
 
+  const bodyEntries = Object.entries(dep.body ?? {});
+  if (bodyEntries.length > 0) {
+    const body: Record<string, unknown> = {};
+    for (const [name, param] of bodyEntries) body[name] = encodeParam(param);
+    request.body = body;
+  }
+
   return {
     name: dep.name,
     service: dep.serviceId,

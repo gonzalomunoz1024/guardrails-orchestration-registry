@@ -12,6 +12,8 @@ import {
 } from 'lucide-react';
 import { usePolicyStore } from '@/store';
 import {
+  EXTERNAL_SERVICES,
+  CUSTOM_SERVICE_ID,
   buildRequestUrl,
   fetchSpec,
   getByPath,
@@ -64,8 +66,104 @@ const sourceLabel: Record<ParamSource, string> = {
   configuration: 'Config',
 };
 
+interface BindingRowProps {
+  name: string;
+  /** Where the value goes: the param `in` (path/query/header) or "body". */
+  kindLabel: string;
+  type: string;
+  required: boolean;
+  example?: unknown;
+  cfg: ExternalParam;
+  onChange: (patch: Partial<ExternalParam>) => void;
+  docPaths: string[];
+  configPaths: string[];
+  /** Preview string of the resolved value (for document/config sources). */
+  resolvedPreview: string;
+  idPrefix: string;
+}
+
+/**
+ * One bindable field row — a value sourced from a static literal, a path in the
+ * document, or a path in the configuration. Used for both request parameters and
+ * request-body fields so the experience is identical.
+ */
+function BindingRow({
+  name,
+  kindLabel,
+  type,
+  required,
+  example,
+  cfg,
+  onChange,
+  docPaths,
+  configPaths,
+  resolvedPreview,
+  idPrefix,
+}: BindingRowProps) {
+  const listId = `${idPrefix}-${name}`;
+  const suggestions = cfg.source === 'document' ? docPaths : configPaths;
+  return (
+    <div className="space-y-1">
+      <div className="flex items-center gap-2">
+        <div className="w-32 shrink-0">
+          <code className="text-xs font-mono text-[var(--color-text-primary)]">
+            {name}
+            {required && <span className="text-[var(--color-error)]">*</span>}
+          </code>
+          <span className="ml-1 text-[10px] text-[var(--color-text-tertiary)]">{kindLabel}</span>
+        </div>
+
+        <select
+          value={cfg.source}
+          onChange={(e) => onChange({ source: e.target.value as ParamSource, value: '' })}
+          className="shrink-0 px-2 py-1.5 rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-[var(--color-surface)] text-xs text-[var(--color-text-secondary)] outline-none focus:border-[var(--color-info)]"
+        >
+          <option value="static">{sourceLabel.static}</option>
+          <option value="document">{sourceLabel.document}</option>
+          <option value="configuration">{sourceLabel.configuration}</option>
+        </select>
+
+        {cfg.source === 'static' ? (
+          <input
+            value={cfg.value}
+            onChange={(e) => onChange({ value: e.target.value })}
+            placeholder={example != null ? String(example) : type}
+            className="flex-1 px-2.5 py-1.5 rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-[var(--color-surface)] text-xs font-mono text-[var(--color-text-primary)] outline-none focus:border-[var(--color-info)]"
+          />
+        ) : (
+          <>
+            <input
+              list={listId}
+              value={cfg.value}
+              onChange={(e) => onChange({ value: e.target.value })}
+              placeholder={`path in ${cfg.source} (e.g. user.role)`}
+              className="flex-1 px-2.5 py-1.5 rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-[var(--color-surface)] text-xs font-mono text-[var(--color-text-primary)] outline-none focus:border-[var(--color-info)]"
+            />
+            <datalist id={listId}>
+              {suggestions.map((path) => (
+                <option key={path} value={path} />
+              ))}
+            </datalist>
+          </>
+        )}
+      </div>
+
+      {cfg.source !== 'static' && (
+        <div className="pl-[8.5rem] text-[10px] text-[var(--color-text-tertiary)]">
+          resolves to{' '}
+          {resolvedPreview ? (
+            <code className="text-[var(--color-text-secondary)]">{resolvedPreview}</code>
+          ) : (
+            <span className="text-[var(--color-warning)]">(not found in {cfg.source})</span>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function ExternalDependencyModal({ dep, isOpen, onClose }: ExternalDependencyModalProps) {
-  const { updateExternalDep, inputJson, configJson } = usePolicyStore();
+  const { updateExternalDep, externalDeps, inputJson, configJson } = usePolicyStore();
 
   const [spec, setSpec] = useState<ParsedSpec | null>(null);
   const [specStatus, setSpecStatus] = useState<'idle' | 'loading' | 'error'>('idle');
@@ -73,9 +171,58 @@ export function ExternalDependencyModal({ dep, isOpen, onClose }: ExternalDepend
 
   const [expandedOpId, setExpandedOpId] = useState<string | null>(null);
   const [params, setParams] = useState<Record<string, Record<string, ExternalParam>>>({});
+  const [bodies, setBodies] = useState<Record<string, Record<string, ExternalParam>>>({});
   const [responses, setResponses] = useState<Record<string, ExecResult>>({});
   const [executing, setExecuting] = useState<string | null>(null);
   const [copiedUrl, setCopiedUrl] = useState<string | null>(null);
+  const [customBaseUrl, setCustomBaseUrl] = useState(dep.baseUrl);
+  const [customSpecUrl, setCustomSpecUrl] = useState(dep.specUrl);
+
+  const isCustom = dep.serviceId === CUSTOM_SERVICE_ID;
+
+  // Auto-generate a unique reference name (the user does not name dependencies).
+  const makeUniqueName = (base: string): string => {
+    const taken = externalDeps.filter((d) => d.id !== dep.id).map((d) => d.name);
+    const safe = sanitizeName(base) || 'external';
+    if (!taken.includes(safe)) return safe;
+    let i = 2;
+    while (taken.includes(`${safe}_${i}`)) i++;
+    return `${safe}_${i}`;
+  };
+
+  const handleServiceChange = (serviceId: string) => {
+    if (serviceId === CUSTOM_SERVICE_ID) {
+      setCustomBaseUrl('');
+      setCustomSpecUrl('');
+      updateExternalDep(dep.id, {
+        serviceId: CUSTOM_SERVICE_ID,
+        name: makeUniqueName('external'),
+        baseUrl: '',
+        specUrl: '',
+        operationId: undefined,
+        path: '',
+        params: {},
+        data: null,
+        status: 'idle',
+        error: undefined,
+      });
+      return;
+    }
+    const svc = EXTERNAL_SERVICES.find((s) => s.id === serviceId);
+    if (!svc) return;
+    updateExternalDep(dep.id, {
+      serviceId: svc.id,
+      name: makeUniqueName(svc.id),
+      baseUrl: svc.baseUrl,
+      specUrl: svc.specUrl,
+      operationId: undefined,
+      path: '',
+      params: {},
+      data: null,
+      status: 'idle',
+      error: undefined,
+    });
+  };
 
   // Available paths from the document / configuration, for the value pickers.
   const docPaths = useMemo(() => flattenLeafPaths(parseJson(inputJson) ?? {}), [inputJson]);
@@ -134,15 +281,77 @@ export function ExternalDependencyModal({ dep, isOpen, onClose }: ExternalDepend
     [paramsFor, resolveParam]
   );
 
+  // Seed body field bindings from examples (static by default).
+  const seedBody = useCallback((op: SwaggerOperation): Record<string, ExternalParam> => {
+    const seed: Record<string, ExternalParam> = {};
+    for (const f of op.bodyFields) {
+      seed[f.name] = { source: 'static', value: f.example != null ? String(f.example) : '' };
+    }
+    return seed;
+  }, []);
+
+  const bodyFor = useCallback(
+    (op: SwaggerOperation): Record<string, ExternalParam> => bodies[op.id] ?? seedBody(op),
+    [bodies, seedBody]
+  );
+
+  // Resolve a body binding to a typed JS value (numbers/booleans/objects, not strings).
+  const resolveTyped = useCallback(
+    (param: ExternalParam, type: string): unknown => {
+      if (param.source === 'static') {
+        const v = param.value;
+        if (v === '') return undefined;
+        if (type === 'number' || type === 'integer') {
+          const n = Number(v);
+          return Number.isNaN(n) ? v : n;
+        }
+        if (type === 'boolean') return v === 'true' || v === '1';
+        if (type === 'object' || type === 'array') {
+          try {
+            return JSON.parse(v);
+          } catch {
+            return v;
+          }
+        }
+        return v;
+      }
+      const root = parseJson(param.source === 'document' ? inputJson : configJson) ?? {};
+      return getByPath(root, param.value);
+    },
+    [inputJson, configJson]
+  );
+
+  // Assemble the typed JSON body for an operation (omitting empty optional fields).
+  const resolvedBody = useCallback(
+    (op: SwaggerOperation): Record<string, unknown> => {
+      const map = bodyFor(op);
+      const out: Record<string, unknown> = {};
+      for (const f of op.bodyFields) {
+        const value = resolveTyped(map[f.name] ?? { source: 'static', value: '' }, f.type);
+        if (value !== undefined) out[f.name] = value;
+      }
+      return out;
+    },
+    [bodyFor, resolveTyped]
+  );
+
   const execute = useCallback(
     async (op: SwaggerOperation) => {
       const opParams = paramsFor(op);
       const resolved = resolvedValues(op);
       const url = buildRequestUrl(dep.baseUrl, op.path, op, resolved);
+      const hasBody = op.bodyFields.length > 0;
+      const opBody = hasBody ? bodyFor(op) : {};
       setExecuting(op.id);
       const start = performance.now();
       try {
-        const res = await fetch(url, { headers: { Accept: 'application/json' } });
+        const res = await fetch(url, {
+          method: op.method,
+          headers: hasBody
+            ? { Accept: 'application/json', 'Content-Type': 'application/json' }
+            : { Accept: 'application/json' },
+          body: hasBody ? JSON.stringify(resolvedBody(op)) : undefined,
+        });
         const timeMs = Math.round(performance.now() - start);
         let body: unknown;
         try {
@@ -157,6 +366,7 @@ export function ExternalDependencyModal({ dep, isOpen, onClose }: ExternalDepend
             path: op.path,
             method: op.method,
             params: opParams,
+            body: hasBody ? opBody : undefined,
             data: body,
             status: 'success',
             fetchedAt: new Date().toISOString(),
@@ -174,7 +384,7 @@ export function ExternalDependencyModal({ dep, isOpen, onClose }: ExternalDepend
         setExecuting(null);
       }
     },
-    [dep.baseUrl, dep.id, paramsFor, resolvedValues, updateExternalDep]
+    [dep.baseUrl, dep.id, paramsFor, resolvedValues, bodyFor, resolvedBody, updateExternalDep]
   );
 
   // Expand an operation: seed its params, then auto-execute if all required
@@ -183,15 +393,17 @@ export function ExternalDependencyModal({ dep, isOpen, onClose }: ExternalDepend
     (op: SwaggerOperation) => {
       setExpandedOpId(op.id);
       setParams((prev) => (prev[op.id] ? prev : { ...prev, [op.id]: seedParams(op) }));
+      setBodies((prev) => (prev[op.id] ? prev : { ...prev, [op.id]: seedBody(op) }));
 
+      // Only auto-execute GET (reads). POST is body-driven/mutating — run on demand.
       const resolved = resolvedValues(op);
       const missingRequired = op.parameters.some((p) => p.required && !resolved[p.name]);
-      if (!responses[op.id] && !missingRequired) {
+      if (op.method === 'GET' && !responses[op.id] && !missingRequired) {
         // Defer so seeded params state settles before the request.
         setTimeout(() => execute(op), 0);
       }
     },
-    [execute, resolvedValues, responses, seedParams]
+    [execute, resolvedValues, responses, seedParams, seedBody]
   );
 
   const toggleOp = (op: SwaggerOperation) => {
@@ -204,6 +416,12 @@ export function ExternalDependencyModal({ dep, isOpen, onClose }: ExternalDepend
 
   const setParam = (opId: string, name: string, patch: Partial<ExternalParam>) =>
     setParams((prev) => {
+      const current = prev[opId]?.[name] ?? { source: 'static', value: '' };
+      return { ...prev, [opId]: { ...prev[opId], [name]: { ...current, ...patch } } };
+    });
+
+  const setBodyParam = (opId: string, name: string, patch: Partial<ExternalParam>) =>
+    setBodies((prev) => {
       const current = prev[opId]?.[name] ?? { source: 'static', value: '' };
       return { ...prev, [opId]: { ...prev[opId], [name]: { ...current, ...patch } } };
     });
@@ -290,24 +508,75 @@ export function ExternalDependencyModal({ dep, isOpen, onClose }: ExternalDepend
           )}
         </div>
 
-        {/* Inject-as bar */}
-        <div className="shrink-0 flex items-center gap-3 px-6 py-3 bg-[var(--color-surface-secondary)] border-b border-[var(--color-border-light)]">
-          <span className="text-xs text-[var(--color-text-secondary)]">Inject response as</span>
-          <div className="flex items-center gap-1.5 px-2 py-1 rounded-[var(--radius-md)] bg-[var(--color-surface)] border border-[var(--color-border)]">
-            <code className="text-xs font-mono text-[var(--color-text-tertiary)]">
-              input.external.
-            </code>
-            <input
-              value={dep.name}
-              onChange={(e) => updateExternalDep(dep.id, { name: sanitizeName(e.target.value) })}
-              placeholder="dependency"
-              className="w-32 bg-transparent text-xs font-mono text-[var(--color-text-primary)] outline-none"
-            />
+        {/* Service selector + auto-assigned reference */}
+        <div className="shrink-0 px-6 py-3 bg-[var(--color-surface-secondary)] border-b border-[var(--color-border-light)] space-y-2">
+          <div className="flex items-center gap-3 flex-wrap">
+            <label className="flex items-center gap-2">
+              <span className="text-xs font-medium text-[var(--color-text-secondary)]">Service</span>
+              <select
+                value={dep.serviceId || ''}
+                onChange={(e) => handleServiceChange(e.target.value)}
+                className="px-2.5 py-1.5 rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--color-surface)] text-sm text-[var(--color-text-primary)] focus:border-[var(--color-info)] outline-none"
+              >
+                <option value="" disabled>
+                  Choose a service…
+                </option>
+                {EXTERNAL_SERVICES.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.name}
+                  </option>
+                ))}
+                <option value={CUSTOM_SERVICE_ID}>Custom URL…</option>
+              </select>
+            </label>
+            {dep.name && (
+              <span className="text-xs text-[var(--color-text-tertiary)]">
+                injected as{' '}
+                <code className="font-mono text-[var(--color-text-secondary)]">
+                  input.external.{dep.name}
+                </code>
+              </span>
+            )}
           </div>
+
+          {isCustom && (
+            <div className="flex flex-wrap items-center gap-2">
+              <input
+                value={customBaseUrl}
+                onChange={(e) => setCustomBaseUrl(e.target.value)}
+                placeholder="Base URL (https://api.example.com)"
+                className="flex-1 min-w-[160px] px-2 py-1.5 rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-[var(--color-surface)] text-xs font-mono text-[var(--color-text-primary)] outline-none focus:border-[var(--color-info)]"
+              />
+              <input
+                value={customSpecUrl}
+                onChange={(e) => setCustomSpecUrl(e.target.value)}
+                placeholder="OpenAPI spec URL (…/openapi.json)"
+                className="flex-1 min-w-[160px] px-2 py-1.5 rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-[var(--color-surface)] text-xs font-mono text-[var(--color-text-primary)] outline-none focus:border-[var(--color-info)]"
+              />
+              <button
+                onClick={() => updateExternalDep(dep.id, { baseUrl: customBaseUrl, specUrl: customSpecUrl })}
+                disabled={!customSpecUrl}
+                className="px-3 py-1.5 rounded-[var(--radius-sm)] bg-[var(--color-info)] text-white text-xs font-medium disabled:opacity-50"
+              >
+                Load
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Body */}
         <div className="flex-1 min-h-0 overflow-y-auto px-6 py-4 space-y-2">
+          {!dep.serviceId && (
+            <div className="flex flex-col items-center justify-center gap-2 py-16 text-center">
+              <ExternalLink className="w-7 h-7 text-[var(--color-text-tertiary)]" />
+              <p className="text-sm font-medium text-[var(--color-text-primary)]">
+                Choose a service to begin
+              </p>
+              <p className="text-xs text-[var(--color-text-tertiary)]">
+                Pick a service above to browse its endpoints and pull data into your input.
+              </p>
+            </div>
+          )}
           {specStatus === 'loading' && (
             <div className="flex items-center justify-center gap-2 py-12 text-sm text-[var(--color-text-tertiary)]">
               <Loader2 className="w-4 h-4 animate-spin" /> Loading API spec…
@@ -324,8 +593,10 @@ export function ExternalDependencyModal({ dep, isOpen, onClose }: ExternalDepend
             const result = responses[op.id];
             const isActive = dep.operationId === op.id;
             const opParams = paramsFor(op);
+            const opBody = bodyFor(op);
             const resolved = resolvedValues(op);
             const reqUrl = buildRequestUrl(dep.baseUrl, op.path, op, resolved);
+            const bodyObj = op.bodyFields.length > 0 ? resolvedBody(op) : null;
             return (
               <div
                 key={op.id}
@@ -380,85 +651,76 @@ export function ExternalDependencyModal({ dep, isOpen, onClose }: ExternalDepend
                         <h4 className="text-[11px] font-semibold uppercase tracking-wider text-[var(--color-text-tertiary)]">
                           Parameters
                         </h4>
-                        {op.parameters.map((p) => {
-                          const cfg = opParams[p.name] ?? { source: 'static', value: '' };
-                          const listId = `paths-${op.id}-${p.name}`;
-                          const suggestions = cfg.source === 'document' ? docPaths : configPaths;
+                        {op.parameters.map((p) => (
+                          <BindingRow
+                            key={p.name}
+                            name={p.name}
+                            kindLabel={p.in}
+                            type={p.type}
+                            required={p.required}
+                            example={p.example}
+                            cfg={opParams[p.name] ?? { source: 'static', value: '' }}
+                            onChange={(patch) => setParam(op.id, p.name, patch)}
+                            docPaths={docPaths}
+                            configPaths={configPaths}
+                            resolvedPreview={resolved[p.name]}
+                            idPrefix={`p-${op.id}`}
+                          />
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Request body */}
+                    {op.bodyFields.length > 0 && (
+                      <div className="space-y-2.5">
+                        <h4 className="text-[11px] font-semibold uppercase tracking-wider text-[var(--color-text-tertiary)]">
+                          Request body
+                          <span className="ml-1.5 font-normal normal-case tracking-normal text-[var(--color-text-tertiary)]">
+                            (assembled into a JSON body)
+                          </span>
+                        </h4>
+                        {op.bodyFields.map((f) => {
+                          const cfg = opBody[f.name] ?? { source: 'static', value: '' };
+                          const preview =
+                            cfg.source === 'static'
+                              ? cfg.value
+                              : (() => {
+                                  const v = resolveTyped(cfg, f.type);
+                                  return v === undefined
+                                    ? ''
+                                    : typeof v === 'object'
+                                      ? JSON.stringify(v)
+                                      : String(v);
+                                })();
                           return (
-                            <div key={p.name} className="space-y-1">
-                              <div className="flex items-center gap-2">
-                                <div className="w-32 shrink-0">
-                                  <code className="text-xs font-mono text-[var(--color-text-primary)]">
-                                    {p.name}
-                                    {p.required && (
-                                      <span className="text-[var(--color-error)]">*</span>
-                                    )}
-                                  </code>
-                                  <span className="ml-1 text-[10px] text-[var(--color-text-tertiary)]">
-                                    {p.in}
-                                  </span>
-                                </div>
-
-                                {/* Source selector */}
-                                <select
-                                  value={cfg.source}
-                                  onChange={(e) =>
-                                    setParam(op.id, p.name, {
-                                      source: e.target.value as ParamSource,
-                                      value: '',
-                                    })
-                                  }
-                                  className="shrink-0 px-2 py-1.5 rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-[var(--color-surface)] text-xs text-[var(--color-text-secondary)] outline-none focus:border-[var(--color-info)]"
-                                >
-                                  <option value="static">{sourceLabel.static}</option>
-                                  <option value="document">{sourceLabel.document}</option>
-                                  <option value="configuration">{sourceLabel.configuration}</option>
-                                </select>
-
-                                {/* Value control */}
-                                {cfg.source === 'static' ? (
-                                  <input
-                                    value={cfg.value}
-                                    onChange={(e) => setParam(op.id, p.name, { value: e.target.value })}
-                                    placeholder={p.example ? String(p.example) : p.type}
-                                    className="flex-1 px-2.5 py-1.5 rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-[var(--color-surface)] text-xs font-mono text-[var(--color-text-primary)] outline-none focus:border-[var(--color-info)]"
-                                  />
-                                ) : (
-                                  <input
-                                    list={listId}
-                                    value={cfg.value}
-                                    onChange={(e) => setParam(op.id, p.name, { value: e.target.value })}
-                                    placeholder={`path in ${cfg.source} (e.g. user.role)`}
-                                    className="flex-1 px-2.5 py-1.5 rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-[var(--color-surface)] text-xs font-mono text-[var(--color-text-primary)] outline-none focus:border-[var(--color-info)]"
-                                  />
-                                )}
-                                {cfg.source !== 'static' && (
-                                  <datalist id={listId}>
-                                    {suggestions.map((path) => (
-                                      <option key={path} value={path} />
-                                    ))}
-                                  </datalist>
-                                )}
-                              </div>
-
-                              {/* Resolved preview for dynamic sources */}
-                              {cfg.source !== 'static' && (
-                                <div className="pl-[8.5rem] text-[10px] text-[var(--color-text-tertiary)]">
-                                  resolves to{' '}
-                                  {resolved[p.name] ? (
-                                    <code className="text-[var(--color-text-secondary)]">
-                                      {resolved[p.name]}
-                                    </code>
-                                  ) : (
-                                    <span className="text-[var(--color-warning)]">
-                                      (not found in {cfg.source})
-                                    </span>
-                                  )}
-                                </div>
-                              )}
-                            </div>
+                            <BindingRow
+                              key={f.name}
+                              name={f.name}
+                              kindLabel="body"
+                              type={f.type}
+                              required={f.required}
+                              example={f.example}
+                              cfg={cfg}
+                              onChange={(patch) => setBodyParam(op.id, f.name, patch)}
+                              docPaths={docPaths}
+                              configPaths={configPaths}
+                              resolvedPreview={preview}
+                              idPrefix={`b-${op.id}`}
+                            />
                           );
                         })}
+
+                        {/* Live JSON body preview */}
+                        {bodyObj && (
+                          <div className="pt-1">
+                            <span className="text-[10px] text-[var(--color-text-tertiary)]">
+                              Body to send
+                            </span>
+                            <pre className="mt-1 max-h-40 overflow-auto rounded-[var(--radius-md)] border border-[var(--color-border-light)] bg-[var(--color-surface-secondary)] px-3 py-2 text-[11px] font-mono text-[var(--color-text-secondary)]">
+                              {JSON.stringify(bodyObj, null, 2)}
+                            </pre>
+                          </div>
+                        )}
                       </div>
                     )}
 

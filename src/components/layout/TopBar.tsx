@@ -5,6 +5,93 @@ import { useRegistryStore } from '@/store/registryStore';
 import { useAuthStore } from '@/store/authStore';
 import { cn } from '@/utils';
 
+interface AppNotification {
+  id: string;
+  title: string;
+  detail?: string;
+  unread?: boolean;
+}
+
+function NotificationsMenu() {
+  const [isOpen, setIsOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  // No notification feed wired up yet — surface an honest empty state.
+  const notifications: AppNotification[] = [];
+  const unreadCount = notifications.filter((n) => n.unread).length;
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+        setIsOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  return (
+    <div className="relative" ref={menuRef}>
+      <button
+        onClick={() => setIsOpen((v) => !v)}
+        title="Notifications"
+        aria-label="Notifications"
+        className={cn(
+          'relative p-2 rounded-[var(--radius-md)] transition-all',
+          'text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]',
+          'hover:bg-[var(--color-surface-secondary)]',
+          isOpen && 'bg-[var(--color-surface-secondary)]'
+        )}
+      >
+        <Bell className="w-5 h-5" />
+        {unreadCount > 0 && (
+          <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-[var(--color-error)]" />
+        )}
+      </button>
+
+      {isOpen && (
+        <div
+          className={cn(
+            'absolute right-0 top-full mt-2 w-80 max-h-96 overflow-auto py-1',
+            'rounded-[var(--radius-md)] border border-[var(--color-border-light)]',
+            'bg-[var(--color-surface)] shadow-[var(--shadow-lg)] animate-fade-in z-50'
+          )}
+        >
+          <div className="px-3 py-2 border-b border-[var(--color-border-light)]">
+            <span className="text-sm font-semibold text-[var(--color-text-primary)]">
+              Notifications
+            </span>
+          </div>
+          {notifications.length === 0 ? (
+            <div className="flex flex-col items-center justify-center gap-2 px-4 py-8 text-center">
+              <Bell className="w-6 h-6 text-[var(--color-text-tertiary)]" />
+              <p className="text-sm text-[var(--color-text-secondary)]">You're all caught up</p>
+              <p className="text-xs text-[var(--color-text-tertiary)]">No new notifications</p>
+            </div>
+          ) : (
+            notifications.map((n) => (
+              <div
+                key={n.id}
+                className="flex items-start gap-2 px-3 py-2.5 hover:bg-[var(--color-surface-secondary)] transition-colors"
+              >
+                {n.unread && (
+                  <span className="mt-1.5 w-2 h-2 shrink-0 rounded-full bg-[var(--color-info)]" />
+                )}
+                <div className={cn('min-w-0', !n.unread && 'pl-4')}>
+                  <p className="text-sm text-[var(--color-text-primary)]">{n.title}</p>
+                  {n.detail && (
+                    <p className="text-xs text-[var(--color-text-tertiary)]">{n.detail}</p>
+                  )}
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 interface UserMenuProps {
   user: {
     login: string;
@@ -116,7 +203,7 @@ export function TopBar() {
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--color-text-tertiary)]" />
             <input
               type="text"
-              placeholder="Search policies..."
+              placeholder="Search guardrails..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className={cn(
@@ -131,16 +218,7 @@ export function TopBar() {
         )}
 
         {/* Notifications */}
-        <button
-          className={cn(
-            'relative p-2 rounded-[var(--radius-md)] transition-all',
-            'text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]',
-            'hover:bg-[var(--color-surface-secondary)]'
-          )}
-        >
-          <Bell className="w-5 h-5" />
-          <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-[var(--color-error)]" />
-        </button>
+        <NotificationsMenu />
 
         {/* Theme toggle */}
         <button

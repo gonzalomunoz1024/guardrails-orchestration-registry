@@ -1,4 +1,3 @@
-import { useState } from 'react';
 import {
   AlertCircle,
   CheckCircle2,
@@ -8,66 +7,27 @@ import {
   Trash2,
 } from 'lucide-react';
 import { usePolicyStore } from '@/store';
-import {
-  EXTERNAL_SERVICES,
-  CUSTOM_SERVICE_ID,
-} from '@/services/external/externalServices';
+import { EXTERNAL_SERVICES } from '@/services/external/externalServices';
 import { cn } from '@/utils';
 import type { ExternalDependency } from '@/types';
 import { ExternalDependencyModal } from './ExternalDependencyModal';
 
 interface ExternalDependencyCardProps {
   dep: ExternalDependency;
+  isExplorerOpen: boolean;
+  onOpenExplorer: () => void;
+  onCloseExplorer: () => void;
 }
 
-function sanitizeName(value: string): string {
-  return value.replace(/[^A-Za-z0-9_]/g, '_').replace(/^(\d)/, '_$1');
-}
-
-export function ExternalDependencyCard({ dep }: ExternalDependencyCardProps) {
-  const { updateExternalDep, removeExternalDep } = usePolicyStore();
-
-  const [explorerOpen, setExplorerOpen] = useState(false);
-  const [customBaseUrl, setCustomBaseUrl] = useState(dep.baseUrl);
-  const [customSpecUrl, setCustomSpecUrl] = useState(dep.specUrl);
-
-  const isCustom = dep.serviceId === CUSTOM_SERVICE_ID;
+export function ExternalDependencyCard({
+  dep,
+  isExplorerOpen,
+  onOpenExplorer,
+  onCloseExplorer,
+}: ExternalDependencyCardProps) {
+  const { removeExternalDep } = usePolicyStore();
   const service = EXTERNAL_SERVICES.find((s) => s.id === dep.serviceId);
-
-  const handleServiceChange = (serviceId: string) => {
-    if (serviceId === CUSTOM_SERVICE_ID) {
-      setCustomBaseUrl('');
-      setCustomSpecUrl('');
-      updateExternalDep(dep.id, {
-        serviceId: CUSTOM_SERVICE_ID,
-        baseUrl: '',
-        specUrl: '',
-        operationId: undefined,
-        path: '',
-        params: {},
-        data: null,
-        status: 'idle',
-        error: undefined,
-      });
-      return;
-    }
-    const svc = EXTERNAL_SERVICES.find((s) => s.id === serviceId);
-    if (!svc) return;
-    updateExternalDep(dep.id, {
-      serviceId: svc.id,
-      name: dep.name || sanitizeName(svc.id),
-      baseUrl: svc.baseUrl,
-      specUrl: svc.specUrl,
-      operationId: undefined,
-      path: '',
-      params: {},
-      data: null,
-      status: 'idle',
-      error: undefined,
-    });
-    // Selecting a service pops the explorer for more real estate.
-    setExplorerOpen(true);
-  };
+  const configured = Boolean(dep.serviceId);
 
   return (
     <div className="rounded-[var(--radius-lg)] border border-[var(--color-border-light)] bg-[var(--color-surface)] shadow-[var(--shadow-card)] overflow-hidden">
@@ -111,104 +71,41 @@ export function ExternalDependencyCard({ dep }: ExternalDependencyCardProps) {
         </div>
       </div>
 
-      <div className="p-3 space-y-3">
-        {/* Name + Service */}
-        <div className="grid grid-cols-2 gap-2">
-          <label className="block">
-            <span className="text-[11px] font-medium text-[var(--color-text-secondary)]">
-              Reference name
+      <div className="p-3 space-y-2">
+        {/* Summary of the current selection */}
+        {configured ? (
+          <div className="flex items-center gap-2 text-xs text-[var(--color-text-secondary)] min-w-0">
+            <span className="font-medium text-[var(--color-text-primary)] truncate">
+              {service?.name ?? 'Custom service'}
             </span>
-            <input
-              value={dep.name}
-              onChange={(e) => updateExternalDep(dep.id, { name: sanitizeName(e.target.value) })}
-              placeholder="dependency"
-              className="mt-1 w-full px-2 py-1.5 rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-[var(--color-surface)] text-sm font-mono text-[var(--color-text-primary)] focus:border-[var(--color-info)] outline-none"
-            />
-          </label>
-          <label className="block">
-            <span className="text-[11px] font-medium text-[var(--color-text-secondary)]">
-              Service
-            </span>
-            <select
-              value={dep.serviceId || ''}
-              onChange={(e) => handleServiceChange(e.target.value)}
-              className="mt-1 w-full px-2 py-1.5 rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-[var(--color-surface)] text-sm text-[var(--color-text-primary)] focus:border-[var(--color-info)] outline-none"
-            >
-              <option value="" disabled>
-                Select a service…
-              </option>
-              {EXTERNAL_SERVICES.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.name}
-                </option>
-              ))}
-              <option value={CUSTOM_SERVICE_ID}>Custom URL…</option>
-            </select>
-          </label>
-        </div>
-
-        {service && (
-          <p className="text-[11px] text-[var(--color-text-tertiary)]">{service.description}</p>
-        )}
-
-        {/* Custom URL entry */}
-        {isCustom && (
-          <div className="space-y-2 p-2 rounded-[var(--radius-md)] bg-[var(--color-surface-secondary)]">
-            <input
-              value={customBaseUrl}
-              onChange={(e) => setCustomBaseUrl(e.target.value)}
-              placeholder="Base URL (https://api.example.com)"
-              className="w-full px-2 py-1.5 rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-[var(--color-surface)] text-xs font-mono text-[var(--color-text-primary)] outline-none focus:border-[var(--color-info)]"
-            />
-            <div className="flex gap-2">
-              <input
-                value={customSpecUrl}
-                onChange={(e) => setCustomSpecUrl(e.target.value)}
-                placeholder="OpenAPI spec URL (…/openapi.json)"
-                className="flex-1 px-2 py-1.5 rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-[var(--color-surface)] text-xs font-mono text-[var(--color-text-primary)] outline-none focus:border-[var(--color-info)]"
-              />
-              <button
-                onClick={() => {
-                  updateExternalDep(dep.id, { baseUrl: customBaseUrl, specUrl: customSpecUrl });
-                  if (customSpecUrl) setExplorerOpen(true);
-                }}
-                disabled={!customSpecUrl}
-                className="px-3 py-1.5 rounded-[var(--radius-sm)] bg-[var(--color-info)] text-white text-xs font-medium disabled:opacity-50"
-              >
-                Load
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* Selected endpoint summary + explorer launcher */}
-        {dep.specUrl && (
-          <div className="flex items-center justify-between gap-2">
-            <div className="min-w-0 text-xs text-[var(--color-text-secondary)]">
-              {dep.path ? (
-                <span className="flex items-center gap-1.5 truncate">
-                  <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-[var(--color-info-bg)] text-[var(--color-info)]">
-                    {dep.method}
-                  </span>
-                  <code className="font-mono truncate">{dep.path}</code>
+            {dep.path ? (
+              <span className="flex items-center gap-1.5 min-w-0">
+                <span className="shrink-0 px-1.5 py-0.5 rounded text-[10px] font-bold bg-[var(--color-info-bg)] text-[var(--color-info)]">
+                  {dep.method}
                 </span>
-              ) : (
-                <span className="text-[var(--color-text-tertiary)]">No endpoint selected</span>
-              )}
-            </div>
-            <button
-              onClick={() => setExplorerOpen(true)}
-              className={cn(
-                'shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-[var(--radius-md)]',
-                'bg-[var(--color-surface-secondary)] text-sm font-medium text-[var(--color-text-primary)]',
-                'border border-[var(--color-border-light)] hover:border-[var(--color-info)] hover:text-[var(--color-info)] transition-colors'
-              )}
-            >
-              <Sliders className="w-3.5 h-3.5" />
-              API explorer
-            </button>
+                <code className="font-mono truncate">{dep.path}</code>
+              </span>
+            ) : (
+              <span className="text-[var(--color-text-tertiary)]">· no endpoint selected</span>
+            )}
           </div>
+        ) : (
+          <p className="text-xs text-[var(--color-text-tertiary)]">
+            No service selected yet.
+          </p>
         )}
+
+        {/* Primary launcher — the obvious next step */}
+        <button
+          onClick={onOpenExplorer}
+          className={cn(
+            'w-full flex items-center justify-center gap-2 px-3 py-2 rounded-[var(--radius-md)]',
+            'bg-[var(--color-info)] text-white text-sm font-medium transition-all hover:opacity-90'
+          )}
+        >
+          <Sliders className="w-4 h-4" />
+          {configured ? 'Open API explorer' : 'Choose a service in API explorer'}
+        </button>
 
         {dep.status === 'error' && dep.error && (
           <p className="flex items-center gap-2 text-xs text-[var(--color-error)]">
@@ -217,11 +114,7 @@ export function ExternalDependencyCard({ dep }: ExternalDependencyCardProps) {
         )}
       </div>
 
-      <ExternalDependencyModal
-        dep={dep}
-        isOpen={explorerOpen}
-        onClose={() => setExplorerOpen(false)}
-      />
+      <ExternalDependencyModal dep={dep} isOpen={isExplorerOpen} onClose={onCloseExplorer} />
     </div>
   );
 }
