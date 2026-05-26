@@ -50,7 +50,7 @@ export function Dashboard() {
 
   const statCards = [
     {
-      label: 'Total Policies',
+      label: 'Total Guardrails',
       value: computedStats.totalPolicies,
       icon: FileText,
       color: 'var(--color-info)',
@@ -111,7 +111,7 @@ export function Dashboard() {
         {/* Recent Policies */}
         <div className="lg:col-span-2 rounded-[var(--radius-lg)] border border-[var(--color-border-light)] bg-[var(--color-surface)] shadow-[var(--shadow-card)]">
           <div className="flex items-center justify-between p-4 border-b border-[var(--color-border-light)]">
-            <h2 className="font-semibold text-[var(--color-text-primary)]">Recent Policies</h2>
+            <h2 className="font-semibold text-[var(--color-text-primary)]">Recent Guardrails</h2>
             <button
               onClick={() => setView('policies')}
               className="text-sm text-[var(--color-info)] hover:underline flex items-center gap-1"
@@ -188,7 +188,7 @@ export function Dashboard() {
                 )}
               >
                 <FileText className="w-5 h-5" />
-                <span className="font-medium">Create New Policy</span>
+                <span className="font-medium">Create New Guardrail</span>
               </button>
               <button
                 onClick={() => navigateToBlastRadius()}

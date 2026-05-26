@@ -9,7 +9,7 @@ interface EditorModalProps {
   onClose: () => void;
   title: string;
   subtitle?: string;
-  language: 'json' | 'rego';
+  language: 'json' | 'rego' | 'yaml';
   value: string;
   onChange?: (value: string) => void;
   readOnly?: boolean;

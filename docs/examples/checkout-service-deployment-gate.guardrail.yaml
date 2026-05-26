@@ -1,0 +1,83 @@
+# Example Guardrail manifest (guardrails.dev/v1alpha1)
+# Published alongside guardrail.rego + configuration.json. The backend reads this
+# to reconstruct the OPA evaluation input at enforcement time:
+#   input = { ...document, guardrail, configuration?, external?: { <name>: <data> } }
+# See docs/guardrail-manifest.md for the full anatomy.
+
+apiVersion: guardrails.dev/v1alpha1
+kind: Guardrail
+
+metadata:
+  name: checkout-service-deployment-gate     # DNS-1123 slug; the stable guardrail id
+  displayName: "Checkout Service Deployment Gate"
+  version: 2.1.0
+  description: >-
+    Blocks checkout-service VM orders unless the source repository is registered
+    and compliant, and the backing VM order targets an approved region.
+  owner: gonzalo.munoz
+  labels:
+    - checkout
+    - access-control
+    - vmforge
+  annotations:
+    runbook: https://wiki.internal/runbooks/checkout-gate
+    rationale: Added after INC-4821 — unregistered repos shipped to prod.
+
+spec:
+  enforcement: MANDATORY            # MANDATORY -> fail closed on infra failure | OPTIONAL -> fail open
+  stage: PRECHECK                   # PRECHECK | POSTCHECK
+
+  target:
+    resourceType: VMFORGE           # which system this guardrail applies to
+    resourceKind: VIRTUAL_MACHINE
+
+  policy:
+    file: guardrail.rego            # sibling artifact
+    package: data.checkout_service_deployment_gate   # entrypoint package the backend queries
+
+  # Where the resource being evaluated comes from. `request` = supplied per call.
+  document:
+    source: request
+
+  # Present only when static configuration is used. The backend looks up the
+  # matching row from the configuration table, then merges it at input.configuration.
+  configuration:
+    file: configuration.json
+    lookup:
+      table: guardrail_configuration
+      onMissing: fail               # fail | empty | default
+
+  # Each entry is fetched and placed at input.external.<name>. Parameter values
+  # are bound from a static literal, the document, or the configuration.
+  externalDependencies:
+    # Is the source repository registered & compliant?  -> input.external.repoRegistry
+    - name: repoRegistry
+      service: repo-registry
+      baseUrl: http://localhost:4001
+      spec: http://localhost:4001/openapi.json
+      request:
+        method: GET
+        path: /repos/{repoId}
+        parameters:
+          repoId: { document: repository.id }        # from the incoming document
+      response:
+        select: ""                  # "" = whole body; or a dotted path to narrow it
+      onError: failClosed           # this signal must block on outage
+
+    # Status of the backing VM order.  -> input.external.vmOrder
+    - name: vmOrder
+      service: vm-order
+      baseUrl: http://localhost:4002
+      spec: http://localhost:4002/openapi.json
+      request:
+        method: GET
+        path: /orders/{orderId}
+        parameters:
+          orderId: { document: order.id }            # path param from the document
+          region:  { config: approvedRegion }        # query param from configuration
+          apiTier: { value: "v2" }                   # static literal
+      onError: failOpen             # advisory enrichment; degrade gracefully
+      fallback: { status: unknown }
+
+# NOTE: the `guardrail` block in the OPA input (id, name, version, enforcementType)
+# is synthesized by the backend from this manifest — it is never authored here.

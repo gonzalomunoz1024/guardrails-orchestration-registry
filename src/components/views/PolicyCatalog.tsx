@@ -90,7 +90,7 @@ function PolicyTable({ policies, onPolicyClick }: PolicyTableProps) {
         <thead>
           <tr className="border-b border-[var(--color-border-light)] bg-[var(--color-surface-secondary)]">
             <th className="px-4 py-3 text-left text-xs font-semibold text-[var(--color-text-secondary)] uppercase tracking-wider">
-              Policy
+              Guardrail
             </th>
             <th className="px-4 py-3 text-left text-xs font-semibold text-[var(--color-text-secondary)] uppercase tracking-wider">
               Resource Type
@@ -396,7 +396,7 @@ export function PolicyCatalog() {
               className="flex items-center gap-2 px-4 py-2 rounded-[var(--radius-md)] bg-[var(--color-info)] text-white font-medium transition-all hover:opacity-90"
             >
               <Plus className="w-4 h-4" />
-              Create Policy
+              Create Guardrail
             </button>
           </div>
         </div>
@@ -440,7 +440,7 @@ export function PolicyCatalog() {
         ) : (
           <div className="flex flex-col items-center justify-center h-64 text-[var(--color-text-tertiary)]">
             <AlertCircle className="w-12 h-12 mb-3 opacity-50" />
-            <p className="text-lg font-medium">No policies found</p>
+            <p className="text-lg font-medium">No guardrails found</p>
             <p className="text-sm">Try adjusting your search or filters</p>
           </div>
         )}

@@ -36,7 +36,7 @@ export function RegoEditorPane({ policyId, onExpand }: RegoEditorPaneProps) {
       <div className="flex items-center justify-between mb-2">
         <div className="flex items-center gap-2 min-w-0">
           <FileCode2 className="w-4 h-4 text-[var(--color-text-secondary)]" />
-          <h3 className="text-sm font-semibold text-[var(--color-text-primary)]">Policy</h3>
+          <h3 className="text-sm font-semibold text-[var(--color-text-primary)]">Rego</h3>
           {policyId && (
             <code className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-[var(--color-surface-secondary)] text-[var(--color-text-tertiary)] truncate">
               package {policyId}
@@ -63,7 +63,7 @@ export function RegoEditorPane({ policyId, onExpand }: RegoEditorPaneProps) {
             <AlertCircle className="w-4 h-4 shrink-0" />
             <span className="truncate">
               Package should be{' '}
-              <code className="font-mono font-semibold">{policyId}</code> to match the policy
+              <code className="font-mono font-semibold">{policyId}</code> to match the guardrail
             </span>
           </span>
           <button

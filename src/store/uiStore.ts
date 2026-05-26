@@ -8,13 +8,11 @@ interface UIState {
   theme: Theme;
   resolvedTheme: 'light' | 'dark';
   sidePanel: SidePanel;
-  isCreatePRModalOpen: boolean;
 
   setTheme: (theme: Theme) => void;
   setResolvedTheme: (theme: 'light' | 'dark') => void;
   setSidePanel: (panel: SidePanel) => void;
   toggleSidePanel: (panel: SidePanel) => void;
-  setCreatePRModalOpen: (open: boolean) => void;
 }
 
 export const useUIStore = create<UIState>()(
@@ -23,7 +21,6 @@ export const useUIStore = create<UIState>()(
       theme: 'system',
       resolvedTheme: 'light',
       sidePanel: null,
-      isCreatePRModalOpen: false,
 
       setTheme: (theme) => set({ theme }),
       setResolvedTheme: (resolvedTheme) => set({ resolvedTheme }),
@@ -32,7 +29,6 @@ export const useUIStore = create<UIState>()(
         set((state) => ({
           sidePanel: state.sidePanel === panel ? null : panel,
         })),
-      setCreatePRModalOpen: (open) => set({ isCreatePRModalOpen: open }),
     }),
     {
       name: 'ui-storage',

@@ -19,9 +19,9 @@ interface NavItem {
 
 const navItems: NavItem[] = [
   { id: 'dashboard', label: 'Dashboard', icon: <LayoutDashboard className="w-5 h-5" /> },
-  { id: 'policies', label: 'Policies', icon: <FileText className="w-5 h-5" /> },
+  { id: 'policies', label: 'Guardrails', icon: <FileText className="w-5 h-5" /> },
   { id: 'blast-radius', label: 'Blast Radius', icon: <Radius className="w-5 h-5" /> },
-  { id: 'create-policy', label: 'Create Policy', icon: <PlusCircle className="w-5 h-5" /> },
+  { id: 'create-policy', label: 'Create Guardrail', icon: <PlusCircle className="w-5 h-5" /> },
 ];
 
 export function Sidebar() {
@@ -51,7 +51,7 @@ export function Sidebar() {
             </div>
             {expanded && (
               <span className="font-semibold text-[var(--color-text-primary)] whitespace-nowrap">
-                Policy Registry
+                Guardrail Registry
               </span>
             )}
           </div>

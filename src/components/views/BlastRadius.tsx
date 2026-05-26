@@ -199,7 +199,7 @@ export function BlastRadius() {
         {/* Policy Selector */}
         <div className="p-4 border-b border-[var(--color-border-light)]">
           <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-2">
-            Select Policy to Test
+            Select Guardrail to Test
           </label>
           <select
             value={selectedPolicy?.id || ''}
@@ -392,7 +392,7 @@ export function BlastRadius() {
             <BarChart3 className="w-16 h-16 mb-4 opacity-50" />
             <p className="text-lg font-medium">No test selected</p>
             <p className="text-sm mt-1">
-              Select a policy and run a blast radius test, or view a previous test result
+              Select a guardrail and run a blast radius test, or view a previous test result
             </p>
           </div>
         )}

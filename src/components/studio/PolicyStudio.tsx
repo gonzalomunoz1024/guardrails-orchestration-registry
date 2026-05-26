@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Panel, Group, Separator } from 'react-resizable-panels';
-import { Play, Loader2, Sliders, Radius, Send, Check, Shield } from 'lucide-react';
+import { Play, Loader2, Sliders, Radius, Send, Check, Shield, FileCode2 } from 'lucide-react';
 import { InputModule } from '@/components/sandbox';
 import { OutputPanel } from '@/components/panels';
 import { EditorModal, SubmitPolicyModal } from '@/components/modals';
 import { usePolicyStore, useEvaluationStore, useUIStore } from '@/store';
 import { useEvaluate, useDebounce } from '@/hooks';
-import { cn, isValidJson } from '@/utils';
+import { cn, isValidJson, toGuardrailYaml } from '@/utils';
 import type { GuardrailKind } from '@/types/guardrail.types';
 import { StudioDetailsDrawer } from './StudioDetailsDrawer';
 import { StudioBlastRadiusDrawer } from './StudioBlastRadiusDrawer';
@@ -85,7 +85,7 @@ export function PolicyStudio() {
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [blastOpen, setBlastOpen] = useState(false);
   const [submitOpen, setSubmitOpen] = useState(false);
-  const [expandedEditor, setExpandedEditor] = useState<'input' | 'config' | 'output' | 'rego' | null>(null);
+  const [expandedEditor, setExpandedEditor] = useState<'input' | 'config' | 'output' | 'rego' | 'manifest' | null>(null);
   const [autoRun, setAutoRun] = useState(true);
 
   const policyId = slugifyName(metadata.name);
@@ -122,6 +122,20 @@ export function PolicyStudio() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [debouncedKey, autoRun]);
 
+  const manifestYaml = useMemo(
+    () =>
+      toGuardrailYaml({
+        metadata,
+        resourceType,
+        resourceKind,
+        enforcementType,
+        tags,
+        configEnabled,
+        externalDeps,
+      }),
+    [metadata, resourceType, resourceKind, enforcementType, tags, configEnabled, externalDeps]
+  );
+
   const savedLabel = isDirty
     ? 'Unsaved changes'
     : lastSavedAt
@@ -140,7 +154,7 @@ export function PolicyStudio() {
             <input
               value={metadata.name}
               onChange={(e) => updateMetadata({ name: e.target.value })}
-              placeholder="Untitled policy"
+              placeholder="Untitled guardrail"
               className="w-full bg-transparent text-base font-semibold text-[var(--color-text-primary)] outline-none placeholder:text-[var(--color-text-tertiary)]"
             />
             <div className="flex items-center gap-2 text-xs text-[var(--color-text-tertiary)]">
@@ -169,6 +183,14 @@ export function PolicyStudio() {
           >
             <Radius className="w-4 h-4" />
             Blast radius
+          </button>
+          <button
+            onClick={() => setExpandedEditor('manifest')}
+            title="View the Guardrail manifest the backend will register"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-[var(--radius-md)] text-sm font-medium text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-surface-secondary)] transition-colors"
+          >
+            <FileCode2 className="w-4 h-4" />
+            Manifest
           </button>
 
           <div className="h-5 w-px bg-[var(--color-border-light)] mx-1" />
@@ -254,7 +276,7 @@ export function PolicyStudio() {
       <EditorModal
         isOpen={expandedEditor === 'rego'}
         onClose={() => setExpandedEditor(null)}
-        title="Policy"
+        title="Rego"
         subtitle="Rego policy code"
         language="rego"
         value={regoCode}
@@ -285,9 +307,19 @@ export function PolicyStudio() {
         isOpen={expandedEditor === 'output'}
         onClose={() => setExpandedEditor(null)}
         title="Result"
-        subtitle="Policy evaluation result"
+        subtitle="Guardrail evaluation result"
         language="json"
         value={result ? JSON.stringify(result.result ?? result.error, null, 2) : '{}'}
+        readOnly
+        theme={resolvedTheme}
+      />
+      <EditorModal
+        isOpen={expandedEditor === 'manifest'}
+        onClose={() => setExpandedEditor(null)}
+        title="guardrail.yaml"
+        subtitle="Registration manifest — how the backend assembles the input"
+        language="yaml"
+        value={manifestYaml}
         readOnly
         theme={resolvedTheme}
       />

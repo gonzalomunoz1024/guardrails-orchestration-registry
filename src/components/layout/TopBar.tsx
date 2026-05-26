@@ -86,10 +86,10 @@ function UserMenu({ user, onLogout }: UserMenuProps) {
 
 const viewTitles: Record<string, string> = {
   dashboard: 'Dashboard',
-  policies: 'Policy Catalog',
-  'policy-detail': 'Policy Details',
+  policies: 'Guardrail Catalog',
+  'policy-detail': 'Guardrail Details',
   'blast-radius': 'Blast Radius Testing',
-  'create-policy': 'Create New Policy',
+  'create-policy': 'Create New Guardrail',
 };
 
 export function TopBar() {
@@ -105,7 +105,7 @@ export function TopBar() {
     <header className="h-14 flex items-center justify-between px-6 border-b border-[var(--color-border-light)] bg-[var(--color-surface)]">
       {/* Title */}
       <h1 className="text-lg font-semibold text-[var(--color-text-primary)]">
-        {viewTitles[currentView] || 'Policy Registry'}
+        {viewTitles[currentView] || 'Guardrail Registry'}
       </h1>
 
       {/* Actions */}

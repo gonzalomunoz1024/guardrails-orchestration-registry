@@ -3,7 +3,6 @@ export { useDebounce } from './useDebounce';
 export { useEvaluate } from './useEvaluate';
 export { useInputShape } from './useInputShape';
 export { useGitHubAuth } from './useGitHubAuth';
-export { useCreatePR } from './useCreatePR';
 export { useDatasources, useDatasource, useDatasourceValue } from './useDatasources';
 export {
   usePolicies,

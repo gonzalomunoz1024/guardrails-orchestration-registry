@@ -4,3 +4,4 @@ export * from './validators';
 export * from './guardrailMapper';
 export * from './runtimeConfig';
 export * from './buildInput';
+export * from './guardrailManifest';

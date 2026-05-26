@@ -103,7 +103,7 @@ export function StudioDetailsDrawer({ isOpen, onClose }: StudioDetailsDrawerProp
         {/* Header */}
         <div className="shrink-0 flex items-center justify-between px-6 py-4 border-b border-[var(--color-border-light)]">
           <h2 className="text-base font-semibold text-[var(--color-text-primary)]">
-            Policy details
+            Guardrail details
           </h2>
           <button
             onClick={onClose}
@@ -116,11 +116,11 @@ export function StudioDetailsDrawer({ isOpen, onClose }: StudioDetailsDrawerProp
         {/* Body */}
         <div className="flex-1 min-h-0 overflow-y-auto px-6 py-5 space-y-5">
           <div>
-            <Label>Policy name</Label>
+            <Label>Guardrail name</Label>
             <input
               value={metadata.name}
               onChange={(e) => updateMetadata({ name: e.target.value })}
-              placeholder="e.g., VM Size Limit Policy"
+              placeholder="e.g., VM Size Limit Guardrail"
               className={fieldClass}
             />
           </div>
@@ -130,7 +130,7 @@ export function StudioDetailsDrawer({ isOpen, onClose }: StudioDetailsDrawerProp
             <textarea
               value={metadata.description}
               onChange={(e) => updateMetadata({ description: e.target.value })}
-              placeholder="Describe what this policy does and when it applies…"
+              placeholder="Describe what this guardrail does and when it applies…"
               rows={3}
               className={cn(fieldClass, 'resize-none')}
             />

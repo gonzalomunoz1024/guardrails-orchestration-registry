@@ -174,14 +174,14 @@ export function PolicyDetail() {
   if (!policy) {
     return (
       <div className="flex items-center justify-center h-full">
-        <p className="text-[var(--color-text-tertiary)]">Policy not found</p>
+        <p className="text-[var(--color-text-tertiary)]">Guardrail not found</p>
       </div>
     );
   }
 
   const tabs: { id: Tab; label: string }[] = [
     { id: 'overview', label: 'Overview' },
-    { id: 'code', label: 'Policy Code' },
+    { id: 'code', label: 'Rego' },
     { id: 'tests', label: `Tests (${policy.testCases.length})` },
     { id: 'versions', label: `Versions (${policy.versions.length})` },
     { id: 'config', label: 'Configuration' },
@@ -196,7 +196,7 @@ export function PolicyDetail() {
           className="flex items-center gap-2 text-sm text-[var(--color-info)] hover:underline mb-4"
         >
           <ArrowLeft className="w-4 h-4" />
-          Back to Policies
+          Back to Guardrails
         </button>
 
         <div className="flex items-start justify-between">
@@ -412,7 +412,7 @@ export function PolicyDetail() {
             ) : (
               <div className="flex flex-col items-center justify-center h-48 text-[var(--color-text-tertiary)]">
                 <p className="text-lg font-medium">No tests defined</p>
-                <p className="text-sm">Add test cases to validate this policy</p>
+                <p className="text-sm">Add test cases to validate this guardrail</p>
               </div>
             )}
           </div>

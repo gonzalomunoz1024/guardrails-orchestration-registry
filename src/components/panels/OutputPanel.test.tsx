@@ -15,14 +15,14 @@ describe('OutputPanel', () => {
   it('displays empty state when no result', () => {
     render(<OutputPanel />);
     expect(
-      screen.getByText(/click "evaluate" to run the policy/i)
+      screen.getByText(/run the guardrail to see the decision/i)
     ).toBeInTheDocument();
   });
 
   it('displays loading state when evaluating', () => {
     useEvaluationStore.setState({ isEvaluating: true });
     render(<OutputPanel />);
-    expect(screen.getByText(/evaluating policy/i)).toBeInTheDocument();
+    expect(screen.getByText(/evaluating guardrail/i)).toBeInTheDocument();
   });
 
   it('displays allowed state for successful allow decision', () => {

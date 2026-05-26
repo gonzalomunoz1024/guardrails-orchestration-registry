@@ -98,7 +98,7 @@ export function StudioBlastRadiusDrawer({ isOpen, onClose, guardrailInfo }: Stud
               Blast radius
             </h2>
             <p className="text-xs text-[var(--color-text-tertiary)]">
-              Evaluate this policy against real test cases to gauge its impact
+              Evaluate this guardrail against real test cases to gauge its impact
             </p>
           </div>
           <button

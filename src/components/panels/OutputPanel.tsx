@@ -77,7 +77,7 @@ export function OutputPanel({ className, onExpand }: OutputPanelProps) {
           <div className="flex flex-col items-center justify-center h-full gap-3">
             <Loader2 className="w-8 h-8 animate-spin text-[var(--color-info)]" />
             <span className="text-sm text-[var(--color-text-secondary)]">
-              Evaluating policy…
+              Evaluating guardrail…
             </span>
           </div>
         ) : result ? (
@@ -149,7 +149,7 @@ export function OutputPanel({ className, onExpand }: OutputPanelProps) {
         ) : (
           <div className="flex flex-col items-center justify-center h-full text-center text-[var(--color-text-tertiary)] gap-1">
             <p className="text-sm">No result yet</p>
-            <p className="text-xs">Run the policy to see the decision here.</p>
+            <p className="text-xs">Run the guardrail to see the decision here.</p>
           </div>
         )}
       </div>
