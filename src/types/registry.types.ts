@@ -1,12 +1,25 @@
 export type PolicyStatus = 'draft' | 'review' | 'approved' | 'active' | 'deprecated';
 
-// Frontend resource types (lowercase for display)
-// Note: guardrail.types.ts has backend ResourceType with UPPERCASE values
-export type FrontendResourceType = 'lightspeed' | 'vmforge' | 'other';
+// Canonical guardrail enums live in guardrail.types.ts; re-export for app-wide use.
+export type { ResourceKind, Stage, EnforcementType, GuardrailStatus } from './guardrail.types';
+import type { ResourceKind, Stage, EnforcementType } from './guardrail.types';
 
-// Alias for simpler usage in frontend components
-export type ResourceType = FrontendResourceType;
-export type ResourceKind = string; // Free-form for now, can be constrained later
+// Presentation labels for the SCREAMING_SNAKE wire enums.
+export const RESOURCE_KIND_LABELS: Record<ResourceKind, string> = {
+  CNAME: 'CNAME',
+  MONGODB: 'MongoDB',
+  VIRTUAL_MACHINE: 'Virtual Machine',
+};
+export const STAGE_LABELS: Record<Stage, string> = {
+  PRECHECK: 'PreCheck',
+  APPROVAL: 'Approval',
+  POSTCHECK: 'PostCheck',
+};
+export const ENFORCEMENT_LABELS: Record<EnforcementType, string> = {
+  MANDATORY: 'Mandatory',
+  OPTIONAL: 'Optional',
+  WARNING: 'Warning',
+};
 
 // Keep for backwards compatibility during migration
 export type PolicySeverity = 'low' | 'medium' | 'high' | 'critical';
@@ -42,17 +55,19 @@ export interface RegistryPolicy {
   id: string;
   name: string;
   description: string;
-  resourceType: ResourceType;
-  resourceKind: string;
+  resourceKind: ResourceKind;
+  stage: Stage;
+  enforcementType: EnforcementType;
   status: PolicyStatus;
   tags: string[];
   author: string;
   createdAt: string;
-  updatedAt: string;
   currentVersion: string;
   versions: PolicyVersion[];
   regoCode: string;
   configJson: string;
+  /** Path/URL to the published input schema artifact, if any. */
+  inputSchemaRef?: string;
   testCases: PolicyTestCase[];
   stats: PolicyStats;
   dependencies?: string[];

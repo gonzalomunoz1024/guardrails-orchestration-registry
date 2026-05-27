@@ -1,7 +1,15 @@
 import { useEffect, useState } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Sidebar, TopBar } from '@/components/layout';
-import { Dashboard, PolicyCatalog, PolicyDetail, BlastRadius } from '@/components/views';
+import {
+  Dashboard,
+  PolicyCatalog,
+  PolicyDetail,
+  BlastRadius,
+  SuiteCatalog,
+  SuiteDetail,
+  SuiteBuilder,
+} from '@/components/views';
 import { PolicyStudio } from '@/components/studio';
 import { DeviceFlowLogin } from '@/components/auth/DeviceFlowLogin';
 import { useRegistryStore } from '@/store/registryStore';
@@ -57,6 +65,12 @@ function AppContent() {
         return <BlastRadius />;
       case 'create-policy':
         return <PolicyStudio />;
+      case 'suites':
+        return <SuiteCatalog />;
+      case 'suite-detail':
+        return <SuiteDetail />;
+      case 'suite-builder':
+        return <SuiteBuilder />;
       default:
         return <Dashboard />;
     }

@@ -3,7 +3,6 @@ import {
   Filter,
   Grid,
   List,
-  Tag,
   Clock,
   CheckCircle,
   AlertCircle,
@@ -12,20 +11,11 @@ import {
   Loader2,
   RefreshCw,
   Plus,
-  Zap,
-  Server,
 } from 'lucide-react';
 import { useRegistryStore } from '@/store/registryStore';
 import { usePolicies } from '@/hooks';
-import { mockPolicies } from '@/data/mockData';
 import { cn } from '@/utils';
-import type { RegistryPolicy, ResourceType, PolicyStatus } from '@/types';
-
-const resourceTypes: { value: ResourceType | null; label: string }[] = [
-  { value: null, label: 'All Resource Types' },
-  { value: 'lightspeed', label: 'Lightspeed' },
-  { value: 'vmforge', label: 'VMForge' },
-];
+import { RESOURCE_KIND_LABELS, type RegistryPolicy, type PolicyStatus } from '@/types';
 
 const statuses: { value: PolicyStatus | null; label: string }[] = [
   { value: null, label: 'All Statuses' },
@@ -34,28 +24,6 @@ const statuses: { value: PolicyStatus | null; label: string }[] = [
   { value: 'draft', label: 'Draft' },
   { value: 'deprecated', label: 'Deprecated' },
 ];
-
-function getResourceTypeIcon(resourceType: ResourceType) {
-  switch (resourceType) {
-    case 'lightspeed':
-      return <Zap className="w-4 h-4 text-[var(--color-warning)]" />;
-    case 'vmforge':
-      return <Server className="w-4 h-4 text-[var(--color-info)]" />;
-    default:
-      return <Tag className="w-4 h-4" />;
-  }
-}
-
-function getResourceTypeColor(resourceType: ResourceType) {
-  switch (resourceType) {
-    case 'lightspeed':
-      return 'bg-[var(--color-warning-bg)] text-[var(--color-warning)]';
-    case 'vmforge':
-      return 'bg-[var(--color-info-bg)] text-[var(--color-info)]';
-    default:
-      return 'bg-[var(--color-surface-secondary)] text-[var(--color-text-secondary)]';
-  }
-}
 
 function getStatusIcon(status: PolicyStatus) {
   switch (status) {
@@ -93,9 +61,6 @@ function PolicyTable({ policies, onPolicyClick }: PolicyTableProps) {
               Guardrail
             </th>
             <th className="px-4 py-3 text-left text-xs font-semibold text-[var(--color-text-secondary)] uppercase tracking-wider">
-              Resource Type
-            </th>
-            <th className="px-4 py-3 text-left text-xs font-semibold text-[var(--color-text-secondary)] uppercase tracking-wider">
               Resource Kind
             </th>
             <th className="px-4 py-3 text-left text-xs font-semibold text-[var(--color-text-secondary)] uppercase tracking-wider">
@@ -126,14 +91,8 @@ function PolicyTable({ policies, onPolicyClick }: PolicyTableProps) {
                 </div>
               </td>
               <td className="px-4 py-4">
-                <span className={cn('inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium', getResourceTypeColor(policy.resourceType))}>
-                  {getResourceTypeIcon(policy.resourceType)}
-                  <span className="capitalize">{policy.resourceType}</span>
-                </span>
-              </td>
-              <td className="px-4 py-4">
                 <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-[var(--color-surface-secondary)] text-[var(--color-text-secondary)]">
-                  {policy.resourceKind}
+                  {RESOURCE_KIND_LABELS[policy.resourceKind]}
                 </span>
               </td>
               <td className="px-4 py-4">
@@ -186,9 +145,8 @@ function PolicyCard({ policy, onClick }: PolicyCardProps) {
       <div className="flex items-start justify-between gap-3">
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 mb-1">
-            <span className={cn('inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium', getResourceTypeColor(policy.resourceType))}>
-              {getResourceTypeIcon(policy.resourceType)}
-              <span className="capitalize">{policy.resourceType}</span>
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-[var(--color-surface-secondary)] text-[var(--color-text-secondary)]">
+              {RESOURCE_KIND_LABELS[policy.resourceKind]}
             </span>
             <span className="flex items-center gap-1 text-xs text-[var(--color-text-tertiary)]">
               {getStatusIcon(policy.status)}
@@ -253,10 +211,8 @@ type ViewMode = 'grid' | 'table';
 export function PolicyCatalog() {
   const {
     searchQuery,
-    selectedResourceType,
     selectedResourceKind,
     selectedStatus,
-    setSelectedResourceType,
     setSelectedResourceKind,
     setSelectedStatus,
     navigateToPolicy,
@@ -270,7 +226,7 @@ export function PolicyCatalog() {
   const { data: backendPolicies, isLoading, error, refetch } = usePolicies();
 
   // Use backend data if available, otherwise fall back to mock data
-  const policies = backendPolicies && backendPolicies.length > 0 ? backendPolicies : mockPolicies;
+  const policies = backendPolicies ?? [];
 
   // Get unique resource kinds from policies for autocomplete
   const uniqueResourceKinds = useMemo(() => {
@@ -286,13 +242,12 @@ export function PolicyCatalog() {
         policy.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
         policy.tags.some((tag) => tag.toLowerCase().includes(searchQuery.toLowerCase()));
 
-      const matchesResourceType = !selectedResourceType || policy.resourceType === selectedResourceType;
       const matchesResourceKind = !selectedResourceKind || policy.resourceKind.toLowerCase().includes(selectedResourceKind.toLowerCase());
       const matchesStatus = !selectedStatus || policy.status === selectedStatus;
 
-      return matchesSearch && matchesResourceType && matchesResourceKind && matchesStatus;
+      return matchesSearch && matchesResourceKind && matchesStatus;
     });
-  }, [searchQuery, selectedResourceType, selectedResourceKind, selectedStatus, policies]);
+  }, [searchQuery, selectedResourceKind, selectedStatus, policies]);
 
   return (
     <div className="h-full flex flex-col">
@@ -301,23 +256,6 @@ export function PolicyCatalog() {
         <div className="flex items-center justify-between gap-4">
           <div className="flex items-center gap-3">
             <Filter className="w-5 h-5 text-[var(--color-text-tertiary)]" />
-
-            {/* Resource Type Filter */}
-            <select
-              value={selectedResourceType || ''}
-              onChange={(e) => setSelectedResourceType((e.target.value as ResourceType) || null)}
-              className={cn(
-                'px-3 py-2 rounded-[var(--radius-md)] text-sm',
-                'bg-[var(--color-surface-secondary)] text-[var(--color-text-primary)]',
-                'border border-transparent focus:border-[var(--color-info)] focus:outline-none'
-              )}
-            >
-              {resourceTypes.map((rt) => (
-                <option key={rt.value || 'all'} value={rt.value || ''}>
-                  {rt.label}
-                </option>
-              ))}
-            </select>
 
             {/* Resource Kind Filter */}
             <div className="relative">

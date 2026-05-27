@@ -19,11 +19,9 @@ import { Octokit } from 'octokit';
 import { cn, toGuardrailYaml, toGuardrailConfigurationYaml } from '@/utils';
 import { useAuthStore } from '@/store/authStore';
 import { usePolicyStore } from '@/store';
-import { useResourceTypeConfig } from '@/hooks/useResourceTypeConfig';
-import type { ResourceType } from '@/types/registry.types';
+import { useGuardrailConfig } from '@/hooks/useGuardrailConfig';
 import { ComingSoonBanner } from '@/components/common/ComingSoonBanner';
-import type { EnforcementType, GuardrailKind } from '@/types/guardrail.types';
-import type { FrontendResourceType } from '@/types/registry.types';
+import type { EnforcementType, Stage, ResourceKind, GuardrailStatus } from '@/types/guardrail.types';
 
 // Shared PAT for GitHub operations (bypasses OAuth App restrictions)
 const GITHUB_PAT = import.meta.env.VITE_GITHUB_PAT;
@@ -33,11 +31,10 @@ interface PolicyMetadata {
   name: string;
   description: string;
   version: string;
-  status: string;
+  status: GuardrailStatus;
   enforcementType: EnforcementType;
-  kind: GuardrailKind;
-  resourceType: string;
-  resourceKind?: string;
+  stage: Stage;
+  resourceKind: ResourceKind;
   owner: string;
   tags: string[];
 }
@@ -49,8 +46,6 @@ interface SubmitPolicyModalProps {
   regoCode: string;
   configJson: string;
   metadata: PolicyMetadata;
-  /** Resource type for determining PR creation availability */
-  resourceType: FrontendResourceType;
 }
 
 type SubmitStatus = 'idle' | 'creating' | 'success' | 'error';
@@ -68,15 +63,14 @@ export function SubmitPolicyModal({
   regoCode,
   configJson,
   metadata,
-  resourceType,
 }: SubmitPolicyModalProps) {
   const { user } = useAuthStore();
-  const { externalDeps, configEnabled } = usePolicyStore();
-  const { config, prCreationEnabled, prCreationDisabledMessage } = useResourceTypeConfig(resourceType);
+  const { externalDeps, configEnabled, inputSchemaJson, inputExamples } = usePolicyStore();
+  const { config, prCreationEnabled, prCreationDisabledMessage } = useGuardrailConfig();
 
-  // Get GitHub repo config from resource type config
-  const UPSTREAM_OWNER = config.prCreation.github?.owner ?? '';
-  const UPSTREAM_REPO = config.prCreation.github?.repo ?? '';
+  // Global GitHub publish target.
+  const UPSTREAM_OWNER = config.github.owner;
+  const UPSTREAM_REPO = config.github.repo;
   const [githubStatus, setGithubStatus] = useState<SubmitStatus>('idle');
   const [githubError, setGithubError] = useState<string | null>(null);
   const [stepLogs, setStepLogs] = useState<StepLog[]>([]);
@@ -134,6 +128,17 @@ export function SubmitPolicyModal({
   // Generate the kube-like Guardrail manifest (guardrails/<id>.yaml). This is the
   // registration spec the backend reads to assemble the OPA input at enforcement
   // time (config lookup + external dependency fetches). See docs/guardrail-manifest.md.
+  // Immutable, versioned artifact directory: guardrails/<id>/<version>/...
+  const versionDir = `guardrails/${policyId}/${metadata.version}`;
+
+  const slugExample = (name: string, i: number): string =>
+    name.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || `example-${i + 1}`;
+
+  // Example payloads to publish under examples/.
+  const exampleArtifacts = inputExamples
+    .filter((e) => e.payload.trim())
+    .map((e, i) => ({ file: `examples/${slugExample(e.name, i)}.json`, payload: e.payload }));
+
   const generateManifestYaml = (): string =>
     toGuardrailYaml({
       metadata: {
@@ -143,40 +148,46 @@ export function SubmitPolicyModal({
         version: metadata.version,
         author: user?.name || user?.login || metadata.owner,
       },
-      resourceType: resourceType as ResourceType,
-      resourceKind: metadata.resourceKind ?? '',
+      resourceKind: metadata.resourceKind,
       enforcementType: metadata.enforcementType,
+      stage: metadata.stage,
+      status: metadata.status,
       tags: metadata.tags,
       configEnabled,
       externalDeps,
-      stage: metadata.kind === 'POSTCHECK' ? 'POSTCHECK' : 'PRECHECK',
-      policyFile: `${policyId}.rego`,
-      configFile: `${policyId}.yaml`,
+      policyFile: 'policy.rego',
+      configFile: 'configuration.yaml',
+      inputSchema: { file: 'input-schema.json', examples: exampleArtifacts.map((e) => e.file) },
     });
 
-  // Generate the kube-like GuardrailConfiguration (configurations/<id>.yaml).
+  // Generate the kube-like GuardrailConfiguration (configuration.yaml).
   const generateConfigYaml = (): string =>
     toGuardrailConfigurationYaml({ name: metadata.name, data: getConfigObject() });
 
-  // Download as ZIP
+  /** The full set of files published for this guardrail version (relative paths). */
+  const buildArtifactFiles = (): { path: string; content: string }[] => {
+    const files: { path: string; content: string }[] = [
+      { path: `${versionDir}/policy.rego`, content: regoCode },
+      { path: `${versionDir}/guardrail.yaml`, content: generateManifestYaml() },
+      { path: `${versionDir}/input-schema.json`, content: inputSchemaJson || '{}' },
+    ];
+    if (configEnabled) {
+      files.push({ path: `${versionDir}/configuration.yaml`, content: generateConfigYaml() });
+    }
+    for (const ex of exampleArtifacts) {
+      files.push({ path: `${versionDir}/${ex.file}`, content: ex.payload });
+    }
+    return files;
+  };
+
+  // Download as ZIP (mirrors the published versioned layout)
   const handleDownloadZip = async () => {
     const zip = new JSZip();
-
-    // Create folder structure
-    const regoFolder = zip.folder('rego');
-    const guardrailsFolder = zip.folder('guardrails');
-
-    // Add files
-    regoFolder?.file(`${policyId}.rego`, regoCode);
-    guardrailsFolder?.file(`${policyId}.yaml`, generateManifestYaml());
-    // Configuration is only published when the guardrail uses it.
-    if (configEnabled) {
-      zip.folder('configurations')?.file(`${policyId}.yaml`, generateConfigYaml());
+    for (const f of buildArtifactFiles()) {
+      zip.file(f.path, f.content);
     }
-
-    // Generate and download
     const content = await zip.generateAsync({ type: 'blob' });
-    saveAs(content, `${policyId}-guardrail.zip`);
+    saveAs(content, `${policyId}-${metadata.version}.zip`);
   };
 
   // Create GitHub PR using shared PAT (bypasses OAuth App restrictions)
@@ -241,10 +252,40 @@ export function SubmitPolicyModal({
       return;
     }
 
-    // Step 3: Create blobs for all files
+    // Step 2b: Enforce immutability — the (guardrailId, version) directory must not exist.
+    updateStep('Check version is new', 'running', versionDir);
+    try {
+      await octokit.rest.repos.getContent({
+        owner: UPSTREAM_OWNER,
+        repo: UPSTREAM_REPO,
+        path: versionDir,
+        ref: defaultBranch,
+      });
+      // If getContent succeeded, the version already exists — refuse to overwrite.
+      updateStep('Check version is new', 'error', 'Version already exists');
+      setGithubError(
+        `Version ${metadata.version} of "${policyId}" already exists and is immutable. ` +
+          `Bump the version (updates increment the minor version) before publishing.`
+      );
+      setGithubStatus('error');
+      return;
+    } catch (error) {
+      const status = (error as { status?: number }).status;
+      if (status && status !== 404) {
+        const msg = error instanceof Error ? error.message : 'Unknown error';
+        updateStep('Check version is new', 'error', msg);
+        setGithubError(`Failed to verify version: ${msg}`);
+        setGithubStatus('error');
+        return;
+      }
+      // 404 = path does not exist → safe to publish this version.
+      updateStep('Check version is new', 'success', `${metadata.version} is new`);
+    }
+
+    // Step 3: Create blobs for all artifact files
     updateStep('Create file blobs', 'running');
-    let regoBlob: string, guardrailBlob: string;
-    let configBlob: string | null = null;
+    const artifactFiles = buildArtifactFiles();
+    let treeEntries: { path: string; mode: '100644'; type: 'blob'; sha: string }[];
     try {
       const createBlob = (content: string) =>
         octokit.rest.git.createBlob({
@@ -254,15 +295,13 @@ export function SubmitPolicyModal({
           encoding: 'base64',
         });
 
-      // Configuration blob is only created when the guardrail uses configuration.
-      const blobResults = await Promise.all([
-        createBlob(regoCode),
-        createBlob(generateManifestYaml()),
-        ...(configEnabled ? [createBlob(generateConfigYaml())] : []),
-      ]);
-      regoBlob = blobResults[0].data.sha;
-      guardrailBlob = blobResults[1].data.sha;
-      if (configEnabled) configBlob = blobResults[2].data.sha;
+      const blobResults = await Promise.all(artifactFiles.map((f) => createBlob(f.content)));
+      treeEntries = artifactFiles.map((f, i) => ({
+        path: f.path,
+        mode: '100644',
+        type: 'blob',
+        sha: blobResults[i].data.sha,
+      }));
       updateStep('Create file blobs', 'success', `${blobResults.length} blobs created`);
     } catch (error) {
       const msg = error instanceof Error ? error.message : 'Unknown error';
@@ -295,28 +334,11 @@ export function SubmitPolicyModal({
     updateStep('Create tree', 'running');
     let newTreeSha: string;
     try {
-      const tree: {
-        path: string;
-        mode: '100644';
-        type: 'blob';
-        sha: string;
-      }[] = [
-        { path: `rego/${policyId}.rego`, mode: '100644', type: 'blob', sha: regoBlob },
-        { path: `guardrails/${policyId}.yaml`, mode: '100644', type: 'blob', sha: guardrailBlob },
-      ];
-      if (configEnabled && configBlob) {
-        tree.push({
-          path: `configurations/${policyId}.yaml`,
-          mode: '100644',
-          type: 'blob',
-          sha: configBlob,
-        });
-      }
       const { data: newTree } = await octokit.rest.git.createTree({
         owner: UPSTREAM_OWNER,
         repo: UPSTREAM_REPO,
         base_tree: baseTreeSha,
-        tree,
+        tree: treeEntries,
       });
       newTreeSha = newTree.sha;
       updateStep('Create tree', 'success', `Tree: ${newTreeSha.substring(0, 7)}`);
@@ -335,7 +357,7 @@ export function SubmitPolicyModal({
       const { data: newCommit } = await octokit.rest.git.createCommit({
         owner: UPSTREAM_OWNER,
         repo: UPSTREAM_REPO,
-        message: `Add guardrail: ${policyId}\n\nSubmitted by: @${user.login}\n\nFiles added:\n- rego/${policyId}.rego\n- guardrails/${policyId}.yaml${configEnabled ? `\n- configurations/${policyId}.yaml` : ''}`,
+        message: `Add guardrail ${policyId}@${metadata.version}\n\nSubmitted by: @${user.login}\n\nFiles added:\n${artifactFiles.map((f) => `- ${f.path}`).join('\n')}`,
         tree: newTreeSha,
         parents: [baseSha],
       });
@@ -378,8 +400,7 @@ ${metadata.description}
 **@${user.login}** via OPA Guardrail Registry
 
 ### Files Added
-- \`rego/${policyId}.rego\` - Rego policy code
-- \`guardrails/${policyId}.yaml\` - Guardrail manifest (input assembly)${configEnabled ? `\n- \`configurations/${policyId}.yaml\` - Guardrail configuration` : ''}
+${artifactFiles.map((f) => `- \`${f.path}\``).join('\n')}
 
 ### Guardrail Details
 | Field | Value |
@@ -389,9 +410,8 @@ ${metadata.description}
 | **Version** | ${metadata.version} |
 | **Status** | ${metadata.status} |
 | **Enforcement** | ${metadata.enforcementType} |
-| **Kind** | ${metadata.kind} |
-| **Resource Type** | ${metadata.resourceType} |
-${metadata.resourceKind ? `| **Resource Kind** | ${metadata.resourceKind} |` : ''}
+| **Stage** | ${metadata.stage} |
+| **Resource Kind** | ${metadata.resourceKind} |
 | **Tags** | ${metadata.tags.length > 0 ? metadata.tags.join(', ') : 'None'} |
 
 ---
@@ -477,21 +497,14 @@ ${metadata.resourceKind ? `| **Resource Kind** | ${metadata.resourceKind} |` : '
                 Files to be created
               </span>
             </div>
+            <div className="mb-1 text-xs text-[var(--color-text-tertiary)]">{versionDir}/</div>
             <div className="space-y-1 font-mono text-sm text-[var(--color-text-secondary)]">
-              <div className="flex items-center gap-2">
-                <span className="text-[var(--color-info)]">rego/</span>
-                <span>{policyId}.rego</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="text-[var(--color-success)]">guardrails/</span>
-                <span>{policyId}.yaml</span>
-              </div>
-              {configEnabled && (
-                <div className="flex items-center gap-2">
-                  <span className="text-[var(--color-warning)]">configurations/</span>
-                  <span>{policyId}.yaml</span>
+              {buildArtifactFiles().map((f) => (
+                <div key={f.path} className="flex items-center gap-2">
+                  <span className="text-[var(--color-text-tertiary)]">└</span>
+                  <span>{f.path.slice(versionDir.length + 1)}</span>
                 </div>
-              )}
+              ))}
             </div>
           </div>
 

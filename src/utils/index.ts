@@ -7,3 +7,5 @@ export * from './buildInput';
 export * from './guardrailManifest';
 export * from './blastRadiusReport';
 export * from './regoError';
+export * from './version';
+export * from './deriveSchema';

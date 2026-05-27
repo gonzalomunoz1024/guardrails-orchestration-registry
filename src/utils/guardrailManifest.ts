@@ -1,8 +1,12 @@
 import yaml from 'js-yaml';
 import { VAULT_ADDRESS, CUSTOM_SERVICE_ID } from '@/services/external/externalServices';
 import type { ExternalDependency, ExternalParam, PolicyMetadata } from '@/types';
-import type { ResourceType } from '@/types/registry.types';
-import type { EnforcementType } from '@/types/guardrail.types';
+import type { EnforcementType, Stage, ResourceKind } from '@/types/guardrail.types';
+
+export interface ManifestInputSchema {
+  file: string;
+  examples: string[];
+}
 
 /**
  * Builds the kube-like Guardrail manifest (`guardrails.dev/v1alpha1`) from the
@@ -19,17 +23,18 @@ export const GUARDRAIL_API_VERSION = 'guardrails.dev/v1alpha1';
 
 export interface GuardrailManifestArgs {
   metadata: PolicyMetadata;
-  resourceType: ResourceType;
-  resourceKind: string;
+  resourceKind: ResourceKind;
   enforcementType: EnforcementType;
+  stage: Stage;
+  status?: string;
   tags: string[];
   configEnabled: boolean;
   externalDeps: ExternalDependency[];
-  /** PRECHECK | POSTCHECK — defaults to PRECHECK (the only stage the studio authors today). */
-  stage?: 'PRECHECK' | 'POSTCHECK';
-  /** Sibling artifact filenames; default to guardrail.rego / configuration.json. */
+  /** Sibling artifact filenames; default to policy.rego / configuration.yaml. */
   policyFile?: string;
   configFile?: string;
+  /** Published input schema contract reference. */
+  inputSchema?: ManifestInputSchema;
 }
 
 function slugify(name: string): string {
@@ -98,14 +103,14 @@ function encodeDependency(dep: ExternalDependency): Record<string, unknown> {
 }
 
 export function buildGuardrailManifest(args: GuardrailManifestArgs): Record<string, unknown> {
-  const { metadata, resourceType, resourceKind, enforcementType, tags, configEnabled, externalDeps } =
+  const { metadata, resourceKind, enforcementType, stage, tags, configEnabled, externalDeps } =
     args;
   const name = slugify(metadata.name || 'untitled-guardrail');
 
   const meta: Record<string, unknown> = {
     name,
     displayName: metadata.name || 'Untitled guardrail',
-    version: metadata.version || '1.0.0',
+    version: metadata.version || '1.0',
   };
   if (metadata.description) meta.description = metadata.description;
   if (metadata.author) meta.owner = metadata.author;
@@ -113,13 +118,13 @@ export function buildGuardrailManifest(args: GuardrailManifestArgs): Record<stri
 
   const spec: Record<string, unknown> = {
     enforcement: enforcementType,
-    stage: args.stage ?? 'PRECHECK',
+    stage,
+    ...(args.status ? { status: args.status } : {}),
     target: {
-      resourceType: resourceType.toUpperCase(),
-      ...(resourceKind ? { resourceKind } : {}),
+      resourceKind,
     },
     policy: {
-      file: args.policyFile ?? 'guardrail.rego',
+      file: args.policyFile ?? 'policy.rego',
       package: `data.${name.replace(/-/g, '_')}`,
     },
     document: {
@@ -127,9 +132,16 @@ export function buildGuardrailManifest(args: GuardrailManifestArgs): Record<stri
     },
   };
 
+  if (args.inputSchema) {
+    spec.inputSchema = {
+      file: args.inputSchema.file,
+      ...(args.inputSchema.examples.length > 0 ? { examples: args.inputSchema.examples } : {}),
+    };
+  }
+
   if (configEnabled) {
     spec.configuration = {
-      file: args.configFile ?? 'configuration.json',
+      file: args.configFile ?? 'configuration.yaml',
       lookup: { table: 'guardrail_configuration', onMissing: 'fail' },
     };
   }

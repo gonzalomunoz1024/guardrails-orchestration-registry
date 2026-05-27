@@ -6,6 +6,7 @@ import {
   PlusCircle,
   Settings,
   Shield,
+  Layers,
 } from 'lucide-react';
 import { useRegistryStore, type ViewType } from '@/store/registryStore';
 import { cn } from '@/utils';
@@ -20,6 +21,7 @@ interface NavItem {
 const navItems: NavItem[] = [
   { id: 'dashboard', label: 'Dashboard', icon: <LayoutDashboard className="w-5 h-5" /> },
   { id: 'policies', label: 'Guardrails', icon: <FileText className="w-5 h-5" /> },
+  { id: 'suites', label: 'Suites', icon: <Layers className="w-5 h-5" /> },
   { id: 'blast-radius', label: 'Blast Radius', icon: <Radius className="w-5 h-5" /> },
   { id: 'create-policy', label: 'Create Guardrail', icon: <PlusCircle className="w-5 h-5" /> },
 ];
@@ -28,6 +30,12 @@ export function Sidebar() {
   const { currentView, setView } = useRegistryStore();
   // Collapsed to an icon rail by default; expands while hovered.
   const [expanded, setExpanded] = useState(false);
+
+  // Keep the section lit across its sub-views (detail/builder).
+  const isActive = (id: ViewType) =>
+    currentView === id ||
+    (id === 'suites' && (currentView === 'suite-detail' || currentView === 'suite-builder')) ||
+    (id === 'policies' && currentView === 'policy-detail');
 
   return (
     // Fixed-width rail footprint keeps page content from shifting; the panel
@@ -65,7 +73,7 @@ export function Sidebar() {
               onClick={() => setView(item.id)}
               className={cn(
                 'w-full flex items-center gap-3 px-3 py-2.5 rounded-[var(--radius-md)] transition-all',
-                currentView === item.id
+                isActive(item.id)
                   ? 'bg-[var(--color-info)] text-white'
                   : 'text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-secondary)] hover:text-[var(--color-text-primary)]',
                 !expanded && 'justify-center px-2'

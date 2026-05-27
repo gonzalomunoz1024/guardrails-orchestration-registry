@@ -1,13 +1,15 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import type { ResourceKind, Stage, EnforcementType, GuardrailStatus } from '@/types/guardrail.types';
 
 /** A locally saved guardrail draft (created via "Save draft" in the studio). */
 export interface GuardrailDraft {
   id: string;
   name: string;
-  resourceType: string;
-  resourceKind?: string;
-  enforcementType: string;
+  resourceKind: ResourceKind;
+  stage: Stage;
+  enforcementType: EnforcementType;
+  status: GuardrailStatus;
   updatedAt: string;
 }
 

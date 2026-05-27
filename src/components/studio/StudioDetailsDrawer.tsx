@@ -2,23 +2,45 @@ import { useEffect, useState } from 'react';
 import { X, Plus } from 'lucide-react';
 import { usePolicyStore } from '@/store';
 import { cn } from '@/utils';
-import type { ResourceType } from '@/types/registry.types';
-import type { EnforcementType } from '@/types/guardrail.types';
+import {
+  RESOURCE_KIND_LABELS,
+  STAGE_LABELS,
+  ENFORCEMENT_LABELS,
+} from '@/types/registry.types';
+import type {
+  ResourceKind,
+  Stage,
+  EnforcementType,
+  GuardrailStatus,
+} from '@/types/guardrail.types';
 
 interface StudioDetailsDrawerProps {
   isOpen: boolean;
   onClose: () => void;
 }
 
-const resourceTypes: { value: ResourceType; label: string }[] = [
-  { value: 'lightspeed', label: 'Lightspeed' },
-  { value: 'vmforge', label: 'VMForge' },
-  { value: 'other', label: 'Other' },
+const resourceKinds: { value: ResourceKind; label: string }[] = [
+  { value: 'CNAME', label: RESOURCE_KIND_LABELS.CNAME },
+  { value: 'MONGODB', label: RESOURCE_KIND_LABELS.MONGODB },
+  { value: 'VIRTUAL_MACHINE', label: RESOURCE_KIND_LABELS.VIRTUAL_MACHINE },
+];
+
+const stages: { value: Stage; label: string }[] = [
+  { value: 'PRECHECK', label: STAGE_LABELS.PRECHECK },
+  { value: 'APPROVAL', label: STAGE_LABELS.APPROVAL },
+  { value: 'POSTCHECK', label: STAGE_LABELS.POSTCHECK },
+];
+
+const statuses: { value: GuardrailStatus; label: string }[] = [
+  { value: 'DRAFT', label: 'Draft' },
+  { value: 'ACTIVE', label: 'Active' },
+  { value: 'INACTIVE', label: 'Inactive' },
 ];
 
 const enforcementTypes: { value: EnforcementType; label: string; hint: string }[] = [
-  { value: 'MANDATORY', label: 'Mandatory', hint: 'Must pass for the action to proceed' },
-  { value: 'OPTIONAL', label: 'Optional', hint: 'Advisory — failures are logged but allowed' },
+  { value: 'MANDATORY', label: ENFORCEMENT_LABELS.MANDATORY, hint: 'Must pass for the action to proceed' },
+  { value: 'OPTIONAL', label: ENFORCEMENT_LABELS.OPTIONAL, hint: 'Advisory — failures are logged but allowed' },
+  { value: 'WARNING', label: ENFORCEMENT_LABELS.WARNING, hint: 'Surfaces a warning but never blocks' },
 ];
 
 const fieldClass =
@@ -65,10 +87,12 @@ export function StudioDetailsDrawer({ isOpen, onClose }: StudioDetailsDrawerProp
   const {
     metadata,
     updateMetadata,
-    resourceType,
-    setResourceType,
     resourceKind,
     setResourceKind,
+    stage,
+    setStage,
+    status,
+    setStatus,
     enforcementType,
     setEnforcementType,
     tags,
@@ -124,6 +148,10 @@ export function StudioDetailsDrawer({ isOpen, onClose }: StudioDetailsDrawerProp
               placeholder="e.g., VM Size Limit Guardrail"
               className={fieldClass}
             />
+            <p className="mt-1.5 text-xs text-[var(--color-text-tertiary)]">
+              Version <code className="font-mono">{metadata.version}</code> · updating a published
+              guardrail bumps the minor version.
+            </p>
           </div>
 
           <div>
@@ -138,18 +166,18 @@ export function StudioDetailsDrawer({ isOpen, onClose }: StudioDetailsDrawerProp
           </div>
 
           <div>
-            <Label>Resource type</Label>
-            <Segmented value={resourceType} options={resourceTypes} onChange={setResourceType} />
+            <Label>Resource kind</Label>
+            <Segmented value={resourceKind} options={resourceKinds} onChange={setResourceKind} />
           </div>
 
           <div>
-            <Label>Resource kind</Label>
-            <input
-              value={resourceKind}
-              onChange={(e) => setResourceKind(e.target.value)}
-              placeholder={resourceType === 'lightspeed' ? 'e.g., playbook' : 'e.g., virtual_machine'}
-              className={fieldClass}
-            />
+            <Label>Stage</Label>
+            <Segmented value={stage} options={stages} onChange={setStage} />
+          </div>
+
+          <div>
+            <Label>Status</Label>
+            <Segmented value={status} options={statuses} onChange={setStatus} />
           </div>
 
           <div>

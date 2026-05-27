@@ -9,11 +9,14 @@ import type {
   GuardrailDefinition,
   GuardrailConfiguration,
   GuardrailStatus,
+  EnforcementType,
+  Stage,
+  ResourceKind,
   CreateGuardrailRequest,
   UpdateGuardrailRequest,
   UpsertConfigurationRequest,
 } from '@/types/guardrail.types';
-import type { RegistryPolicy, PolicyStatus, ResourceType } from '@/types/registry.types';
+import type { RegistryPolicy, PolicyStatus } from '@/types/registry.types';
 
 /**
  * Maps backend GuardrailStatus to frontend PolicyStatus
@@ -51,20 +54,6 @@ export function mapPolicyStatusToGuardrail(status: PolicyStatus): GuardrailStatu
 }
 
 /**
- * Maps backend ResourceType to frontend ResourceType (lowercase)
- */
-export function mapResourceType(backendType: string): ResourceType {
-  switch (backendType) {
-    case 'LIGHTSPEED':
-      return 'lightspeed';
-    case 'VMFORGE':
-      return 'vmforge';
-    default:
-      return 'lightspeed'; // Default fallback
-  }
-}
-
-/**
  * Maps a Guardrail Definition + Configuration to a RegistryPolicy
  *
  * Note: Many frontend fields don't exist in the backend and will use defaults:
@@ -79,18 +68,18 @@ export function mapGuardrailToPolicy(
   config?: GuardrailConfiguration | null
 ): RegistryPolicy {
   return {
-    id: guardrail.id,
-    name: guardrail.name,
+    id: guardrail.guardrailId,
+    name: guardrail.guardrailName,
     description: guardrail.description,
-    resourceType: mapResourceType(guardrail.resourceType),
     resourceKind: guardrail.resourceKind,
+    stage: guardrail.stage,
+    enforcementType: guardrail.enforcementType,
     status: mapGuardrailStatusToPolicy(guardrail.status),
     tags: [], // Not in backend
     author: guardrail.owner,
     createdAt: guardrail.createdAt,
-    updatedAt: guardrail.updatedAt,
     currentVersion: guardrail.version,
-    versions: [], // Not in backend - would need separate endpoint
+    versions: [], // Fed by the versions endpoint
     regoCode: '', // Not stored in backend guardrail definition
     configJson: config ? JSON.stringify(config.global, null, 2) : '{}',
     testCases: [], // Not in backend
@@ -111,7 +100,7 @@ export function mapGuardrailsToPolices(
   guardrails: GuardrailDefinition[],
   configs?: Map<string, GuardrailConfiguration>
 ): RegistryPolicy[] {
-  return guardrails.map((g) => mapGuardrailToPolicy(g, configs?.get(g.id)));
+  return guardrails.map((g) => mapGuardrailToPolicy(g, configs?.get(g.guardrailId)));
 }
 
 /**
@@ -120,41 +109,42 @@ export function mapGuardrailsToPolices(
 export function mapPolicyToCreateGuardrailRequest(
   policy: Partial<RegistryPolicy>,
   additionalFields: {
-    enforcementType?: 'MANDATORY' | 'OPTIONAL';
-    kind?: 'PRECHECK' | 'POSTCHECK';
-    resourceType?: string;
-    resourceKind?: string;
+    enforcementType?: EnforcementType;
+    stage?: Stage;
+    resourceKind?: ResourceKind;
   } = {}
 ): CreateGuardrailRequest {
   // Generate an ID if not provided
-  const id = policy.id || `guardrail-${Date.now()}`;
+  const guardrailId = policy.id || `guardrail-${Date.now()}`;
 
   return {
-    id,
-    name: policy.name || 'Untitled Policy',
+    guardrailId,
+    guardrailName: policy.name || 'Untitled Guardrail',
     description: policy.description || '',
-    version: policy.currentVersion || '1.0.0',
+    version: policy.currentVersion || '1.0',
     status: mapPolicyStatusToGuardrail(policy.status || 'draft'),
-    enforcementType: additionalFields.enforcementType || 'OPTIONAL',
-    kind: additionalFields.kind || 'PRECHECK',
-    resourceType: (additionalFields.resourceType as 'LIGHTSPEED') || 'LIGHTSPEED',
-    resourceKind: (additionalFields.resourceKind as 'VIRTUAL_MACHINE') || 'VIRTUAL_MACHINE',
+    enforcementType: additionalFields.enforcementType || policy.enforcementType || 'OPTIONAL',
+    stage: additionalFields.stage || policy.stage || 'PRECHECK',
+    resourceKind: additionalFields.resourceKind || policy.resourceKind || 'VIRTUAL_MACHINE',
     owner: policy.author || 'unknown',
   };
 }
 
 /**
- * Creates an Update Guardrail request from frontend policy data
+ * Creates an Update Guardrail request from frontend policy data.
+ * Note: version is NOT sent — the backend derives the new immutable version.
  */
 export function mapPolicyToUpdateGuardrailRequest(
   policy: Partial<RegistryPolicy>
 ): UpdateGuardrailRequest {
   const request: UpdateGuardrailRequest = {};
 
-  if (policy.name !== undefined) request.name = policy.name;
+  if (policy.name !== undefined) request.guardrailName = policy.name;
   if (policy.description !== undefined) request.description = policy.description;
-  if (policy.currentVersion !== undefined) request.version = policy.currentVersion;
   if (policy.status !== undefined) request.status = mapPolicyStatusToGuardrail(policy.status);
+  if (policy.stage !== undefined) request.stage = policy.stage;
+  if (policy.enforcementType !== undefined) request.enforcementType = policy.enforcementType;
+  if (policy.resourceKind !== undefined) request.resourceKind = policy.resourceKind;
   if (policy.author !== undefined) request.owner = policy.author;
 
   return request;

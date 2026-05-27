@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import Editor from '@monaco-editor/react';
 import {
   ArrowLeft,
@@ -22,10 +22,10 @@ import {
 import { useRegistryStore } from '@/store/registryStore';
 import { useUIStore } from '@/store';
 import { usePolicy } from '@/hooks';
-import { mockPolicies } from '@/data/mockData';
 import { defaultEditorOptions } from '@/monaco/config';
 import { cn } from '@/utils';
 import type { PolicyTestCase, PolicyVersion } from '@/types';
+import { RESOURCE_KIND_LABELS } from '@/types';
 
 type Tab = 'overview' | 'code' | 'tests' | 'versions' | 'config';
 
@@ -156,12 +156,7 @@ export function PolicyDetail() {
 
   // Fetch policy from backend
   const { data: backendPolicy, isLoading } = usePolicy(selectedPolicyId);
-
-  // Use backend data if available, otherwise fall back to mock data
-  const policy = useMemo(() => {
-    if (backendPolicy) return backendPolicy;
-    return mockPolicies.find((p) => p.id === selectedPolicyId);
-  }, [backendPolicy, selectedPolicyId]);
+  const policy = backendPolicy;
 
   if (isLoading) {
     return (
@@ -215,14 +210,8 @@ export function PolicyDetail() {
               >
                 {policy.status}
               </span>
-              <span
-                className={cn(
-                  'px-2.5 py-1 rounded-full text-xs font-medium capitalize',
-                  policy.resourceType === 'lightspeed' && 'bg-[var(--color-warning-bg)] text-[var(--color-warning)]',
-                  policy.resourceType === 'vmforge' && 'bg-[var(--color-info-bg)] text-[var(--color-info)]'
-                )}
-              >
-                {policy.resourceType}
+              <span className="px-2.5 py-1 rounded-full text-xs font-medium bg-[var(--color-surface-secondary)] text-[var(--color-text-secondary)]">
+                {RESOURCE_KIND_LABELS[policy.resourceKind]}
               </span>
             </div>
             <p className="text-[var(--color-text-secondary)] max-w-2xl">{policy.description}</p>
@@ -261,7 +250,7 @@ export function PolicyDetail() {
           </div>
           <div className="flex items-center gap-2 text-[var(--color-text-secondary)]">
             <Calendar className="w-4 h-4" />
-            Updated {formatDate(policy.updatedAt)}
+            Created {formatDate(policy.createdAt)}
           </div>
           <div className="flex items-center gap-2 text-[var(--color-text-secondary)]">
             <GitBranch className="w-4 h-4" />
@@ -379,11 +368,11 @@ export function PolicyDetail() {
                   <TrendingUp className="w-5 h-5 text-[var(--color-info)]" />
                   <span className="font-medium text-[var(--color-text-primary)]">Resource</span>
                 </div>
-                <p className="text-sm text-[var(--color-text-secondary)] capitalize">
-                  {policy.resourceType}
+                <p className="text-sm text-[var(--color-text-secondary)]">
+                  {RESOURCE_KIND_LABELS[policy.resourceKind]}
                 </p>
                 <p className="text-xs text-[var(--color-text-tertiary)] mt-1">
-                  {policy.resourceKind}
+                  {policy.stage}
                 </p>
               </div>
             </div>
