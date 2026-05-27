@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 import {
   X,
   Play,
@@ -13,7 +13,7 @@ import {
   Download,
 } from 'lucide-react';
 import { cn, downloadBlastRadiusReport } from '@/utils';
-import { evaluationApi } from '@/services/api';
+import { useBlastRunStore } from '@/store';
 import type { TestInput } from '@/types/registry.types';
 import type { EnforcementType } from '@/types/guardrail.types';
 
@@ -33,134 +33,28 @@ interface BlastRadiusExecutionModalProps {
   guardrailInfo: GuardrailInfo;
 }
 
-type ExecutionStatus = 'pending' | 'running' | 'passed' | 'failed' | 'error';
-
-interface ExecutionResult {
-  testInputId: string;
-  status: ExecutionStatus;
-  result?: unknown;
-  error?: string;
-  executionTimeMs?: number;
-}
-
-/**
- * Build the inputBundle for OPA evaluation
- * Merges test input with guardrail metadata and configuration
- */
-function buildInputBundle(
-  testInputData: Record<string, unknown>,
-  guardrailInfo: GuardrailInfo,
-  configuration: Record<string, unknown>
-): Record<string, unknown> {
-  return {
-    ...testInputData,
-    guardrail: {
-      id: guardrailInfo.id,
-      name: guardrailInfo.name,
-      version: guardrailInfo.version,
-      enforcementType: guardrailInfo.enforcementType,
-    },
-    configuration: configuration,
-  };
-}
-
 export function BlastRadiusExecutionModal({
   isOpen,
   onClose,
-  testInputs,
+  testInputs: propTestInputs,
   regoCode,
   configJson,
   guardrailInfo,
 }: BlastRadiusExecutionModalProps) {
-  const [isExecuting, setIsExecuting] = useState(false);
-  const [hasStarted, setHasStarted] = useState(false);
-  const [currentIndex, setCurrentIndex] = useState(0);
-  const [results, setResults] = useState<Map<string, ExecutionResult>>(new Map());
+  const run = useBlastRunStore();
   const [expandedResult, setExpandedResult] = useState<string | null>(null);
 
-  // Reset state when modal opens/closes
-  useEffect(() => {
-    if (!isOpen) {
-      setIsExecuting(false);
-      setHasStarted(false);
-      setCurrentIndex(0);
-      setResults(new Map());
-      setExpandedResult(null);
-    }
-  }, [isOpen]);
+  // Run lifecycle lives in the store so it keeps going when the modal is minimized.
+  const isExecuting = run.status === 'running';
+  const hasStarted = run.status !== 'idle';
+  const currentIndex = run.currentIndex;
+  // Once a run exists, show its own inputs; otherwise the current selection.
+  const testInputs = hasStarted && run.testInputs.length ? run.testInputs : propTestInputs;
+  const configuration = run.configuration;
+  const results = useMemo(() => new Map(Object.entries(run.results)), [run.results]);
 
-  // Parse configuration JSON
-  const configuration = (() => {
-    try {
-      return JSON.parse(configJson || '{}');
-    } catch {
-      return {};
-    }
-  })();
-
-  // Execute a single test case
-  const executeTestCase = useCallback(async (testInput: TestInput): Promise<ExecutionResult> => {
-    const startTime = performance.now();
-
-    try {
-      // Merge the test input's data with guardrail and configuration
-      const testInputData = testInput.input || {};
-      const inputBundle = buildInputBundle(testInputData, guardrailInfo, configuration);
-
-      const response = await evaluationApi.evaluate(regoCode, inputBundle);
-
-      const executionTimeMs = performance.now() - startTime;
-
-      // Determine if the result indicates pass or fail
-      // Convention: result.allow === true means passed
-      const resultObj = response.result as Record<string, unknown> | undefined;
-      const passed = resultObj?.allow === true || resultObj?.result === true;
-
-      return {
-        testInputId: testInput.id,
-        status: passed ? 'passed' : 'failed',
-        result: response.result,
-        executionTimeMs,
-      };
-    } catch (error) {
-      return {
-        testInputId: testInput.id,
-        status: 'error',
-        error: error instanceof Error ? error.message : 'Unknown error',
-        executionTimeMs: performance.now() - startTime,
-      };
-    }
-  }, [regoCode, configuration, guardrailInfo]);
-
-  // Run all test cases sequentially
-  const runAllTests = useCallback(async () => {
-    setIsExecuting(true);
-    setHasStarted(true);
-    setCurrentIndex(0);
-    setResults(new Map());
-
-    for (let i = 0; i < testInputs.length; i++) {
-      setCurrentIndex(i);
-      const testInput = testInputs[i];
-
-      // Mark as running
-      setResults(prev => new Map(prev).set(testInput.id, {
-        testInputId: testInput.id,
-        status: 'running',
-      }));
-
-      // Execute
-      const result = await executeTestCase(testInput);
-
-      // Update with result
-      setResults(prev => new Map(prev).set(testInput.id, result));
-
-      // Small delay for visual effect
-      await new Promise(resolve => setTimeout(resolve, 100));
-    }
-
-    setIsExecuting(false);
-  }, [testInputs, executeTestCase]);
+  const startRun = () =>
+    run.start({ testInputs: propTestInputs, regoCode, configJson, guardrailInfo });
 
   // Calculate summary stats
   const passedCount = Array.from(results.values()).filter(r => r.status === 'passed').length;
@@ -251,10 +145,7 @@ export function BlastRadiusExecutionModal({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       {/* Backdrop */}
-      <div
-        className="absolute inset-0 bg-black/60 backdrop-blur-sm"
-        onClick={!isExecuting ? onClose : undefined}
-      />
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
 
       {/* Modal */}
       <div className="relative w-full max-w-3xl max-h-[85vh] mx-4 rounded-3xl bg-[var(--color-surface)] shadow-2xl overflow-hidden flex flex-col animate-in fade-in zoom-in-95 duration-200">
@@ -275,11 +166,10 @@ export function BlastRadiusExecutionModal({
           </div>
           <button
             onClick={onClose}
-            disabled={isExecuting}
+            title={isExecuting ? 'Minimize — keeps running in the background' : 'Close'}
             className={cn(
               'p-2.5 rounded-xl transition-all',
-              'hover:bg-[var(--color-surface-secondary)]',
-              'disabled:opacity-50 disabled:cursor-not-allowed'
+              'hover:bg-[var(--color-surface-secondary)]'
             )}
           >
             <X className="w-5 h-5 text-[var(--color-text-tertiary)]" />
@@ -472,20 +362,18 @@ export function BlastRadiusExecutionModal({
           <div className="flex items-center justify-between">
             <button
               onClick={onClose}
-              disabled={isExecuting}
               className={cn(
                 'px-6 py-3 rounded-xl font-medium transition-all',
                 'text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]',
-                'hover:bg-[var(--color-surface-secondary)]',
-                'disabled:opacity-50 disabled:cursor-not-allowed'
+                'hover:bg-[var(--color-surface-secondary)]'
               )}
             >
-              {hasStarted && !isExecuting ? 'Close' : 'Cancel'}
+              {isExecuting ? 'Run in background' : hasStarted ? 'Close' : 'Cancel'}
             </button>
 
             {!hasStarted ? (
               <button
-                onClick={runAllTests}
+                onClick={startRun}
                 className={cn(
                   'flex items-center gap-3 px-8 py-3 rounded-xl',
                   'bg-gradient-to-r from-[var(--color-info)] to-[var(--color-success)]',
@@ -530,7 +418,7 @@ export function BlastRadiusExecutionModal({
                   JSON
                 </button>
                 <button
-                  onClick={runAllTests}
+                  onClick={startRun}
                   className={cn(
                     'flex items-center gap-2 px-6 py-3 rounded-xl',
                     'bg-[var(--color-surface-secondary)] text-[var(--color-text-primary)]',

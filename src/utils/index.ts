@@ -6,3 +6,4 @@ export * from './runtimeConfig';
 export * from './buildInput';
 export * from './guardrailManifest';
 export * from './blastRadiusReport';
+export * from './regoError';

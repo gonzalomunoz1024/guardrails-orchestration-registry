@@ -1,8 +1,12 @@
 import Editor from '@monaco-editor/react';
-import { useCallback } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
+import type * as Monaco from 'monaco-editor';
 import { AlertCircle, Expand, FileCode2 } from 'lucide-react';
-import { usePolicyStore, useUIStore } from '@/store';
+import { usePolicyStore, useUIStore, useEvaluationStore } from '@/store';
 import { initializeMonaco, attachRegoDiagnostics, defaultEditorOptions } from '@/monaco/config';
+import { parseRegoErrorLocation } from '@/utils';
+
+const EVAL_ERROR_OWNER = 'rego-eval-error';
 
 interface RegoEditorPaneProps {
   policyId: string;
@@ -17,6 +21,40 @@ function packageNameOf(code: string): string | null {
 export function RegoEditorPane({ policyId, onExpand }: RegoEditorPaneProps) {
   const { regoCode, setRegoCode } = usePolicyStore();
   const { resolvedTheme } = useUIStore();
+  const { result } = useEvaluationStore();
+
+  const monacoRef = useRef<typeof Monaco | null>(null);
+  const editorRef = useRef<Monaco.editor.IStandaloneCodeEditor | null>(null);
+
+  // When an evaluation fails with a source location, mark + reveal that line so
+  // the user can jump straight to the broken Rego.
+  useEffect(() => {
+    const monaco = monacoRef.current;
+    const editor = editorRef.current;
+    const model = editor?.getModel();
+    if (!monaco || !editor || !model) return;
+
+    if (result && !result.success && result.error) {
+      const loc = parseRegoErrorLocation(result.error);
+      if (loc) {
+        const line = Math.min(Math.max(loc.line, 1), model.getLineCount());
+        monaco.editor.setModelMarkers(model, EVAL_ERROR_OWNER, [
+          {
+            severity: monaco.MarkerSeverity.Error,
+            message: result.error,
+            startLineNumber: line,
+            startColumn: loc.column || 1,
+            endLineNumber: line,
+            endColumn: model.getLineMaxColumn(line),
+          },
+        ]);
+        editor.revealLineInCenter(line);
+        return;
+      }
+    }
+    // No error (or no parseable location) → clear the eval marker.
+    monaco.editor.setModelMarkers(model, EVAL_ERROR_OWNER, []);
+  }, [result]);
 
   const currentPackage = packageNameOf(regoCode);
   const mismatch = Boolean(policyId) && Boolean(regoCode.trim()) && currentPackage !== policyId;
@@ -83,9 +121,18 @@ export function RegoEditorPane({ policyId, onExpand }: RegoEditorPaneProps) {
           value={regoCode}
           onChange={(value) => setRegoCode(value || '')}
           onMount={(editor, monaco) => {
+            monacoRef.current = monaco;
+            editorRef.current = editor;
             initializeMonaco(monaco);
             monaco.editor.setTheme(resolvedTheme === 'dark' ? 'rego-dark' : 'rego-light');
             attachRegoDiagnostics(monaco, editor);
+            // Clear the evaluation-error marker as soon as the user edits.
+            const model = editor.getModel();
+            if (model) {
+              editor.onDidChangeModelContent(() =>
+                monaco.editor.setModelMarkers(model, EVAL_ERROR_OWNER, [])
+              );
+            }
           }}
           options={defaultEditorOptions}
         />

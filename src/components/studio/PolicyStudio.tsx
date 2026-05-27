@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Panel, Group, Separator } from 'react-resizable-panels';
-import { Play, Loader2, Sliders, Radius, Send, Check, Shield, FileCode2 } from 'lucide-react';
+import { Play, Loader2, Sliders, Radius, Send, Check, Shield, FileCode2, X } from 'lucide-react';
 import { InputModule } from '@/components/sandbox';
 import { OutputPanel } from '@/components/panels';
 import { EditorModal, SubmitPolicyModal } from '@/components/modals';
-import { usePolicyStore, useEvaluationStore, useUIStore, useDraftStore } from '@/store';
+import { usePolicyStore, useEvaluationStore, useUIStore, useDraftStore, useBlastRunStore } from '@/store';
 import { useEvaluate, useDebounce } from '@/hooks';
 import { cn, isValidJson, toGuardrailYaml } from '@/utils';
 import type { GuardrailKind } from '@/types/guardrail.types';
@@ -82,6 +82,14 @@ export function PolicyStudio() {
   const { result } = useEvaluationStore();
   const { resolvedTheme } = useUIStore();
   const upsertDraft = useDraftStore((s) => s.upsertDraft);
+
+  // Background blast-radius run state (drives the red dot + completion toast).
+  const blastStatus = useBlastRunStore((s) => s.status);
+  const blastSeen = useBlastRunStore((s) => s.seen);
+  const blastFinishedTick = useBlastRunStore((s) => s.finishedTick);
+  const markBlastSeen = useBlastRunStore((s) => s.markSeen);
+  const showBlastDot = blastStatus === 'done' && !blastSeen;
+  const [blastToast, setBlastToast] = useState<{ passed: number; total: number } | null>(null);
 
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [blastOpen, setBlastOpen] = useState(false);
@@ -165,6 +173,22 @@ export function PolicyStudio() {
     }
   };
 
+  // Surface a completion toast when a (possibly minimized) blast-radius run finishes.
+  useEffect(() => {
+    if (blastFinishedTick === 0) return;
+    const { results, testInputs } = useBlastRunStore.getState();
+    const passed = Object.values(results).filter((r) => r.status === 'passed').length;
+    setBlastToast({ passed, total: testInputs.length });
+    const timer = setTimeout(() => setBlastToast(null), 6000);
+    return () => clearTimeout(timer);
+  }, [blastFinishedTick]);
+
+  const openBlast = () => {
+    setBlastOpen(true);
+    markBlastSeen();
+    setBlastToast(null);
+  };
+
   return (
     <div className="h-full flex flex-col min-h-0 bg-[var(--color-surface-secondary)]">
       {/* Studio header */}
@@ -201,11 +225,17 @@ export function PolicyStudio() {
             Details
           </button>
           <button
-            onClick={() => setBlastOpen(true)}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-[var(--radius-md)] text-sm font-medium text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-surface-secondary)] transition-colors"
+            onClick={openBlast}
+            className="relative flex items-center gap-1.5 px-3 py-1.5 rounded-[var(--radius-md)] text-sm font-medium text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-surface-secondary)] transition-colors"
           >
             <Radius className="w-4 h-4" />
             Blast radius
+            {showBlastDot && (
+              <span className="absolute top-0.5 right-0.5 w-2 h-2 rounded-full bg-[var(--color-error)]" />
+            )}
+            {blastStatus === 'running' && (
+              <Loader2 className="w-3 h-3 animate-spin text-[var(--color-info)]" />
+            )}
           </button>
           <button
             onClick={() => setExpandedEditor('manifest')}
@@ -368,6 +398,37 @@ export function PolicyStudio() {
           tags,
         }}
       />
+
+      {/* Background blast-radius completion toast */}
+      {blastToast && (
+        <div className="fixed top-4 right-4 z-[60] w-80 rounded-[var(--radius-lg)] border border-[var(--color-border-light)] bg-[var(--color-surface)] shadow-[var(--shadow-lg)] p-4 animate-slide-in">
+          <div className="flex items-start gap-3">
+            <div className="p-2 rounded-[var(--radius-md)] bg-[var(--color-success-bg)] shrink-0">
+              <Radius className="w-4 h-4 text-[var(--color-success)]" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-semibold text-[var(--color-text-primary)]">
+                Blast radius complete
+              </p>
+              <p className="text-xs text-[var(--color-text-secondary)]">
+                {blastToast.passed}/{blastToast.total} allowed
+              </p>
+              <button
+                onClick={openBlast}
+                className="mt-1.5 text-xs font-medium text-[var(--color-info)] hover:underline"
+              >
+                View results
+              </button>
+            </div>
+            <button
+              onClick={() => setBlastToast(null)}
+              className="p-1 rounded text-[var(--color-text-tertiary)] hover:text-[var(--color-text-primary)]"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

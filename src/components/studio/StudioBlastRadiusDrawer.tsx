@@ -11,7 +11,7 @@ import {
   X,
   Zap,
 } from 'lucide-react';
-import { usePolicyStore } from '@/store';
+import { usePolicyStore, useBlastRunStore } from '@/store';
 import { useTestInputs, useResourceTypeConfig } from '@/hooks';
 import { BlastRadiusExecutionModal } from '@/components/modals';
 import { ComingSoonBanner } from '@/components/common/ComingSoonBanner';
@@ -37,6 +37,7 @@ const fieldClass =
 
 export function StudioBlastRadiusDrawer({ isOpen, onClose, guardrailInfo }: StudioBlastRadiusDrawerProps) {
   const { regoCode, configJson, resourceType, resourceKind, setInputJson } = usePolicyStore();
+  const startRun = useBlastRunStore((s) => s.start);
   const { supportsBlastRadius, testInputsDisabledMessage } = useResourceTypeConfig(resourceType);
 
   const [applicationId, setApplicationId] = useState('');
@@ -72,6 +73,13 @@ export function StudioBlastRadiusDrawer({ isOpen, onClose, guardrailInfo }: Stud
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
   }, [isOpen, onClose]);
+
+  // When the drawer opens and a run is in progress or finished, surface it.
+  useEffect(() => {
+    if (isOpen && useBlastRunStore.getState().status !== 'idle') {
+      setExecutionOpen(true);
+    }
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
@@ -265,7 +273,10 @@ export function StudioBlastRadiusDrawer({ isOpen, onClose, guardrailInfo }: Stud
                 : 'Fetch test cases to run a blast radius'}
             </span>
             <button
-              onClick={() => setExecutionOpen(true)}
+              onClick={() => {
+                startRun({ testInputs, regoCode, configJson, guardrailInfo });
+                setExecutionOpen(true);
+              }}
               disabled={testInputs.length === 0 || !regoCode.trim()}
               className={cn(
                 'flex items-center gap-2 px-5 py-2 rounded-[var(--radius-md)]',
