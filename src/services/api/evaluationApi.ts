@@ -1,4 +1,5 @@
 import { apiClient } from './client';
+import { formatOpaError } from '@/utils/regoError';
 import type { EvaluateResponse } from '@/types';
 
 /**
@@ -17,17 +18,26 @@ export const evaluationApi = {
     policy: string,
     input: Record<string, unknown>
   ): Promise<EvaluateResponse> => {
-    const response = await apiClient.post<{ result: unknown; metrics?: object }>(
-      '/v1/opa/evaluate',
-      {
-        policy,
-        input,
-      }
-    );
+    try {
+      const response = await apiClient.post<{ result: unknown; metrics?: object }>(
+        '/v1/opa/evaluate',
+        {
+          policy,
+          input,
+        }
+      );
 
-    return {
-      result: response.data.result,
-    };
+      return {
+        result: response.data.result,
+      };
+    } catch (error: unknown) {
+      // Surface the actual OPA error (with its source location) instead of the
+      // generic Axios "Request failed with status code …" message.
+      const data = (error as { response?: { data?: unknown } }).response?.data;
+      const formatted = formatOpaError(data);
+      if (formatted) throw new Error(formatted);
+      throw error;
+    }
   },
 
   /**
