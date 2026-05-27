@@ -1,8 +1,12 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { ExternalDependency, PolicyMetadata } from '@/types';
-import type { ResourceType } from '@/types/registry.types';
-import type { EnforcementType } from '@/types/guardrail.types';
+import type { ResourceKind, Stage, EnforcementType, GuardrailStatus } from '@/types/guardrail.types';
+
+export interface InputExample {
+  name: string;
+  payload: string;
+}
 
 interface PolicyState {
   regoCode: string;
@@ -14,10 +18,17 @@ interface PolicyState {
   externalDeps: ExternalDependency[];
   metadata: PolicyMetadata;
   // Authoring details (persisted so a draft fully survives a reload).
-  resourceType: ResourceType;
-  resourceKind: string;
+  resourceKind: ResourceKind;
+  stage: Stage;
+  status: GuardrailStatus;
   enforcementType: EnforcementType;
   tags: string[];
+  /** The version loaded when editing an existing guardrail (null = brand new). */
+  baseVersion: string | null;
+  // Input schema contract (the document the policy evaluates).
+  inputSchemaJson: string;
+  inputSchemaAuto: boolean;
+  inputExamples: InputExample[];
   /** ISO timestamp of the last explicit "Save draft", or null. */
   lastSavedAt: string | null;
   isDirty: boolean;
@@ -30,10 +41,14 @@ interface PolicyState {
   updateExternalDep: (id: string, patch: Partial<ExternalDependency>) => void;
   removeExternalDep: (id: string) => void;
   updateMetadata: (metadata: Partial<PolicyMetadata>) => void;
-  setResourceType: (rt: ResourceType) => void;
-  setResourceKind: (rk: string) => void;
+  setResourceKind: (rk: ResourceKind) => void;
+  setStage: (stage: Stage) => void;
+  setStatus: (status: GuardrailStatus) => void;
   setEnforcementType: (et: EnforcementType) => void;
   setTags: (tags: string[]) => void;
+  setInputSchemaJson: (json: string) => void;
+  setInputSchemaAuto: (auto: boolean) => void;
+  setInputExamples: (examples: InputExample[]) => void;
   saveDraft: () => void;
   resetPolicy: () => void;
   markClean: () => void;
@@ -43,7 +58,7 @@ const initialMetadata: PolicyMetadata = {
   name: '',
   description: '',
   tags: [],
-  version: '1.0.0',
+  version: '1.0',
   author: '',
 };
 
@@ -77,21 +92,30 @@ const defaultInputJson = `{
 
 const defaultConfigJson = '{}';
 
+const initialState = {
+  regoCode: defaultRegoCode,
+  inputJson: defaultInputJson,
+  configJson: defaultConfigJson,
+  configEnabled: false,
+  externalDeps: [] as ExternalDependency[],
+  metadata: initialMetadata,
+  resourceKind: 'VIRTUAL_MACHINE' as ResourceKind,
+  stage: 'PRECHECK' as Stage,
+  status: 'DRAFT' as GuardrailStatus,
+  enforcementType: 'MANDATORY' as EnforcementType,
+  tags: [] as string[],
+  baseVersion: null as string | null,
+  inputSchemaJson: '{}',
+  inputSchemaAuto: true,
+  inputExamples: [] as InputExample[],
+  lastSavedAt: null as string | null,
+  isDirty: false,
+};
+
 export const usePolicyStore = create<PolicyState>()(
   persist(
     (set) => ({
-      regoCode: defaultRegoCode,
-      inputJson: defaultInputJson,
-      configJson: defaultConfigJson,
-      configEnabled: false,
-      externalDeps: [],
-      metadata: initialMetadata,
-      resourceType: 'lightspeed',
-      resourceKind: '',
-      enforcementType: 'MANDATORY',
-      tags: [],
-      lastSavedAt: null,
-      isDirty: false,
+      ...initialState,
 
       setRegoCode: (code) => set({ regoCode: code, isDirty: true }),
       setInputJson: (json) => set({ inputJson: json, isDirty: true }),
@@ -116,30 +140,27 @@ export const usePolicyStore = create<PolicyState>()(
           metadata: { ...state.metadata, ...metadata },
           isDirty: true,
         })),
-      setResourceType: (resourceType) => set({ resourceType, isDirty: true }),
       setResourceKind: (resourceKind) => set({ resourceKind, isDirty: true }),
+      setStage: (stage) => set({ stage, isDirty: true }),
+      setStatus: (status) => set({ status, isDirty: true }),
       setEnforcementType: (enforcementType) => set({ enforcementType, isDirty: true }),
       setTags: (tags) => set({ tags, isDirty: true }),
+      setInputSchemaJson: (inputSchemaJson) => set({ inputSchemaJson, isDirty: true }),
+      setInputSchemaAuto: (inputSchemaAuto) => set({ inputSchemaAuto, isDirty: true }),
+      setInputExamples: (inputExamples) => set({ inputExamples, isDirty: true }),
       saveDraft: () => set({ lastSavedAt: new Date().toISOString(), isDirty: false }),
-      resetPolicy: () =>
-        set({
-          regoCode: defaultRegoCode,
-          inputJson: defaultInputJson,
-          configJson: defaultConfigJson,
-          configEnabled: false,
-          externalDeps: [],
-          metadata: initialMetadata,
-          resourceType: 'lightspeed',
-          resourceKind: '',
-          enforcementType: 'MANDATORY',
-          tags: [],
-          lastSavedAt: null,
-          isDirty: false,
-        }),
+      resetPolicy: () => set({ ...initialState }),
       markClean: () => set({ isDirty: false }),
     }),
     {
       name: 'policy-storage',
+      version: 2,
+      // v1 → v2: resourceType removed; drop the stale field if present.
+      migrate: (persisted: unknown) => {
+        const state = (persisted ?? {}) as Record<string, unknown>;
+        delete state.resourceType;
+        return state as unknown as PolicyState;
+      },
       partialize: (state) => ({
         regoCode: state.regoCode,
         inputJson: state.inputJson,
@@ -147,10 +168,15 @@ export const usePolicyStore = create<PolicyState>()(
         configEnabled: state.configEnabled,
         externalDeps: state.externalDeps,
         metadata: state.metadata,
-        resourceType: state.resourceType,
         resourceKind: state.resourceKind,
+        stage: state.stage,
+        status: state.status,
         enforcementType: state.enforcementType,
         tags: state.tags,
+        baseVersion: state.baseVersion,
+        inputSchemaJson: state.inputSchemaJson,
+        inputSchemaAuto: state.inputSchemaAuto,
+        inputExamples: state.inputExamples,
         lastSavedAt: state.lastSavedAt,
       }),
     }

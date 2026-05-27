@@ -1,18 +1,16 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Panel, Group, Separator } from 'react-resizable-panels';
-import { Play, Loader2, Sliders, Radius, Send, Check, Shield, FileCode2, X } from 'lucide-react';
+import { Play, Loader2, Sliders, Radius, Send, Check, Shield, FileCode2, FileJson, X } from 'lucide-react';
 import { InputModule } from '@/components/sandbox';
 import { OutputPanel } from '@/components/panels';
 import { EditorModal, SubmitPolicyModal } from '@/components/modals';
 import { usePolicyStore, useEvaluationStore, useUIStore, useDraftStore, useBlastRunStore } from '@/store';
 import { useEvaluate, useDebounce } from '@/hooks';
-import { cn, isValidJson, toGuardrailYaml } from '@/utils';
-import type { GuardrailKind } from '@/types/guardrail.types';
+import { cn, isValidJson, toGuardrailYaml, deriveSchemaFromJson } from '@/utils';
 import { StudioDetailsDrawer } from './StudioDetailsDrawer';
 import { StudioBlastRadiusDrawer } from './StudioBlastRadiusDrawer';
+import { InputSchemaDrawer } from './InputSchemaDrawer';
 import { RegoEditorPane } from './RegoEditorPane';
-
-const DEFAULT_GUARDRAIL_KIND: GuardrailKind = 'PRECHECK';
 
 function slugifyName(name: string): string {
   return name
@@ -71,10 +69,13 @@ export function PolicyStudio() {
     externalDeps,
     metadata,
     updateMetadata,
-    resourceType,
     resourceKind,
+    stage,
+    status,
     enforcementType,
     tags,
+    inputSchemaAuto,
+    setInputSchemaJson,
     lastSavedAt,
     isDirty,
     saveDraft,
@@ -93,6 +94,7 @@ export function PolicyStudio() {
 
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [blastOpen, setBlastOpen] = useState(false);
+  const [schemaOpen, setSchemaOpen] = useState(false);
   const [submitOpen, setSubmitOpen] = useState(false);
   const [expandedEditor, setExpandedEditor] = useState<'input' | 'config' | 'output' | 'rego' | 'manifest' | null>(null);
   const [autoRun, setAutoRun] = useState(true);
@@ -100,8 +102,8 @@ export function PolicyStudio() {
   const policyId = slugifyName(metadata.name);
 
   const guardrailInfo = useMemo(
-    () => ({ id: policyId, name: metadata.name, version: '1.0.0', enforcementType }),
-    [policyId, metadata.name, enforcementType]
+    () => ({ id: policyId, name: metadata.name, version: metadata.version, enforcementType }),
+    [policyId, metadata.name, metadata.version, enforcementType]
   );
 
   const { evaluate, isEvaluating } = useEvaluate({ guardrailInfo });
@@ -131,18 +133,25 @@ export function PolicyStudio() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [debouncedKey, autoRun]);
 
+  // Keep the input schema in sync with the document while in auto mode.
+  useEffect(() => {
+    if (inputSchemaAuto) setInputSchemaJson(deriveSchemaFromJson(inputJson));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [inputJson, inputSchemaAuto]);
+
   const manifestYaml = useMemo(
     () =>
       toGuardrailYaml({
         metadata,
-        resourceType,
         resourceKind,
         enforcementType,
+        stage,
+        status,
         tags,
         configEnabled,
         externalDeps,
       }),
-    [metadata, resourceType, resourceKind, enforcementType, tags, configEnabled, externalDeps]
+    [metadata, resourceKind, enforcementType, stage, status, tags, configEnabled, externalDeps]
   );
 
   const savedLabel = isDirty
@@ -152,11 +161,10 @@ export function PolicyStudio() {
       : null;
 
   // All Guardrail Details fields except tags are required before submitting.
-  // (resource type and enforcement always carry a value.)
+  // (resource kind, stage, status and enforcement always carry an enum value.)
   const missingDetails: string[] = [];
   if (!metadata.name.trim()) missingDetails.push('name');
   if (!metadata.description.trim()) missingDetails.push('description');
-  if (!resourceKind.trim()) missingDetails.push('resource kind');
   const canSubmit = missingDetails.length === 0;
 
   const handleSaveDraft = () => {
@@ -165,9 +173,10 @@ export function PolicyStudio() {
       upsertDraft({
         id: policyId,
         name: metadata.name,
-        resourceType,
         resourceKind,
+        stage,
         enforcementType,
+        status,
         updatedAt: new Date().toISOString(),
       });
     }
@@ -236,6 +245,14 @@ export function PolicyStudio() {
             {blastStatus === 'running' && (
               <Loader2 className="w-3 h-3 animate-spin text-[var(--color-info)]" />
             )}
+          </button>
+          <button
+            onClick={() => setSchemaOpen(true)}
+            title="Author the input schema contract + examples"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-[var(--radius-md)] text-sm font-medium text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-surface-secondary)] transition-colors"
+          >
+            <FileJson className="w-4 h-4" />
+            Input contract
           </button>
           <button
             onClick={() => setExpandedEditor('manifest')}
@@ -320,6 +337,8 @@ export function PolicyStudio() {
       {/* Drawers & modals */}
       <StudioDetailsDrawer isOpen={detailsOpen} onClose={() => setDetailsOpen(false)} />
 
+      <InputSchemaDrawer isOpen={schemaOpen} onClose={() => setSchemaOpen(false)} />
+
       <StudioBlastRadiusDrawer
         isOpen={blastOpen}
         onClose={() => setBlastOpen(false)}
@@ -383,16 +402,14 @@ export function PolicyStudio() {
         policyId={policyId}
         regoCode={regoCode}
         configJson={configJson}
-        resourceType={resourceType}
         metadata={{
           id: policyId,
           name: metadata.name,
           description: metadata.description,
-          version: '1.0.0',
-          status: 'DRAFT',
+          version: metadata.version,
+          status,
           enforcementType,
-          kind: DEFAULT_GUARDRAIL_KIND,
-          resourceType: resourceType.toUpperCase(),
+          stage,
           resourceKind,
           owner: metadata.author || 'current-user',
           tags,

@@ -8,6 +8,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { guardrailsApi, GuardrailsApiError } from '@/services/api';
 import type { RegistryPolicy } from '@/types/registry.types';
+import type { EnforcementType, Stage, ResourceKind } from '@/types/guardrail.types';
 
 // Query keys for cache management
 export const policyKeys = {
@@ -57,10 +58,9 @@ export function useCreatePolicy() {
     }: {
       policy: Partial<RegistryPolicy>;
       additionalFields?: {
-        enforcementType?: 'MANDATORY' | 'OPTIONAL';
-        kind?: 'PRECHECK' | 'POSTCHECK';
-        resourceType?: string;
-        resourceKind?: string;
+        enforcementType?: EnforcementType;
+        stage?: Stage;
+        resourceKind?: ResourceKind;
       };
     }) => {
       return guardrailsApi.savePolicy(policy, true, additionalFields);
@@ -88,10 +88,9 @@ export function useUpdatePolicy() {
     }: {
       policy: Partial<RegistryPolicy> & { id: string };
       additionalFields?: {
-        enforcementType?: 'MANDATORY' | 'OPTIONAL';
-        kind?: 'PRECHECK' | 'POSTCHECK';
-        resourceType?: string;
-        resourceKind?: string;
+        enforcementType?: EnforcementType;
+        stage?: Stage;
+        resourceKind?: ResourceKind;
       };
     }) => {
       return guardrailsApi.savePolicy(policy, false, additionalFields);
@@ -138,10 +137,9 @@ export function useSavePolicy() {
       policy: Partial<RegistryPolicy>,
       isNew: boolean,
       additionalFields?: {
-        enforcementType?: 'MANDATORY' | 'OPTIONAL';
-        kind?: 'PRECHECK' | 'POSTCHECK';
-        resourceType?: string;
-        resourceKind?: string;
+        enforcementType?: EnforcementType;
+        stage?: Stage;
+        resourceKind?: ResourceKind;
       }
     ) => {
       if (isNew) {

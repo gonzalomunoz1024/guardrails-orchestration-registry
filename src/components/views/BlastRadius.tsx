@@ -13,7 +13,6 @@ import {
 } from 'lucide-react';
 import { useRegistryStore } from '@/store/registryStore';
 import { usePolicies } from '@/hooks';
-import { mockPolicies } from '@/data/mockData';
 import { cn } from '@/utils';
 import type { BlastRadiusResult, BlastRadiusSample, RegistryPolicy } from '@/types';
 
@@ -97,7 +96,7 @@ export function BlastRadius() {
   const { data: backendPolicies } = usePolicies();
 
   // Use backend data if available, otherwise fall back to mock data
-  const allPolicies = backendPolicies && backendPolicies.length > 0 ? backendPolicies : mockPolicies;
+  const allPolicies = backendPolicies ?? [];
 
   const [selectedPolicy, setSelectedPolicy] = useState<RegistryPolicy | null>(
     selectedPolicyId ? allPolicies.find((p) => p.id === selectedPolicyId) || null : null

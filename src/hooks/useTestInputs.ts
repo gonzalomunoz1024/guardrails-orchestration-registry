@@ -1,19 +1,17 @@
 import { useInfiniteQuery } from '@tanstack/react-query';
 import { guardrailsApi } from '@/services/api';
-import { getResourceTypeConfig } from '@/config/resourceTypes';
-import type { TestInputFilters, TestInput, FrontendResourceType } from '@/types/registry.types';
+import { guardrailConfig } from '@/config/guardrailConfig';
+import type { TestInputFilters, TestInput } from '@/types/registry.types';
 
 export const testInputsKeys = {
   all: ['testInputs'] as const,
-  list: (filters?: TestInputFilters, resourceType?: FrontendResourceType) =>
-    [...testInputsKeys.all, 'list', filters, resourceType] as const,
+  list: (filters?: TestInputFilters) => [...testInputsKeys.all, 'list', filters] as const,
 };
 
 interface UseTestInputsOptions {
   filters?: TestInputFilters;
   limit?: number;
   enabled?: boolean;
-  resourceType?: FrontendResourceType;
 }
 
 interface UseTestInputsResult {
@@ -30,13 +28,12 @@ interface UseTestInputsResult {
 }
 
 export function useTestInputs(options: UseTestInputsOptions = {}): UseTestInputsResult {
-  const { filters, limit = 50, enabled = true, resourceType = 'lightspeed' } = options;
+  const { filters, limit = 50, enabled = true } = options;
 
-  const resourceTypeConfig = getResourceTypeConfig(resourceType);
-  const isResourceTypeEnabled = resourceTypeConfig.testInputs.enabled;
+  const testInputsEnabled = guardrailConfig.testInputs.enabled;
 
   const query = useInfiniteQuery({
-    queryKey: testInputsKeys.list(filters, resourceType),
+    queryKey: testInputsKeys.list(filters),
     queryFn: async ({ pageParam }) => {
       return guardrailsApi.getTestInputs(filters, pageParam as string | undefined, limit);
     },
@@ -44,12 +41,12 @@ export function useTestInputs(options: UseTestInputsOptions = {}): UseTestInputs
     getNextPageParam: (lastPage) => {
       return lastPage.hasMore ? lastPage.scrollId : undefined;
     },
-    enabled: enabled && isResourceTypeEnabled,
+    enabled: enabled && testInputsEnabled,
     staleTime: 2 * 60 * 1000,
     retry: 2,
   });
 
-  if (!isResourceTypeEnabled) {
+  if (!testInputsEnabled) {
     return {
       testInputs: [],
       totalHits: 0,
@@ -60,7 +57,7 @@ export function useTestInputs(options: UseTestInputsOptions = {}): UseTestInputs
       fetchNextPage: () => {},
       refetch: () => {},
       isDisabled: true,
-      disabledMessage: resourceTypeConfig.testInputs.disabledMessage,
+      disabledMessage: guardrailConfig.testInputs.disabledMessage,
     };
   }
 

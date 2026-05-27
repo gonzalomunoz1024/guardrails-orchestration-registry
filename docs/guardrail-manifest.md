@@ -5,11 +5,19 @@ guardrail — alongside `guardrail.rego` (the policy) and `configuration.json` (
 static data). It is the contract the backend registers and reconciles so it knows
 **how to assemble the OPA evaluation input at enforcement time**.
 
+Each `(guardrailId, version)` is published as an immutable directory:
+
 ```
-rego/<id>.rego                 # the Rego policy
-guardrails/<id>.yaml           # ← this manifest: how to build the input
-configurations/<id>.yaml       # the GuardrailConfiguration (static data, optional)
+guardrails/<id>/<version>/guardrail.yaml       # ← this manifest: how to build the input
+guardrails/<id>/<version>/policy.rego          # the Rego policy
+guardrails/<id>/<version>/configuration.yaml   # the GuardrailConfiguration (optional)
+guardrails/<id>/<version>/input-schema.json    # the input contract (JSON Schema)
+guardrails/<id>/<version>/examples/<name>.json # example input payloads
 ```
+
+Publishing a new version writes a new directory; existing versions are never
+overwritten (the studio hard-fails if `<id>/<version>` already exists), so a
+suite that pinned `<id>@1.0` keeps resolving the original artifacts.
 
 ## Why it exists
 

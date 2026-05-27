@@ -15,6 +15,10 @@ import type {
   UpsertConfigurationRequest,
   EvaluationRecord,
   PaginatedResponse,
+  EnforcementType,
+  Stage,
+  ResourceKind,
+  GuardrailRef,
 } from '@/types/guardrail.types';
 import type {
   RegistryPolicy,
@@ -94,6 +98,76 @@ export const guardrailsApi = {
         `Failed to fetch guardrail with ID: ${id}`,
         (error as { response?: { status?: number } })?.response?.status,
         `${GUARDRAILS_PATH}/${id}`,
+        error
+      );
+    }
+  },
+
+  /**
+   * List all immutable versions of a guardrail (newest first per the backend).
+   * GET /v1/registry/guardrails/{id}/versions
+   */
+  getGuardrailVersions: async (id: string): Promise<GuardrailRef[]> => {
+    try {
+      const response = await apiClient.get<GuardrailRef[]>(`${GUARDRAILS_PATH}/${id}/versions`);
+      return response.data;
+    } catch (error) {
+      console.error(`[guardrailsApi] Failed to list versions for guardrail ${id}:`, error);
+      throw new GuardrailsApiError(
+        `Failed to fetch versions for guardrail: ${id}`,
+        (error as { response?: { status?: number } })?.response?.status,
+        `${GUARDRAILS_PATH}/${id}/versions`,
+        error
+      );
+    }
+  },
+
+  /**
+   * Get a single immutable version of a guardrail.
+   * GET /v1/registry/guardrails/{id}/versions/{version}
+   */
+  getGuardrailVersion: async (id: string, version: string): Promise<GuardrailDefinition> => {
+    try {
+      const response = await apiClient.get<GuardrailDefinition>(
+        `${GUARDRAILS_PATH}/${id}/versions/${version}`
+      );
+      return response.data;
+    } catch (error) {
+      console.error(`[guardrailsApi] Failed to get guardrail ${id}@${version}:`, error);
+      throw new GuardrailsApiError(
+        `Failed to fetch guardrail ${id}@${version}`,
+        (error as { response?: { status?: number } })?.response?.status,
+        `${GUARDRAILS_PATH}/${id}/versions/${version}`,
+        error
+      );
+    }
+  },
+
+  /**
+   * Get the published input contract for a guardrail version.
+   * GET /v1/registry/guardrails/{id}/versions/{version}/input-schema
+   */
+  getInputSchema: async (
+    id: string,
+    version: string
+  ): Promise<{ schema: Record<string, unknown> | null; examples: { name: string; payload: string }[] }> => {
+    const path = `${GUARDRAILS_PATH}/${id}/versions/${version}/input-schema`;
+    try {
+      const response = await apiClient.get<{
+        schema: Record<string, unknown> | null;
+        examples?: { name: string; payload: string }[];
+      }>(path);
+      return { schema: response.data.schema ?? null, examples: response.data.examples ?? [] };
+    } catch (error) {
+      // No published contract yet is not fatal — adopters just see "none".
+      if ((error as { response?: { status?: number } })?.response?.status === 404) {
+        return { schema: null, examples: [] };
+      }
+      console.error(`[guardrailsApi] Failed to get input schema for ${id}@${version}:`, error);
+      throw new GuardrailsApiError(
+        `Failed to fetch input schema for ${id}@${version}`,
+        (error as { response?: { status?: number } })?.response?.status,
+        path,
         error
       );
     }
@@ -509,7 +583,7 @@ export const guardrailsApi = {
 
     // Map guardrails to policies with their configurations
     return guardrails.map((guardrail) =>
-      mapGuardrailToPolicy(guardrail, configMap.get(guardrail.id) || null)
+      mapGuardrailToPolicy(guardrail, configMap.get(guardrail.guardrailId) || null)
     );
   },
 
@@ -539,10 +613,9 @@ export const guardrailsApi = {
     policy: Partial<RegistryPolicy>,
     isNew: boolean,
     additionalFields?: {
-      enforcementType?: 'MANDATORY' | 'OPTIONAL';
-      kind?: 'PRECHECK' | 'POSTCHECK';
-      resourceType?: string;
-      resourceKind?: string;
+      enforcementType?: EnforcementType;
+      stage?: Stage;
+      resourceKind?: ResourceKind;
     }
   ): Promise<{ guardrail: GuardrailDefinition; configuration: GuardrailConfiguration }> => {
     let savedGuardrail: GuardrailDefinition;
@@ -564,18 +637,18 @@ export const guardrailsApi = {
     let savedConfiguration: GuardrailConfiguration;
 
     try {
-      savedConfiguration = await guardrailsApi.upsertConfiguration(savedGuardrail.id, configRequest);
+      savedConfiguration = await guardrailsApi.upsertConfiguration(savedGuardrail.guardrailId, configRequest);
     } catch (configError) {
       // If configuration save fails after guardrail was created, we have partial success
       // Log the error but don't throw - return what we have
       console.error(
-        `[guardrailsApi] Guardrail saved but configuration failed for ${savedGuardrail.id}:`,
+        `[guardrailsApi] Guardrail saved but configuration failed for ${savedGuardrail.guardrailId}:`,
         configError
       );
 
       // Return with empty configuration
       savedConfiguration = {
-        guardrailId: savedGuardrail.id,
+        guardrailId: savedGuardrail.guardrailId,
         global: {},
       };
     }

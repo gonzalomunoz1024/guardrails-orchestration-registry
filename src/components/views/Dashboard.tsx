@@ -10,7 +10,6 @@ import {
 import { useRegistryStore } from '@/store/registryStore';
 import { useDraftStore } from '@/store';
 import { usePolicies, useStats } from '@/hooks';
-import { mockPolicies } from '@/data/mockData';
 import { cn } from '@/utils';
 import type { DashboardStats } from '@/types';
 
@@ -23,8 +22,7 @@ export function Dashboard() {
   // Fetch stats from backend
   const { data: backendStats } = useStats('24h');
 
-  // Use backend data if available, otherwise fall back to mock data
-  const policies = backendPolicies && backendPolicies.length > 0 ? backendPolicies : mockPolicies;
+  const policies = backendPolicies ?? [];
 
   // Locally saved drafts (from "Save draft" in the studio).
   const localDraftCount = useDraftStore((s) => s.drafts.length);
@@ -124,6 +122,11 @@ export function Dashboard() {
             </button>
           </div>
           <div className="divide-y divide-[var(--color-border-light)]">
+            {recentPolicies.length === 0 && (
+              <div className="p-8 text-center text-sm text-[var(--color-text-tertiary)]">
+                No guardrails yet. Create your first one to get started.
+              </div>
+            )}
             {recentPolicies.map((policy) => (
               <button
                 key={policy.id}

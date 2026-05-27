@@ -12,7 +12,7 @@ import {
   Zap,
 } from 'lucide-react';
 import { usePolicyStore, useBlastRunStore } from '@/store';
-import { useTestInputs, useResourceTypeConfig } from '@/hooks';
+import { useTestInputs, useGuardrailConfig } from '@/hooks';
 import { BlastRadiusExecutionModal } from '@/components/modals';
 import { ComingSoonBanner } from '@/components/common/ComingSoonBanner';
 import { cn } from '@/utils';
@@ -36,9 +36,9 @@ const fieldClass =
   'w-full px-3 py-2 rounded-[var(--radius-md)] bg-[var(--color-surface-secondary)] text-[var(--color-text-primary)] border border-[var(--color-border-light)] focus:border-[var(--color-info)] focus:outline-none transition-colors text-sm';
 
 export function StudioBlastRadiusDrawer({ isOpen, onClose, guardrailInfo }: StudioBlastRadiusDrawerProps) {
-  const { regoCode, configJson, resourceType, resourceKind, setInputJson } = usePolicyStore();
+  const { regoCode, configJson, resourceKind, setInputJson } = usePolicyStore();
   const startRun = useBlastRunStore((s) => s.start);
-  const { supportsBlastRadius, testInputsDisabledMessage } = useResourceTypeConfig(resourceType);
+  const { supportsBlastRadius, testInputsDisabledMessage } = useGuardrailConfig();
 
   const [applicationId, setApplicationId] = useState('');
   const [organization, setOrganization] = useState('');
@@ -52,9 +52,9 @@ export function StudioBlastRadiusDrawer({ isOpen, onClose, guardrailInfo }: Stud
       applicationId: applicationId || undefined,
       organization: organization || undefined,
       environment: environment || undefined,
-      resourceKind: resourceType === 'lightspeed' ? resourceKind || undefined : undefined,
+      resourceKind: resourceKind || undefined,
     }),
-    [applicationId, organization, environment, resourceKind, resourceType]
+    [applicationId, organization, environment, resourceKind]
   );
 
   const {
@@ -65,7 +65,7 @@ export function StudioBlastRadiusDrawer({ isOpen, onClose, guardrailInfo }: Stud
     isFetchingNextPage,
     fetchNextPage,
     refetch,
-  } = useTestInputs({ filters, enabled: shouldFetch && supportsBlastRadius, resourceType });
+  } = useTestInputs({ filters, enabled: shouldFetch && supportsBlastRadius });
 
   useEffect(() => {
     if (!isOpen) return;
@@ -162,7 +162,7 @@ export function StudioBlastRadiusDrawer({ isOpen, onClose, guardrailInfo }: Stud
                     className={fieldClass}
                   />
                 </label>
-                {resourceType === 'lightspeed' && resourceKind && (
+                {resourceKind && (
                   <label className="block">
                     <span className="text-xs font-medium text-[var(--color-text-secondary)] mb-1.5 block">
                       Resource kind

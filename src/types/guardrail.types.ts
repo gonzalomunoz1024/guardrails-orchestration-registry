@@ -5,32 +5,36 @@
  * The frontend uses RegistryPolicy, which is mapped from these types.
  */
 
-// Enums matching backend values
+// Enums matching backend values (SCREAMING_SNAKE on the wire)
 export type GuardrailStatus = 'ACTIVE' | 'INACTIVE' | 'DRAFT';
-export type EnforcementType = 'MANDATORY' | 'OPTIONAL';
-export type GuardrailKind = 'PRECHECK' | 'POSTCHECK';
-export type ResourceType = 'LIGHTSPEED' | 'VMFORGE' | 'MONGO_DB' | 'CUSTOM';
-export type ResourceKind = 'VIRTUAL_MACHINE' | 'MONGO_DB' | 'CONTAINER' | 'NETWORK' | 'STORAGE';
+export type EnforcementType = 'MANDATORY' | 'OPTIONAL' | 'WARNING';
+/** Lifecycle stage a guardrail runs at (renamed from GuardrailKind). */
+export type Stage = 'PRECHECK' | 'APPROVAL' | 'POSTCHECK';
+export type ResourceKind = 'CNAME' | 'MONGODB' | 'VIRTUAL_MACHINE';
 export type EvaluationVerdict = 'PASSED' | 'FAILED';
 
+/** Immutable composite key. A suite pins a guardrail by (guardrailId, version). */
+export interface GuardrailRef {
+  guardrailId: string;
+  version: string;
+}
+
 /**
- * Guardrail Definition - Backend DTO
+ * Guardrail Definition - Backend DTO (an immutable versioned record)
  * GET/POST/PUT /api/v1/registry/guardrails
  */
 export interface GuardrailDefinition {
-  id: string;
-  name: string;
+  guardrailId: string;
+  guardrailName: string;
   description: string;
-  version: string;
+  version: string; // MAJOR.MINOR, e.g. "1.0"
   status: GuardrailStatus;
   enforcementType: EnforcementType;
-  kind: GuardrailKind;
-  resourceType: ResourceType;
+  stage: Stage;
   resourceKind: ResourceKind;
   owner: string;
   scopeExclusions?: ScopeExclusion[];
   createdAt: string;
-  updatedAt: string;
 }
 
 export interface ScopeExclusion {
@@ -43,29 +47,27 @@ export interface ScopeExclusion {
  * GET /api/v1/registry/guardrails (list response)
  */
 export interface GuardrailListItem {
-  id: string;
-  name: string;
+  guardrailId: string;
+  guardrailName: string;
   version: string;
   status: GuardrailStatus;
   enforcementType: EnforcementType;
-  kind: GuardrailKind;
-  resourceType: ResourceType;
+  stage: Stage;
   resourceKind: ResourceKind;
 }
 
 /**
  * Create Guardrail Request - Backend DTO
- * POST /api/v1/registry/guardrails
+ * POST /api/v1/registry/guardrails (creates at version 1.0)
  */
 export interface CreateGuardrailRequest {
-  id: string;
-  name: string;
+  guardrailId: string;
+  guardrailName: string;
   description: string;
   version: string;
   status: GuardrailStatus;
   enforcementType: EnforcementType;
-  kind: GuardrailKind;
-  resourceType: ResourceType;
+  stage: Stage;
   resourceKind: ResourceKind;
   owner: string;
   scopeExclusions?: ScopeExclusion[];
@@ -73,16 +75,15 @@ export interface CreateGuardrailRequest {
 
 /**
  * Update Guardrail Request - Backend DTO
- * PUT /api/v1/registry/guardrails/{id}
+ * PUT /api/v1/registry/guardrails/{guardrailId} — creates a NEW immutable version
+ * (server derives the version; callers do not choose it).
  */
 export interface UpdateGuardrailRequest {
-  name?: string;
+  guardrailName?: string;
   description?: string;
-  version?: string;
   status?: GuardrailStatus;
   enforcementType?: EnforcementType;
-  kind?: GuardrailKind;
-  resourceType?: ResourceType;
+  stage?: Stage;
   resourceKind?: ResourceKind;
   owner?: string;
   scopeExclusions?: ScopeExclusion[];

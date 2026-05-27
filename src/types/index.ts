@@ -3,6 +3,7 @@ export * from './evaluation.types';
 export * from './datasource.types';
 export * from './registry.types';
 export * from './external.types';
+export * from './suite.types';
 // Export guardrail types with explicit names to avoid conflicts with registry.types
 export {
   type GuardrailDefinition,
@@ -13,7 +14,8 @@ export {
   type UpsertConfigurationRequest,
   type GuardrailStatus,
   type EnforcementType,
-  type GuardrailKind,
+  type Stage,
+  type GuardrailRef,
   type EvaluationVerdict,
   type ScopeExclusion,
   type ConfigurationListItem,
@@ -25,7 +27,4 @@ export {
   type PaginatedEvaluations,
   type PaginatedResponse,
   type ApiErrorResponse,
-  // Alias backend types with Backend prefix to avoid conflict
-  type ResourceType as BackendResourceType,
-  type ResourceKind as BackendResourceKind,
 } from './guardrail.types';
