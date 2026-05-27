@@ -4,7 +4,6 @@ import {
   CheckCircle,
   XCircle,
   AlertTriangle,
-  Clock,
   ChevronDown,
   ChevronRight,
   Download,
@@ -14,7 +13,7 @@ import {
 } from 'lucide-react';
 import { useRegistryStore } from '@/store/registryStore';
 import { usePolicies } from '@/hooks';
-import { mockPolicies, mockBlastRadiusResults } from '@/data/mockData';
+import { mockPolicies } from '@/data/mockData';
 import { cn } from '@/utils';
 import type { BlastRadiusResult, BlastRadiusSample, RegistryPolicy } from '@/types';
 
@@ -91,70 +90,6 @@ function SampleRow({ sample }: { sample: BlastRadiusSample }) {
   );
 }
 
-function ResultCard({ result, onSelect }: { result: BlastRadiusResult; onSelect: () => void }) {
-  const allowPercent = Math.round((result.allowedCount / result.totalRecords) * 100);
-  const denyPercent = Math.round((result.deniedCount / result.totalRecords) * 100);
-
-  return (
-    <button
-      onClick={onSelect}
-      className={cn(
-        'w-full text-left p-5 rounded-[var(--radius-lg)] border border-[var(--color-border-light)]',
-        'bg-[var(--color-surface)] shadow-[var(--shadow-card)]',
-        'hover:border-[var(--color-info)] transition-all'
-      )}
-    >
-      <div className="flex items-start justify-between mb-3">
-        <div>
-          <h3 className="font-semibold text-[var(--color-text-primary)]">{result.policyName}</h3>
-          <p className="text-sm text-[var(--color-text-tertiary)]">
-            {formatDate(result.executedAt)} by {result.executedBy}
-          </p>
-        </div>
-        <Clock className="w-5 h-5 text-[var(--color-text-tertiary)]" />
-      </div>
-
-      <div className="flex items-center gap-4 mb-3">
-        <div className="flex-1">
-          <div className="flex items-center justify-between text-sm mb-1">
-            <span className="text-[var(--color-text-secondary)]">
-              {result.totalRecords.toLocaleString()} records tested
-            </span>
-            <span className="text-[var(--color-text-tertiary)]">
-              {result.executionTimeMs}ms
-            </span>
-          </div>
-          <div className="h-2 rounded-full bg-[var(--color-surface-secondary)] overflow-hidden flex">
-            <div
-              className="h-full bg-[var(--color-success)]"
-              style={{ width: `${allowPercent}%` }}
-            />
-            <div
-              className="h-full bg-[var(--color-error)]"
-              style={{ width: `${denyPercent}%` }}
-            />
-          </div>
-        </div>
-      </div>
-
-      <div className="flex items-center gap-6 text-sm">
-        <div className="flex items-center gap-2">
-          <CheckCircle className="w-4 h-4 text-[var(--color-success)]" />
-          <span className="text-[var(--color-text-secondary)]">
-            {result.allowedCount.toLocaleString()} allowed ({allowPercent}%)
-          </span>
-        </div>
-        <div className="flex items-center gap-2">
-          <XCircle className="w-4 h-4 text-[var(--color-error)]" />
-          <span className="text-[var(--color-text-secondary)]">
-            {result.deniedCount.toLocaleString()} denied ({denyPercent}%)
-          </span>
-        </div>
-      </div>
-    </button>
-  );
-}
-
 export function BlastRadius() {
   const { selectedPolicyId } = useRegistryStore();
 
@@ -182,14 +117,9 @@ export function BlastRadius() {
   const handleRunTest = () => {
     if (!selectedPolicy) return;
     setIsRunning(true);
-    // Simulate running the test
-    setTimeout(() => {
-      setIsRunning(false);
-      const existingResult = mockBlastRadiusResults.find((r) => r.policyId === selectedPolicy.id);
-      if (existingResult) {
-        setSelectedResult(existingResult);
-      }
-    }, 2000);
+    // Real evaluation runs from the studio's Blast Radius drawer against fetched
+    // test inputs; this view no longer ships mock results.
+    setTimeout(() => setIsRunning(false), 600);
   };
 
   return (
@@ -252,15 +182,9 @@ export function BlastRadius() {
             <h3 className="text-sm font-medium text-[var(--color-text-secondary)] mb-3">
               Recent Tests
             </h3>
-            <div className="space-y-3">
-              {mockBlastRadiusResults.map((result) => (
-                <ResultCard
-                  key={result.id}
-                  result={result}
-                  onSelect={() => setSelectedResult(result)}
-                />
-              ))}
-            </div>
+            <p className="text-xs text-[var(--color-text-tertiary)]">
+              No recent tests yet.
+            </p>
           </div>
         </div>
       </div>

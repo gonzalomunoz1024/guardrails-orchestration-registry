@@ -145,10 +145,7 @@ export const usePolicyStore = create<PolicyState>()(
         inputJson: state.inputJson,
         configJson: state.configJson,
         configEnabled: state.configEnabled,
-        // Never persist Vault passwords to local storage.
-        externalDeps: state.externalDeps.map((d) =>
-          d.auth ? { ...d, auth: { ...d.auth, password: '' } } : d
-        ),
+        externalDeps: state.externalDeps,
         metadata: state.metadata,
         resourceType: state.resourceType,
         resourceKind: state.resourceKind,

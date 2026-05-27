@@ -1,11 +1,13 @@
 import { lightspeedConfig } from './lightspeed';
 import { vmforgeConfig } from './vmforge';
+import { otherConfig } from './other';
 import type { ResourceTypeConfig } from '../resourceTypeConfig';
 import type { FrontendResourceType } from '@/types/registry.types';
 
 export const resourceTypeRegistry: Record<FrontendResourceType, ResourceTypeConfig> = {
   lightspeed: lightspeedConfig,
   vmforge: vmforgeConfig,
+  other: otherConfig,
 };
 
 export function getResourceTypeConfig(resourceType: FrontendResourceType): ResourceTypeConfig {

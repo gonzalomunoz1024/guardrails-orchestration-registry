@@ -12,7 +12,7 @@ import {
   ChevronUp,
   Download,
 } from 'lucide-react';
-import { cn } from '@/utils';
+import { cn, downloadBlastRadiusReport } from '@/utils';
 import { evaluationApi } from '@/services/api';
 import type { TestInput } from '@/types/registry.types';
 import type { EnforcementType } from '@/types/guardrail.types';
@@ -210,6 +210,40 @@ export function BlastRadiusExecutionModal({
     link.click();
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
+  }, [testInputs, results, guardrailInfo, configuration, passedCount, failedCount, errorCount, passRate]);
+
+  // Download a polished, self-contained HTML report (print → PDF).
+  const handleDownloadReport = useCallback(() => {
+    downloadBlastRadiusReport({
+      guardrail: {
+        id: guardrailInfo.id,
+        name: guardrailInfo.name,
+        version: guardrailInfo.version,
+        enforcementType: guardrailInfo.enforcementType,
+      },
+      executedAt: new Date().toISOString(),
+      configuration,
+      summary: {
+        total: testInputs.length,
+        passed: passedCount,
+        failed: failedCount,
+        errors: errorCount,
+        passRate,
+      },
+      tests: testInputs.map((testInput) => {
+        const r = results.get(testInput.id);
+        return {
+          name: (testInput.metadata?.correlationId as string) || testInput.name,
+          correlationId: (testInput.metadata?.correlationId as string) || null,
+          applicationId: testInput.applicationId || null,
+          status: r?.status ?? 'pending',
+          executionTimeMs: r?.executionTimeMs ?? null,
+          input: testInput.input,
+          output: r?.result ?? null,
+          error: r?.error ?? null,
+        };
+      }),
+    });
   }, [testInputs, results, guardrailInfo, configuration, passedCount, failedCount, errorCount, passRate]);
 
   if (!isOpen) return null;
@@ -473,7 +507,7 @@ export function BlastRadiusExecutionModal({
             ) : (
               <div className="flex items-center gap-3">
                 <button
-                  onClick={handleDownloadResults}
+                  onClick={handleDownloadReport}
                   className={cn(
                     'flex items-center gap-2 px-6 py-3 rounded-xl',
                     'bg-[var(--color-info)] text-white',
@@ -481,7 +515,19 @@ export function BlastRadiusExecutionModal({
                   )}
                 >
                   <Download className="w-4 h-4" />
-                  Download Results
+                  Download Report
+                </button>
+                <button
+                  onClick={handleDownloadResults}
+                  title="Download raw JSON"
+                  className={cn(
+                    'flex items-center gap-2 px-4 py-3 rounded-xl',
+                    'bg-[var(--color-surface-secondary)] text-[var(--color-text-primary)]',
+                    'border border-[var(--color-border-light)]',
+                    'font-medium transition-all hover:bg-[var(--color-border-light)]'
+                  )}
+                >
+                  JSON
                 </button>
                 <button
                   onClick={runAllTests}

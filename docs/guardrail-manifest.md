@@ -199,10 +199,10 @@ operators can tell an outage apart from a real denial.
 
 Registered services are assumed pre-integrated, so they carry no auth. **Custom**
 services may declare HashiCorp Vault auth. There is a single, org-wide Vault whose
-`address` is a fixed constant (`VITE_VAULT_ADDR`), so the studio only captures the
-secret path and username; the **password is never stored or written to the
-manifest**. At enforcement time the backend reads the credentials from Vault,
-mints a bearer token, and calls the API with it.
+`address` is a fixed constant (`VITE_VAULT_ADDR`). The studio only captures
+**where** the credentials live — the secret path and the field keys within that
+secret — **never real credentials**. At enforcement time the backend reads the
+secret from Vault, mints a bearer token, and calls the API with it.
 
 ```yaml
 - name: my_api
@@ -212,9 +212,10 @@ mints a bearer token, and calls the API with it.
   auth:
     type: vault
     vault:
-      address: https://vault.example.com   # Vault location
+      address: https://vault.internal      # the org-wide Vault (constant)
       secretPath: secret/data/my-api        # where the credential lives
-      username: svc-guardrails              # password fetched from Vault at runtime
+      usernameKey: username                 # field in the secret holding the username
+      passwordKey: password                 # field in the secret holding the password
   request:
     method: GET
     path: /things/{id}

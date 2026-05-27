@@ -4,7 +4,7 @@ import { Play, Loader2, Sliders, Radius, Send, Check, Shield, FileCode2 } from '
 import { InputModule } from '@/components/sandbox';
 import { OutputPanel } from '@/components/panels';
 import { EditorModal, SubmitPolicyModal } from '@/components/modals';
-import { usePolicyStore, useEvaluationStore, useUIStore } from '@/store';
+import { usePolicyStore, useEvaluationStore, useUIStore, useDraftStore } from '@/store';
 import { useEvaluate, useDebounce } from '@/hooks';
 import { cn, isValidJson, toGuardrailYaml } from '@/utils';
 import type { GuardrailKind } from '@/types/guardrail.types';
@@ -81,6 +81,7 @@ export function PolicyStudio() {
   } = usePolicyStore();
   const { result } = useEvaluationStore();
   const { resolvedTheme } = useUIStore();
+  const upsertDraft = useDraftStore((s) => s.upsertDraft);
 
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [blastOpen, setBlastOpen] = useState(false);
@@ -141,6 +142,28 @@ export function PolicyStudio() {
     : lastSavedAt
       ? `Saved ${new Date(lastSavedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
       : null;
+
+  // All Guardrail Details fields except tags are required before submitting.
+  // (resource type and enforcement always carry a value.)
+  const missingDetails: string[] = [];
+  if (!metadata.name.trim()) missingDetails.push('name');
+  if (!metadata.description.trim()) missingDetails.push('description');
+  if (!resourceKind.trim()) missingDetails.push('resource kind');
+  const canSubmit = missingDetails.length === 0;
+
+  const handleSaveDraft = () => {
+    saveDraft();
+    if (policyId) {
+      upsertDraft({
+        id: policyId,
+        name: metadata.name,
+        resourceType,
+        resourceKind,
+        enforcementType,
+        updatedAt: new Date().toISOString(),
+      });
+    }
+  };
 
   return (
     <div className="h-full flex flex-col min-h-0 bg-[var(--color-surface-secondary)]">
@@ -212,7 +235,7 @@ export function PolicyStudio() {
           <div className="h-5 w-px bg-[var(--color-border-light)] mx-1" />
 
           <button
-            onClick={saveDraft}
+            onClick={handleSaveDraft}
             disabled={!isDirty}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-[var(--radius-md)] text-sm font-medium text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-surface-secondary)] transition-colors disabled:opacity-50 disabled:cursor-default"
           >
@@ -221,8 +244,8 @@ export function PolicyStudio() {
           </button>
           <button
             onClick={() => setSubmitOpen(true)}
-            disabled={!policyId || !metadata.description.trim()}
-            title={!policyId || !metadata.description.trim() ? 'Add a name and description in Details first' : undefined}
+            disabled={!canSubmit}
+            title={canSubmit ? undefined : `Complete in Details: ${missingDetails.join(', ')}`}
             className={cn(
               'flex items-center gap-1.5 px-4 py-1.5 rounded-[var(--radius-md)]',
               'bg-[var(--color-text-primary)] text-[var(--color-surface)] text-sm font-medium transition-all hover:opacity-90',
@@ -339,8 +362,8 @@ export function PolicyStudio() {
           status: 'DRAFT',
           enforcementType,
           kind: DEFAULT_GUARDRAIL_KIND,
-          resourceType: resourceType.toUpperCase() as 'LIGHTSPEED' | 'VMFORGE',
-          resourceKind: resourceType === 'lightspeed' ? resourceKind : undefined,
+          resourceType: resourceType.toUpperCase(),
+          resourceKind,
           owner: metadata.author || 'current-user',
           tags,
         }}

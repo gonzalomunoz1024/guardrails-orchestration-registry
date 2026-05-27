@@ -8,6 +8,7 @@ import {
   ArrowRight,
 } from 'lucide-react';
 import { useRegistryStore } from '@/store/registryStore';
+import { useDraftStore } from '@/store';
 import { usePolicies, useStats } from '@/hooks';
 import { mockPolicies } from '@/data/mockData';
 import { cn } from '@/utils';
@@ -25,21 +26,24 @@ export function Dashboard() {
   // Use backend data if available, otherwise fall back to mock data
   const policies = backendPolicies && backendPolicies.length > 0 ? backendPolicies : mockPolicies;
 
+  // Locally saved drafts (from "Save draft" in the studio).
+  const localDraftCount = useDraftStore((s) => s.drafts.length);
+
   // Use backend stats if available, otherwise compute from policies
   const computedStats: DashboardStats = backendStats
     ? {
-        totalPolicies: backendStats.totalGuardrails ?? 0,
+        totalPolicies: (backendStats.totalGuardrails ?? 0) + localDraftCount,
         activePolicies: backendStats.activeGuardrails ?? 0,
-        draftPolicies: backendStats.guardrailsByStatus?.DRAFT ?? 0,
+        draftPolicies: (backendStats.guardrailsByStatus?.DRAFT ?? 0) + localDraftCount,
         pendingReview: backendStats.guardrailsByStatus?.REVIEW ?? 0,
         totalEvaluationsToday: backendStats.evaluations?.total ?? 0,
         avgAllowRate: backendStats.evaluations?.passRate ?? 0,
         recentBlastRadiusTests: 0, // Not provided by backend yet
       }
     : {
-        totalPolicies: policies.length,
+        totalPolicies: policies.length + localDraftCount,
         activePolicies: policies.filter((p) => p.status === 'active').length,
-        draftPolicies: policies.filter((p) => p.status === 'draft').length,
+        draftPolicies: policies.filter((p) => p.status === 'draft').length + localDraftCount,
         pendingReview: policies.filter((p) => p.status === 'review').length,
         totalEvaluationsToday: 0,
         avgAllowRate: 0,

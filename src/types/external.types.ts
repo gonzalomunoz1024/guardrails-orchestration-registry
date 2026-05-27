@@ -74,18 +74,20 @@ export interface ParsedSpec {
 export type ExternalDepStatus = 'idle' | 'loading' | 'success' | 'error';
 
 /**
- * Authentication config for a custom external service. Points at where the
- * credentials live in the (single, org-wide) HashiCorp Vault so the backend can
- * later fetch them, mint a bearer token, and call the API. The password is
- * treated as transient and is never persisted to local storage.
+ * Authentication config for a custom external service. Points at *where* the
+ * credentials live in the (single, org-wide) HashiCorp Vault — a secret path
+ * and the keys within that secret. No real credentials are entered or stored;
+ * the backend reads the secret at enforcement time, mints a bearer token, and
+ * calls the API.
  */
 export interface ExternalAuth {
   type: 'vault';
   /** Path to the secret in Vault, e.g. secret/data/my-api. */
   secretPath: string;
-  username: string;
-  /** Transient — not persisted; entered to prove out the flow. */
-  password: string;
+  /** Key within the secret holding the username, e.g. "username". */
+  usernameKey: string;
+  /** Key within the secret holding the password, e.g. "password". */
+  passwordKey: string;
 }
 
 /** Where a request parameter's value comes from. */

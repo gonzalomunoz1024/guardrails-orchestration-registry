@@ -13,6 +13,7 @@ interface StudioDetailsDrawerProps {
 const resourceTypes: { value: ResourceType; label: string }[] = [
   { value: 'lightspeed', label: 'Lightspeed' },
   { value: 'vmforge', label: 'VMForge' },
+  { value: 'other', label: 'Other' },
 ];
 
 const enforcementTypes: { value: EnforcementType; label: string; hint: string }[] = [
@@ -103,7 +104,7 @@ export function StudioDetailsDrawer({ isOpen, onClose }: StudioDetailsDrawerProp
         {/* Header */}
         <div className="shrink-0 flex items-center justify-between px-6 py-4 border-b border-[var(--color-border-light)]">
           <h2 className="text-base font-semibold text-[var(--color-text-primary)]">
-            Guardrail details
+            Guardrail Details
           </h2>
           <button
             onClick={onClose}
@@ -141,17 +142,15 @@ export function StudioDetailsDrawer({ isOpen, onClose }: StudioDetailsDrawerProp
             <Segmented value={resourceType} options={resourceTypes} onChange={setResourceType} />
           </div>
 
-          {resourceType === 'lightspeed' && (
-            <div>
-              <Label>Resource kind</Label>
-              <input
-                value={resourceKind}
-                onChange={(e) => setResourceKind(e.target.value)}
-                placeholder="e.g., playbook"
-                className={fieldClass}
-              />
-            </div>
-          )}
+          <div>
+            <Label>Resource kind</Label>
+            <input
+              value={resourceKind}
+              onChange={(e) => setResourceKind(e.target.value)}
+              placeholder={resourceType === 'lightspeed' ? 'e.g., playbook' : 'e.g., virtual_machine'}
+              className={fieldClass}
+            />
+          </div>
 
           <div>
             <Label>Enforcement</Label>
@@ -163,16 +162,6 @@ export function StudioDetailsDrawer({ isOpen, onClose }: StudioDetailsDrawerProp
             <p className="mt-1.5 text-xs text-[var(--color-text-tertiary)]">
               {enforcementTypes.find((e) => e.value === enforcementType)?.hint}
             </p>
-          </div>
-
-          <div>
-            <Label>Author</Label>
-            <input
-              value={metadata.author}
-              onChange={(e) => updateMetadata({ author: e.target.value })}
-              placeholder="you@example.com"
-              className={fieldClass}
-            />
           </div>
 
           <div>

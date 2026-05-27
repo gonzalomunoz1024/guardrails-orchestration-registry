@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import Editor from '@monaco-editor/react';
 import {
   FileText,
@@ -144,6 +144,52 @@ function ToolbarButton({
   );
 }
 
+type EditorHandle = { focus: () => void; onDidBlurEditorWidget: (cb: () => void) => void };
+
+/**
+ * A JSON editor that only grabs the scroll wheel once you click into it. An
+ * invisible overlay sits on top so wheel events scroll the surrounding panel;
+ * clicking focuses the editor (overlay lifts), and it re-arms on blur.
+ */
+function GuardedEditor({
+  value,
+  theme,
+  onChange,
+}: {
+  value: string;
+  theme: string;
+  onChange: (v: string | undefined) => void;
+}) {
+  const [active, setActive] = useState(false);
+  const ref = useRef<EditorHandle | null>(null);
+  return (
+    <div className="relative h-full">
+      <Editor
+        height="100%"
+        language="json"
+        theme={theme}
+        value={value}
+        onChange={onChange}
+        onMount={(editor) => {
+          ref.current = editor;
+          editor.onDidBlurEditorWidget(() => setActive(false));
+        }}
+        options={{ ...defaultEditorOptions, scrollbar: { alwaysConsumeMouseWheel: false } }}
+      />
+      {!active && (
+        <div
+          className="absolute inset-0 z-10 cursor-text"
+          title="Click to edit"
+          onMouseDown={() => {
+            setActive(true);
+            setTimeout(() => ref.current?.focus(), 0);
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
 export function InputModule({ guardrailInfo, onExpandInput, onExpandConfig }: InputModuleProps) {
   const {
     inputJson,
@@ -254,13 +300,10 @@ export function InputModule({ guardrailInfo, onExpandInput, onExpandConfig }: In
           }
         >
           <div className="h-[200px]">
-            <Editor
-              height="100%"
-              language="json"
+            <GuardedEditor
               theme={editorTheme}
               value={inputJson}
               onChange={(v) => setInputJson(v || '{}')}
-              options={defaultEditorOptions}
             />
           </div>
         </CollapsibleSection>
@@ -301,13 +344,10 @@ export function InputModule({ guardrailInfo, onExpandInput, onExpandConfig }: In
             }
           >
             <div className="h-[160px]">
-              <Editor
-                height="100%"
-                language="json"
+              <GuardedEditor
                 theme={editorTheme}
                 value={configJson}
                 onChange={(v) => setConfigJson(v || '{}')}
-                options={defaultEditorOptions}
               />
             </div>
           </CollapsibleSection>

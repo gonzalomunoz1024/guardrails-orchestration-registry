@@ -227,6 +227,8 @@ export function ExternalDependencyModal({ dep, isOpen, onClose }: ExternalDepend
         operationId: undefined,
         path: '',
         params: {},
+        body: undefined,
+        auth: undefined,
         data: null,
         status: 'idle',
         error: undefined,
@@ -243,6 +245,9 @@ export function ExternalDependencyModal({ dep, isOpen, onClose }: ExternalDepend
       operationId: undefined,
       path: '',
       params: {},
+      body: undefined,
+      // Registered services are pre-integrated — never carry Vault auth.
+      auth: undefined,
       data: null,
       status: 'idle',
       error: undefined,
@@ -596,7 +601,7 @@ export function ExternalDependencyModal({ dep, isOpen, onClose }: ExternalDepend
                   onChange={(e) =>
                     updateExternalDep(dep.id, {
                       auth: e.target.checked
-                        ? { type: 'vault', secretPath: '', username: '', password: '' }
+                        ? { type: 'vault', secretPath: '', usernameKey: 'username', passwordKey: 'password' }
                         : undefined,
                     })
                   }
@@ -615,39 +620,51 @@ export function ExternalDependencyModal({ dep, isOpen, onClose }: ExternalDepend
                     Vault
                     <code className="font-mono text-[var(--color-text-secondary)]">{VAULT_ADDRESS}</code>
                   </div>
-                  <input
-                    value={dep.auth.secretPath}
-                    onChange={(e) =>
-                      updateExternalDep(dep.id, { auth: { ...dep.auth!, secretPath: e.target.value } })
-                    }
-                    placeholder="Secret path (secret/data/my-api)"
-                    className="w-full px-2 py-1.5 rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-[var(--color-surface)] text-xs font-mono text-[var(--color-text-primary)] outline-none focus:border-[var(--color-info)]"
-                  />
+                  <label className="block">
+                    <span className="text-[10px] font-medium text-[var(--color-text-secondary)]">
+                      Secret path
+                    </span>
+                    <input
+                      value={dep.auth.secretPath}
+                      onChange={(e) =>
+                        updateExternalDep(dep.id, { auth: { ...dep.auth!, secretPath: e.target.value } })
+                      }
+                      placeholder="secret/data/my-api"
+                      className="mt-0.5 w-full px-2 py-1.5 rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-[var(--color-surface)] text-xs font-mono text-[var(--color-text-primary)] outline-none focus:border-[var(--color-info)]"
+                    />
+                  </label>
                   <div className="flex gap-2">
-                    <input
-                      value={dep.auth.username}
-                      onChange={(e) =>
-                        updateExternalDep(dep.id, { auth: { ...dep.auth!, username: e.target.value } })
-                      }
-                      placeholder="Username"
-                      autoComplete="off"
-                      className="flex-1 px-2 py-1.5 rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-[var(--color-surface)] text-xs text-[var(--color-text-primary)] outline-none focus:border-[var(--color-info)]"
-                    />
-                    <input
-                      type="password"
-                      value={dep.auth.password}
-                      onChange={(e) =>
-                        updateExternalDep(dep.id, { auth: { ...dep.auth!, password: e.target.value } })
-                      }
-                      placeholder="Password"
-                      autoComplete="new-password"
-                      className="flex-1 px-2 py-1.5 rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-[var(--color-surface)] text-xs text-[var(--color-text-primary)] outline-none focus:border-[var(--color-info)]"
-                    />
+                    <label className="flex-1">
+                      <span className="text-[10px] font-medium text-[var(--color-text-secondary)]">
+                        Username key
+                      </span>
+                      <input
+                        value={dep.auth.usernameKey}
+                        onChange={(e) =>
+                          updateExternalDep(dep.id, { auth: { ...dep.auth!, usernameKey: e.target.value } })
+                        }
+                        placeholder="username"
+                        className="mt-0.5 w-full px-2 py-1.5 rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-[var(--color-surface)] text-xs font-mono text-[var(--color-text-primary)] outline-none focus:border-[var(--color-info)]"
+                      />
+                    </label>
+                    <label className="flex-1">
+                      <span className="text-[10px] font-medium text-[var(--color-text-secondary)]">
+                        Password key
+                      </span>
+                      <input
+                        value={dep.auth.passwordKey}
+                        onChange={(e) =>
+                          updateExternalDep(dep.id, { auth: { ...dep.auth!, passwordKey: e.target.value } })
+                        }
+                        placeholder="password"
+                        className="mt-0.5 w-full px-2 py-1.5 rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-[var(--color-surface)] text-xs font-mono text-[var(--color-text-primary)] outline-none focus:border-[var(--color-info)]"
+                      />
+                    </label>
                   </div>
                   <p className="text-[10px] text-[var(--color-text-tertiary)] leading-relaxed">
-                    Not used in the sandbox yet. At enforcement time the backend will read these
-                    credentials from Vault, mint a bearer token, and call the API with it. The
-                    password is never saved to local storage.
+                    These are the secret path and field keys in Vault — not real credentials. At
+                    enforcement time the backend reads the secret, mints a bearer token, and calls
+                    the API with it.
                   </p>
                 </div>
               )}

@@ -2,7 +2,7 @@ export type PolicyStatus = 'draft' | 'review' | 'approved' | 'active' | 'depreca
 
 // Frontend resource types (lowercase for display)
 // Note: guardrail.types.ts has backend ResourceType with UPPERCASE values
-export type FrontendResourceType = 'lightspeed' | 'vmforge';
+export type FrontendResourceType = 'lightspeed' | 'vmforge' | 'other';
 
 // Alias for simpler usage in frontend components
 export type ResourceType = FrontendResourceType;
