@@ -9,3 +9,4 @@ export * from './blastRadiusReport';
 export * from './regoError';
 export * from './version';
 export * from './deriveSchema';
+export * from './slugify';

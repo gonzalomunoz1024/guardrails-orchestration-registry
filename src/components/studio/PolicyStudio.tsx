@@ -12,13 +12,7 @@ import { StudioBlastRadiusDrawer } from './StudioBlastRadiusDrawer';
 import { InputSchemaDrawer } from './InputSchemaDrawer';
 import { ManifestDrawer } from './ManifestDrawer';
 import { RegoEditorPane } from './RegoEditorPane';
-
-function slugifyName(name: string): string {
-  return name
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '_')
-    .replace(/^_+|_+$/g, '');
-}
+import { slugifyName } from '@/utils';
 
 function Switch({
   checked,
