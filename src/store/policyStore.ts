@@ -25,6 +25,12 @@ interface PolicyState {
   tags: string[];
   /** The version loaded when editing an existing guardrail (null = brand new). */
   baseVersion: string | null;
+  // Contract baseline captured at load time. Used to decide whether the
+  // version should auto-bump on publish (contract changed → bump minor; only
+  // metadata changed → keep version, overwrite metadata files in place).
+  baseRego: string | null;
+  baseInputSchemaJson: string | null;
+  baseInputExamplesJson: string | null;
   // Input schema contract (the document the policy evaluates).
   inputSchemaJson: string;
   inputSchemaAuto: boolean;
@@ -52,6 +58,31 @@ interface PolicyState {
   saveDraft: () => void;
   resetPolicy: () => void;
   markClean: () => void;
+  /** Load an existing guardrail into the studio and pin the baseline. */
+  loadForEdit: (payload: LoadForEditPayload) => void;
+}
+
+/**
+ * Payload for `loadForEdit`. Caller passes the existing guardrail's full state
+ * — the store snapshots it as the contract baseline so future edits can be
+ * compared (rego/schema/examples → version bump; everything else → no bump).
+ */
+export interface LoadForEditPayload {
+  regoCode: string;
+  configJson: string;
+  configEnabled: boolean;
+  inputJson?: string;
+  inputSchemaJson: string;
+  inputExamples: InputExample[];
+  externalDeps?: ExternalDependency[];
+  metadata: PolicyMetadata;
+  resourceKind: ResourceKind;
+  stage: Stage;
+  status: GuardrailStatus;
+  enforcementType: EnforcementType;
+  tags: string[];
+  /** The current immutable version of the guardrail being edited. */
+  baseVersion: string;
 }
 
 const initialMetadata: PolicyMetadata = {
@@ -105,6 +136,9 @@ const initialState = {
   enforcementType: 'MANDATORY' as EnforcementType,
   tags: [] as string[],
   baseVersion: null as string | null,
+  baseRego: null as string | null,
+  baseInputSchemaJson: null as string | null,
+  baseInputExamplesJson: null as string | null,
   inputSchemaJson: '{}',
   inputSchemaAuto: true,
   inputExamples: [] as InputExample[],
@@ -151,6 +185,32 @@ export const usePolicyStore = create<PolicyState>()(
       saveDraft: () => set({ lastSavedAt: new Date().toISOString(), isDirty: false }),
       resetPolicy: () => set({ ...initialState }),
       markClean: () => set({ isDirty: false }),
+      loadForEdit: (p) =>
+        set({
+          ...initialState,
+          regoCode: p.regoCode,
+          configJson: p.configJson,
+          configEnabled: p.configEnabled,
+          inputJson: p.inputJson ?? initialState.inputJson,
+          externalDeps: p.externalDeps ?? [],
+          metadata: { ...p.metadata },
+          resourceKind: p.resourceKind,
+          stage: p.stage,
+          status: p.status,
+          enforcementType: p.enforcementType,
+          tags: p.tags,
+          inputSchemaJson: p.inputSchemaJson,
+          inputExamples: p.inputExamples,
+          // Manual schema mode — we have a published contract; auto-derive
+          // would clobber it on every Document keystroke.
+          inputSchemaAuto: false,
+          baseVersion: p.baseVersion,
+          baseRego: p.regoCode,
+          baseInputSchemaJson: p.inputSchemaJson,
+          baseInputExamplesJson: JSON.stringify(p.inputExamples),
+          isDirty: false,
+          lastSavedAt: null,
+        }),
     }),
     {
       name: 'policy-storage',
@@ -183,6 +243,9 @@ export const usePolicyStore = create<PolicyState>()(
         enforcementType: state.enforcementType,
         tags: state.tags,
         baseVersion: state.baseVersion,
+        baseRego: state.baseRego,
+        baseInputSchemaJson: state.baseInputSchemaJson,
+        baseInputExamplesJson: state.baseInputExamplesJson,
         inputSchemaJson: state.inputSchemaJson,
         inputSchemaAuto: state.inputSchemaAuto,
         inputExamples: state.inputExamples,

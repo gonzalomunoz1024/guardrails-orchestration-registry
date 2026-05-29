@@ -100,6 +100,7 @@ export function StudioDetailsDrawer({ isOpen, onClose }: StudioDetailsDrawerProp
     setEnforcementType,
     tags,
     setTags,
+    baseVersion,
   } = usePolicyStore();
   const [tagInput, setTagInput] = useState('');
 
@@ -151,9 +152,28 @@ export function StudioDetailsDrawer({ isOpen, onClose }: StudioDetailsDrawerProp
               placeholder="e.g., VM Size Limit Guardrail"
               className={fieldClass}
             />
+            {/* Smart version hint reflects the contract-diff rule:
+                  new guardrail → publishes as 1.0
+                  no contract change → version stays (metadata-only update)
+                  contract changed → version bumped from baseVersion. */}
             <p className="mt-1.5 text-xs text-[var(--color-text-tertiary)]">
-              Version <code className="font-mono">{metadata.version}</code> · updating a published
-              guardrail bumps the minor version.
+              {baseVersion === null ? (
+                <>
+                  New guardrail · publishes as{' '}
+                  <code className="font-mono">{metadata.version}</code>
+                </>
+              ) : metadata.version === baseVersion ? (
+                <>
+                  Version <code className="font-mono">{metadata.version}</code> · metadata-only
+                  update (no version bump).
+                </>
+              ) : (
+                <>
+                  Version <code className="font-mono">{metadata.version}</code>{' '}
+                  <span className="text-[var(--color-info)]">(was {baseVersion})</span> · contract
+                  changed, minor bumped.
+                </>
+              )}
             </p>
           </div>
 

@@ -6,7 +6,7 @@ import { OutputPanel } from '@/components/panels';
 import { EditorModal, SubmitPolicyModal } from '@/components/modals';
 import { usePolicyStore, useEvaluationStore, useUIStore, useDraftStore, useBlastRunStore } from '@/store';
 import { useEvaluate, useDebounce } from '@/hooks';
-import { cn, isValidJson, toGuardrailYaml, deriveSchemaFromJson } from '@/utils';
+import { cn, isValidJson, toGuardrailYaml, deriveSchemaFromJson, incrementMinor } from '@/utils';
 import { StudioDetailsDrawer } from './StudioDetailsDrawer';
 import { StudioBlastRadiusDrawer } from './StudioBlastRadiusDrawer';
 import { InputSchemaDrawer } from './InputSchemaDrawer';
@@ -74,6 +74,12 @@ export function PolicyStudio() {
     lastSavedAt,
     isDirty,
     saveDraft,
+    inputSchemaJson,
+    inputExamples,
+    baseVersion,
+    baseRego,
+    baseInputSchemaJson,
+    baseInputExamplesJson,
   } = usePolicyStore();
   const { result } = useEvaluationStore();
   const { resolvedTheme } = useUIStore();
@@ -133,6 +139,23 @@ export function PolicyStudio() {
     if (inputSchemaAuto) setInputSchemaJson(deriveSchemaFromJson(inputJson));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [inputJson, inputSchemaAuto]);
+
+  // Auto-version: when editing an existing guardrail (baseVersion is set),
+  // bump MINOR only if the **contract** (rego, schema, examples) changed.
+  // Pure metadata edits (config, enforcement, status, name, etc.) keep the
+  // version pinned at baseVersion and the publish flow overwrites metadata
+  // files in the existing version dir. Brand-new guardrails stay at "1.0".
+  useEffect(() => {
+    if (!baseVersion) return;
+    const examplesJson = JSON.stringify(inputExamples);
+    const contractChanged =
+      regoCode !== (baseRego ?? '') ||
+      inputSchemaJson !== (baseInputSchemaJson ?? '') ||
+      examplesJson !== (baseInputExamplesJson ?? JSON.stringify([]));
+    const target = contractChanged ? incrementMinor(baseVersion) : baseVersion;
+    if (metadata.version !== target) updateMetadata({ version: target });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [regoCode, inputSchemaJson, inputExamples, baseVersion, baseRego, baseInputSchemaJson, baseInputExamplesJson]);
 
   const manifestYaml = useMemo(
     () =>

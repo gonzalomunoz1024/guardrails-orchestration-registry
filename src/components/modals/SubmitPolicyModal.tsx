@@ -126,8 +126,18 @@ export function SubmitPolicyModal({
   metadata,
 }: SubmitPolicyModalProps) {
   const { user } = useAuthStore();
-  const { externalDeps, configEnabled, inputSchemaJson, inputExamples } = usePolicyStore();
+  const {
+    externalDeps,
+    configEnabled,
+    inputSchemaJson,
+    inputExamples,
+    baseVersion,
+  } = usePolicyStore();
   const { resolvedTheme } = useUIStore();
+  // Metadata-only publishes (no contract change) target the existing version
+  // dir and only rewrite guardrail.yaml + configuration.yaml. The pre-flight
+  // immutability check is inverted: it expects the dir to already exist.
+  const metadataOnly = baseVersion !== null && metadata.version === baseVersion;
   const { config, prCreationEnabled, prCreationDisabledMessage } = useGuardrailConfig();
 
   // Global GitHub publish target.
@@ -233,8 +243,24 @@ export function SubmitPolicyModal({
   const generateConfigYaml = (): string =>
     toGuardrailConfigurationYaml({ name: metadata.name, data: getConfigObject() });
 
-  /** The full set of files published for this guardrail version (relative paths). */
+  /**
+   * The set of files published for this guardrail version.
+   *   - Contract change (or brand-new guardrail): full snapshot (policy.rego,
+   *     guardrail.yaml, input-schema.json, configuration.yaml, examples/*).
+   *   - Metadata-only update: only guardrail.yaml + configuration.yaml. The
+   *     contract files in the existing dir are untouched, preserving the
+   *     immutability suites pinned against.
+   */
   const buildArtifactFiles = (): { path: string; content: string }[] => {
+    if (metadataOnly) {
+      const files: { path: string; content: string }[] = [
+        { path: `${versionDir}/guardrail.yaml`, content: generateManifestYaml() },
+      ];
+      if (configEnabled) {
+        files.push({ path: `${versionDir}/configuration.yaml`, content: generateConfigYaml() });
+      }
+      return files;
+    }
     const files: { path: string; content: string }[] = [
       { path: `${versionDir}/policy.rego`, content: regoCode },
       { path: `${versionDir}/guardrail.yaml`, content: generateManifestYaml() },
@@ -282,7 +308,8 @@ export function SubmitPolicyModal({
 
     // Use shared PAT for all GitHub operations
     const octokit = new Octokit({ auth: GITHUB_PAT });
-    const branchName = `feature/policy-${policyId}-${Date.now()}`;
+    const branchPrefix = metadataOnly ? 'metadata' : 'policy';
+    const branchName = `feature/${branchPrefix}-${policyId}-${Date.now()}`;
     let defaultBranch = 'main';
     let baseSha = '';
 
@@ -321,8 +348,13 @@ export function SubmitPolicyModal({
       return;
     }
 
-    // Step 2b: Enforce immutability — the (guardrailId, version) directory must not exist.
-    updateStep('Check version is new', 'running', versionDir);
+    // Step 2b: Version dir check.
+    //   - Contract change / new guardrail: dir must NOT exist (immutability).
+    //   - Metadata-only update: dir SHOULD exist; we're rewriting just the
+    //     mutable artifacts (guardrail.yaml + configuration.yaml) and leaving
+    //     policy.rego, input-schema.json, examples/* in place.
+    const stepLabel = metadataOnly ? 'Check version exists' : 'Check version is new';
+    updateStep(stepLabel, 'running', versionDir);
     try {
       await octokit.rest.repos.getContent({
         owner: UPSTREAM_OWNER,
@@ -330,25 +362,40 @@ export function SubmitPolicyModal({
         path: versionDir,
         ref: defaultBranch,
       });
-      // If getContent succeeded, the version already exists — refuse to overwrite.
-      updateStep('Check version is new', 'error', 'Version already exists');
-      setGithubError(
-        `Version ${metadata.version} of "${policyId}" already exists and is immutable. ` +
-          `Bump the version (updates increment the minor version) before publishing.`
-      );
-      setGithubStatus('error');
-      return;
+      if (metadataOnly) {
+        updateStep(stepLabel, 'success', `${metadata.version} exists — updating metadata`);
+      } else {
+        // Contract changed but the target dir already has artifacts — refuse to overwrite.
+        updateStep(stepLabel, 'error', 'Version already exists');
+        setGithubError(
+          `Version ${metadata.version} of "${policyId}" already exists and is immutable. ` +
+            `Bump the version (updates increment the minor version) before publishing.`
+        );
+        setGithubStatus('error');
+        return;
+      }
     } catch (error) {
       const status = (error as { status?: number }).status;
       if (status && status !== 404) {
         const msg = error instanceof Error ? error.message : 'Unknown error';
-        updateStep('Check version is new', 'error', msg);
+        updateStep(stepLabel, 'error', msg);
         setGithubError(`Failed to verify version: ${msg}`);
         setGithubStatus('error');
         return;
       }
-      // 404 = path does not exist → safe to publish this version.
-      updateStep('Check version is new', 'success', `${metadata.version} is new`);
+      if (metadataOnly) {
+        // 404 here is unexpected — a metadata-only update needs an existing dir
+        // to overlay. Bail out clearly so the user knows what happened.
+        updateStep(stepLabel, 'error', `${metadata.version} not published yet`);
+        setGithubError(
+          `Cannot apply a metadata-only update: version ${metadata.version} of "${policyId}" ` +
+            `has not been published yet. Make a contract change to publish a new version.`
+        );
+        setGithubStatus('error');
+        return;
+      }
+      // 404 = path does not exist → safe to publish this brand-new contract.
+      updateStep(stepLabel, 'success', `${metadata.version} is new`);
     }
 
     // Step 3: Create blobs for all artifact files
@@ -426,7 +473,13 @@ export function SubmitPolicyModal({
       const { data: newCommit } = await octokit.rest.git.createCommit({
         owner: UPSTREAM_OWNER,
         repo: UPSTREAM_REPO,
-        message: `Add guardrail ${policyId}@${metadata.version}\n\nSubmitted by: @${user.login}\n\nFiles added:\n${artifactFiles.map((f) => `- ${f.path}`).join('\n')}`,
+        message:
+          (metadataOnly
+            ? `Update metadata for guardrail ${policyId}@${metadata.version}`
+            : `Add guardrail ${policyId}@${metadata.version}`) +
+          `\n\nSubmitted by: @${user.login}\n\n` +
+          (metadataOnly ? 'Files updated:\n' : 'Files added:\n') +
+          artifactFiles.map((f) => `- ${f.path}`).join('\n'),
         tree: newTreeSha,
         parents: [baseSha],
       });
@@ -461,14 +514,21 @@ export function SubmitPolicyModal({
     // Step 8: Create Pull Request
     updateStep('Create Pull Request', 'running');
     try {
-      const prBody = `## New Policy: ${metadata.name}
+      const prHeading = metadataOnly
+        ? `## Metadata update: ${metadata.name} @ ${metadata.version}`
+        : `## New Policy: ${metadata.name}`;
+      const prFilesHeading = metadataOnly ? 'Files Updated' : 'Files Added';
+      const prScopeLine = metadataOnly
+        ? `Metadata-only update — the contract (policy.rego, input-schema.json, examples/) is unchanged at v${metadata.version}.`
+        : '';
+      const prBody = `${prHeading}
 
 ${metadata.description}
 
-### Submitted By
+${prScopeLine ? prScopeLine + '\n\n' : ''}### Submitted By
 **@${user.login}** via OPA Guardrail Registry
 
-### Files Added
+### ${prFilesHeading}
 ${artifactFiles.map((f) => `- \`${f.path}\``).join('\n')}
 
 ### Guardrail Details
@@ -486,10 +546,13 @@ ${artifactFiles.map((f) => `- \`${f.path}\``).join('\n')}
 ---
 *Submitted by @${user.login} via OPA Guardrail Registry*`;
 
+      const prTitle = metadataOnly
+        ? `[Policy] Update ${metadata.name} metadata @ ${metadata.version} (by @${user.login})`
+        : `[Policy] Add ${metadata.name} (by @${user.login})`;
       const { data: pr } = await octokit.rest.pulls.create({
         owner: UPSTREAM_OWNER,
         repo: UPSTREAM_REPO,
-        title: `[Policy] Add ${metadata.name} (by @${user.login})`,
+        title: prTitle,
         body: prBody,
         head: branchName,
         base: defaultBranch,
@@ -554,10 +617,15 @@ ${artifactFiles.map((f) => `- \`${f.path}\``).join('\n')}
             </div>
             <div>
               <h2 className="text-lg font-semibold text-[var(--color-text-primary)]">
-                Submit Guardrail
+                {metadataOnly ? 'Update Metadata' : 'Submit Guardrail'}
               </h2>
               <p className="text-sm text-[var(--color-text-secondary)]">
                 {metadata.name} ({policyId})
+                {metadataOnly && (
+                  <span className="ml-2 text-[var(--color-info)]">
+                    · v{metadata.version} contract unchanged
+                  </span>
+                )}
               </p>
             </div>
           </div>
