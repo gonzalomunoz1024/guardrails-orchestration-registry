@@ -5,7 +5,7 @@ independently-shippable phases for the backend agent. The frontend mirrors the
 backend DTOs in `src/types/guardrail.types.ts`; keep these contracts in sync.
 
 **Wire conventions:** enums are `SCREAMING_SNAKE`; timestamps are ISO-8601 UTC;
-all guardrail endpoints live under `/v1/registry`.
+all guardrail endpoints live under `/v1/utilities/registry`.
 
 ## North-star model
 
@@ -57,14 +57,14 @@ No endpoint returns `resourceType`/`updatedAt`.
 **Goal:** make `(guardrailId, version)` the immutable primary key and change write semantics.
 
 - Storage keyed by composite `(guardrailId, version)`. Enforce uniqueness; reject duplicate writes (HTTP 409).
-- **POST `/v1/registry/guardrails`** → creates the guardrail at version **`1.0`**. 409 if `guardrailId` already exists at `1.0`.
-- **PUT `/v1/registry/guardrails/{guardrailId}`** → does **not** mutate; creates a **new immutable version**:
+- **POST `/v1/utilities/registry/guardrails`** → creates the guardrail at version **`1.0`**. 409 if `guardrailId` already exists at `1.0`.
+- **PUT `/v1/utilities/registry/guardrails/{guardrailId}`** → does **not** mutate; creates a **new immutable version**:
   - Default: auto-increment **MINOR** from the current latest (`1.3 → 1.4`).
   - Explicit MAJOR bump via `?bump=major` (or body flag) → `1.x → 2.0`.
   - Returns the newly created `GuardrailDefinition`.
-- **New** `GET /v1/registry/guardrails/{guardrailId}/versions` → `GuardrailRef[]` (`{guardrailId, version}` for all versions, newest first).
-- **New** `GET /v1/registry/guardrails/{guardrailId}/versions/{version}` → full `GuardrailDefinition` for a pinned version.
-- `GET /v1/registry/guardrails` (list) → latest version per `guardrailId`.
+- **New** `GET /v1/utilities/registry/guardrails/{guardrailId}/versions` → `GuardrailRef[]` (`{guardrailId, version}` for all versions, newest first).
+- **New** `GET /v1/utilities/registry/guardrails/{guardrailId}/versions/{version}` → full `GuardrailDefinition` for a pinned version.
+- `GET /v1/utilities/registry/guardrails` (list) → latest version per `guardrailId`.
 
 **Acceptance:** Publishing `1.1` leaves `1.0` byte-identical; `GET .../versions` lists both; fetching `1.0` after `1.1` exists still returns the original.
 
@@ -84,7 +84,7 @@ guardrails/<guardrailId>/<version>/examples/<name>.json # example input payloads
 ```
 
 - Backend ingests (on PR merge/registration) and caches these artifacts keyed by `(guardrailId, version)`.
-- **New** `GET /v1/registry/guardrails/{guardrailId}/versions/{version}/input-schema` →
+- **New** `GET /v1/utilities/registry/guardrails/{guardrailId}/versions/{version}/input-schema` →
   `{ "schema": <JSONSchema>, "examples": [ { "name": "...", "payload": {...} } ] }`.
 - The schema describes the **document** (caller-supplied portion) only. The platform injects `guardrail`, `configuration`, `external` at evaluation time (do not require them from callers).
 
@@ -112,12 +112,12 @@ guardrails/<guardrailId>/<version>/examples/<name>.json # example input payloads
 }
 ```
 
-Endpoints (base `/v1/registry/suites`):
-- `GET /v1/registry/suites` → `GuardrailSuite[]`.
-- `GET /v1/registry/suites/{suiteId}` → full suite (members pinned).
-- `POST /v1/registry/suites` → `{ name, description, owner, status, members: GuardrailRef[] }`.
-- `PUT /v1/registry/suites/{suiteId}` → `{ name?, description?, status?, members? }`.
-- `DELETE /v1/registry/suites/{suiteId}`.
+Endpoints (base `/v1/utilities/registry/suites`):
+- `GET /v1/utilities/registry/suites` → `GuardrailSuite[]`.
+- `GET /v1/utilities/registry/suites/{suiteId}` → full suite (members pinned).
+- `POST /v1/utilities/registry/suites` → `{ name, description, owner, status, members: GuardrailRef[] }`.
+- `PUT /v1/utilities/registry/suites/{suiteId}` → `{ name?, description?, status?, members? }`.
+- `DELETE /v1/utilities/registry/suites/{suiteId}`.
 
 **Validation:** every `member.{guardrailId, version}` must reference an existing
 **immutable** guardrail version (Phase B2). Reject (HTTP 422) otherwise. Pins must
@@ -134,7 +134,7 @@ published; submitting a member for a non-existent version is rejected.
 
 - Evaluation results: `enforcementType` may now be `WARNING`. Define semantics: `WARNING` failures are surfaced but **never block** (distinct from `OPTIONAL` if product wants a visible warning tier).
 - `EvaluationSummary`: keep `mandatoryFailed`/`optionalFailed`; add `warningFailed`.
-- Stats (`GET /v1/registry/stats`): group by `stage` (not the removed resourceType); include enforcement breakdown incl. `WARNING`.
+- Stats (`GET /v1/utilities/registry/stats`): group by `stage` (not the removed resourceType); include enforcement breakdown incl. `WARNING`.
 - (Optional) Suite-level evaluation: evaluate all members of a suite for a given document and aggregate verdicts.
 
 **Acceptance:** evaluating a `WARNING` guardrail that fails returns a non-blocking verdict tagged `WARNING`; stats no longer reference resourceType.

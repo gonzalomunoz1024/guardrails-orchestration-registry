@@ -4,7 +4,7 @@
  * Priority order:
  * 1. VITE_API_BASE_URL env var (for development)
  * 2. window.__RUNTIME_CONFIG__ (for production, set by serve.cjs)
- * 3. Default '/api'
+ * 3. Default '' (empty — all endpoints are absolute paths under /v1/utilities)
  */
 
 interface RuntimeConfig {
@@ -30,7 +30,7 @@ export function getRuntimeConfig(): RuntimeConfig {
   }
 
   // Fallback
-  return { API_BASE_URL: '/api' };
+  return { API_BASE_URL: '' };
 }
 
 export function getApiBaseUrl(): string {

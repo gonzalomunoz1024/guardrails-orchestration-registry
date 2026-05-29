@@ -11,7 +11,7 @@ import type { EvaluateResponse } from '@/types';
 export const evaluationApi = {
   /**
    * Evaluate a policy with given input
-   * Uses backend passthrough: POST /v1/opa/evaluate
+   * Uses backend passthrough: POST /v1/utilities/opa/evaluate
    * Input should contain: guardrail, configuration, resource
    */
   evaluate: async (
@@ -20,7 +20,7 @@ export const evaluationApi = {
   ): Promise<EvaluateResponse> => {
     try {
       const response = await apiClient.post<{ result: unknown; metrics?: object }>(
-        '/v1/opa/evaluate',
+        '/v1/utilities/opa/evaluate',
         {
           policy,
           input,
@@ -42,14 +42,14 @@ export const evaluationApi = {
 
   /**
    * Validate policy syntax without evaluation
-   * Uses backend passthrough: POST /v1/opa/validate
+   * Uses backend passthrough: POST /v1/utilities/opa/validate
    */
   validatePolicy: async (
     policy: string
   ): Promise<{ valid: boolean; errors?: string[] }> => {
     try {
       const response = await apiClient.post<{ valid: boolean; errors?: Array<{ message: string }> }>(
-        '/v1/opa/validate',
+        '/v1/utilities/opa/validate',
         { policy }
       );
 

@@ -17,7 +17,7 @@ import type {
 } from '@/types/suite.types';
 import type { GuardrailRef } from '@/types/guardrail.types';
 
-const SUITES_PATH = '/v1/registry/suites';
+const SUITES_PATH = '/v1/utilities/registry/suites';
 
 export const suitesApi = {
   listSuites: async (): Promise<GuardrailSuite[]> => {

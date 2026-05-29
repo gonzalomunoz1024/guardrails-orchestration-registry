@@ -14,12 +14,8 @@ export default defineConfig({
     port: 3000,
     open: true,
     proxy: {
-      '/api/auth': {
-        target: 'http://localhost:3001',
-        changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/api/, ''),
-      },
-      '/api': {
+      // Backend API — all endpoints live under /v1/utilities/...
+      '/v1': {
         target: 'http://localhost:8080',
         changeOrigin: true,
       },

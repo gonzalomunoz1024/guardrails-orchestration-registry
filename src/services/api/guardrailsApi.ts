@@ -37,12 +37,12 @@ import {
   mapPolicyConfigToUpsertRequest,
 } from '@/utils/guardrailMapper';
 
-// Base paths for the backend API
-const GUARDRAILS_PATH = '/v1/registry/guardrails';
-const CONFIGURATIONS_PATH = '/v1/registry/configurations';
-const EVALUATIONS_PATH = '/v1/evaluations';
-const STATS_PATH = '/v1/registry/stats';
-const TEST_INPUTS_PATH = '/v1/registry/test-inputs';
+// Base paths for the backend API — all endpoints live under /v1/utilities
+const GUARDRAILS_PATH = '/v1/utilities/registry/guardrails';
+const CONFIGURATIONS_PATH = '/v1/utilities/registry/configurations';
+const EVALUATIONS_PATH = '/v1/utilities/evaluations';
+const STATS_PATH = '/v1/utilities/registry/stats';
+const TEST_INPUTS_PATH = '/v1/utilities/registry/test-inputs';
 
 /**
  * Error class for API errors with additional context
@@ -105,7 +105,7 @@ export const guardrailsApi = {
 
   /**
    * List all immutable versions of a guardrail (newest first per the backend).
-   * GET /v1/registry/guardrails/{id}/versions
+   * GET /v1/utilities/registry/guardrails/{id}/versions
    */
   getGuardrailVersions: async (id: string): Promise<GuardrailRef[]> => {
     try {
@@ -124,7 +124,7 @@ export const guardrailsApi = {
 
   /**
    * Get a single immutable version of a guardrail.
-   * GET /v1/registry/guardrails/{id}/versions/{version}
+   * GET /v1/utilities/registry/guardrails/{id}/versions/{version}
    */
   getGuardrailVersion: async (id: string, version: string): Promise<GuardrailDefinition> => {
     try {
@@ -145,7 +145,7 @@ export const guardrailsApi = {
 
   /**
    * Get the published input contract for a guardrail version.
-   * GET /v1/registry/guardrails/{id}/versions/{version}/input-schema
+   * GET /v1/utilities/registry/guardrails/{id}/versions/{version}/input-schema
    */
   getInputSchema: async (
     id: string,

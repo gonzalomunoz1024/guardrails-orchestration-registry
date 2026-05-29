@@ -21,7 +21,7 @@ export interface GuardrailRef {
 
 /**
  * Guardrail Definition - Backend DTO (an immutable versioned record)
- * GET/POST/PUT /api/v1/registry/guardrails
+ * GET/POST/PUT /v1/utilities/registry/guardrails
  */
 export interface GuardrailDefinition {
   guardrailId: string;
@@ -44,7 +44,7 @@ export interface ScopeExclusion {
 
 /**
  * Guardrail Definition List Item - Backend DTO
- * GET /api/v1/registry/guardrails (list response)
+ * GET /v1/utilities/registry/guardrails (list response)
  */
 export interface GuardrailListItem {
   guardrailId: string;
@@ -58,7 +58,7 @@ export interface GuardrailListItem {
 
 /**
  * Create Guardrail Request - Backend DTO
- * POST /api/v1/registry/guardrails (creates at version 1.0)
+ * POST /v1/utilities/registry/guardrails (creates at version 1.0)
  */
 export interface CreateGuardrailRequest {
   guardrailId: string;
@@ -75,7 +75,7 @@ export interface CreateGuardrailRequest {
 
 /**
  * Update Guardrail Request - Backend DTO
- * PUT /api/v1/registry/guardrails/{guardrailId} — creates a NEW immutable version
+ * PUT /v1/utilities/registry/guardrails/{guardrailId} — creates a NEW immutable version
  * (server derives the version; callers do not choose it).
  */
 export interface UpdateGuardrailRequest {
@@ -91,7 +91,7 @@ export interface UpdateGuardrailRequest {
 
 /**
  * Guardrail Configuration - Backend DTO
- * GET/PUT /api/v1/registry/configurations/{guardrailId}
+ * GET/PUT /v1/utilities/registry/configurations/{guardrailId}
  */
 export interface GuardrailConfiguration {
   guardrailId: string;
@@ -101,7 +101,7 @@ export interface GuardrailConfiguration {
 
 /**
  * Configuration List Item - Backend DTO
- * GET /api/v1/registry/configurations
+ * GET /v1/utilities/registry/configurations
  */
 export interface ConfigurationListItem {
   guardrailId: string;
@@ -111,7 +111,7 @@ export interface ConfigurationListItem {
 
 /**
  * Create/Update Configuration Request - Backend DTO
- * PUT /api/v1/registry/configurations/{guardrailId}
+ * PUT /v1/utilities/registry/configurations/{guardrailId}
  */
 export interface UpsertConfigurationRequest {
   global: Record<string, unknown>;
@@ -120,7 +120,7 @@ export interface UpsertConfigurationRequest {
 
 /**
  * Evaluation Record - Backend DTO
- * GET /api/v1/evaluations/{eventId}
+ * GET /v1/utilities/evaluations/{eventId}
  */
 export interface EvaluationRecord {
   eventId: string;
@@ -165,7 +165,7 @@ export interface IndividualEvaluation {
 
 /**
  * Paginated Evaluation List - Backend DTO
- * GET /api/v1/evaluations/all
+ * GET /v1/utilities/evaluations/all
  */
 export interface PaginatedEvaluations {
   page: number;

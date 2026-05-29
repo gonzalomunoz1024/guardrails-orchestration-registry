@@ -35,6 +35,6 @@ export const guardrailConfig: GuardrailAppConfig = {
   },
   testInputs: {
     enabled: true,
-    endpoint: '/v1/registry/test-inputs',
+    endpoint: '/v1/utilities/registry/test-inputs',
   },
 };

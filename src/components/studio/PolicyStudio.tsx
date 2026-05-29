@@ -10,6 +10,7 @@ import { cn, isValidJson, toGuardrailYaml, deriveSchemaFromJson } from '@/utils'
 import { StudioDetailsDrawer } from './StudioDetailsDrawer';
 import { StudioBlastRadiusDrawer } from './StudioBlastRadiusDrawer';
 import { InputSchemaDrawer } from './InputSchemaDrawer';
+import { ManifestDrawer } from './ManifestDrawer';
 import { RegoEditorPane } from './RegoEditorPane';
 
 function slugifyName(name: string): string {
@@ -385,14 +386,10 @@ export function PolicyStudio() {
         readOnly
         theme={resolvedTheme}
       />
-      <EditorModal
+      <ManifestDrawer
         isOpen={expandedEditor === 'manifest'}
         onClose={() => setExpandedEditor(null)}
-        title="guardrail.yaml"
-        subtitle="Registration manifest — how the backend assembles the input"
-        language="yaml"
         value={manifestYaml}
-        readOnly
         theme={resolvedTheme}
       />
 
