@@ -19,13 +19,16 @@ import {
   FileCode2,
   FileJson,
   Boxes,
+  Eye,
 } from 'lucide-react';
 import JSZip from 'jszip';
 import { saveAs } from 'file-saver';
 import { Octokit } from 'octokit';
+import Editor from '@monaco-editor/react';
 import { cn, toGuardrailYaml, toGuardrailConfigurationYaml } from '@/utils';
 import { useAuthStore } from '@/store/authStore';
-import { usePolicyStore } from '@/store';
+import { usePolicyStore, useUIStore } from '@/store';
+import { defaultEditorOptions } from '@/monaco/config';
 import { useGuardrailConfig } from '@/hooks/useGuardrailConfig';
 import { ComingSoonBanner } from '@/components/common/ComingSoonBanner';
 import type { EnforcementType, Stage, ResourceKind, GuardrailStatus } from '@/types/guardrail.types';
@@ -106,6 +109,14 @@ function formatBytes(bytes: number): string {
   return `${(bytes / 1024).toFixed(1)} KB`;
 }
 
+/** Pick a Monaco language id from a path's extension. */
+function languageForPath(path: string): string {
+  if (path.endsWith('.rego')) return 'rego';
+  if (path.endsWith('.yaml') || path.endsWith('.yml')) return 'yaml';
+  if (path.endsWith('.json')) return 'json';
+  return 'plaintext';
+}
+
 export function SubmitPolicyModal({
   isOpen,
   onClose,
@@ -116,6 +127,7 @@ export function SubmitPolicyModal({
 }: SubmitPolicyModalProps) {
   const { user } = useAuthStore();
   const { externalDeps, configEnabled, inputSchemaJson, inputExamples } = usePolicyStore();
+  const { resolvedTheme } = useUIStore();
   const { config, prCreationEnabled, prCreationDisabledMessage } = useGuardrailConfig();
 
   // Global GitHub publish target.
@@ -126,6 +138,9 @@ export function SubmitPolicyModal({
   const [stepLogs, setStepLogs] = useState<StepLog[]>([]);
   const [prUrl, setPrUrl] = useState<string | null>(null);
   const [copiedPrUrl, setCopiedPrUrl] = useState(false);
+  // Path of the artifact file currently being previewed in the side sub-modal.
+  const [previewPath, setPreviewPath] = useState<string | null>(null);
+  const [copiedPreview, setCopiedPreview] = useState(false);
 
   // Helper to update step log
   const updateStep = (step: string, status: StepLog['status'], message?: string) => {
@@ -140,10 +155,13 @@ export function SubmitPolicyModal({
     });
   };
 
-  // Handle escape key
+  // Handle escape key — closes the preview overlay first if it's open, then
+  // (on a second press, or when no preview is open) closes the Submit modal.
   useEffect(() => {
     const handleEscape = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
+      if (e.key !== 'Escape') return;
+      if (previewPath) setPreviewPath(null);
+      else onClose();
     };
     if (isOpen) {
       document.addEventListener('keydown', handleEscape);
@@ -153,7 +171,7 @@ export function SubmitPolicyModal({
       document.removeEventListener('keydown', handleEscape);
       document.body.style.overflow = '';
     };
-  }, [isOpen, onClose]);
+  }, [isOpen, onClose, previewPath]);
 
   // Reset state when modal opens
   useEffect(() => {
@@ -163,6 +181,7 @@ export function SubmitPolicyModal({
       setStepLogs([]);
       setPrUrl(null);
       setCopiedPrUrl(false);
+      setPreviewPath(null);
     }
   }, [isOpen]);
 
@@ -497,7 +516,20 @@ ${artifactFiles.map((f) => `- \`${f.path}\``).join('\n')}
 
   if (!isOpen) return null;
 
+  // The artifact whose contents the side preview is showing (if any).
+  const previewFile = previewPath
+    ? buildArtifactFiles().find((f) => f.path === previewPath) ?? null
+    : null;
+
+  const handleCopyPreview = async () => {
+    if (!previewFile) return;
+    await navigator.clipboard.writeText(previewFile.content);
+    setCopiedPreview(true);
+    setTimeout(() => setCopiedPreview(false), 2000);
+  };
+
   return (
+    <>
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       {/* Backdrop */}
       <div
@@ -644,17 +676,32 @@ ${artifactFiles.map((f) => `- \`${f.path}\``).join('\n')}
                     const rel = f.path.slice(versionDir.length + 1);
                     const last = i === arr.length - 1;
                     return (
-                      <li key={f.path} className="flex items-center gap-2 font-mono text-sm text-[var(--color-text-secondary)]">
-                        <span className="text-[var(--color-text-tertiary)] w-3">{last ? '└' : '├'}</span>
-                        <FileIcon path={rel} />
-                        <span className="truncate">{rel}</span>
-                        <span className="ml-auto text-[10px] text-[var(--color-text-tertiary)]">
-                          {formatBytes(new Blob([f.content]).size)}
-                        </span>
+                      <li key={f.path}>
+                        <button
+                          type="button"
+                          onClick={() => setPreviewPath(f.path)}
+                          title={`Preview ${rel}`}
+                          className={cn(
+                            'group w-full flex items-center gap-2 px-1.5 py-1 rounded-[var(--radius-sm)]',
+                            'font-mono text-sm text-[var(--color-text-secondary)] text-left',
+                            'hover:bg-[var(--color-surface-secondary)] hover:text-[var(--color-text-primary)] transition-colors'
+                          )}
+                        >
+                          <span className="text-[var(--color-text-tertiary)] w-3">{last ? '└' : '├'}</span>
+                          <FileIcon path={rel} />
+                          <span className="truncate flex-1">{rel}</span>
+                          <span className="text-[10px] text-[var(--color-text-tertiary)]">
+                            {formatBytes(new Blob([f.content]).size)}
+                          </span>
+                          <Eye className="w-3.5 h-3.5 text-[var(--color-text-tertiary)] opacity-60 group-hover:opacity-100 group-hover:text-[var(--color-info)] transition-all" />
+                        </button>
                       </li>
                     );
                   })}
                 </ul>
+                <p className="mt-3 text-[11px] text-[var(--color-text-tertiary)]">
+                  Click any file to preview the exact contents that will be published / downloaded.
+                </p>
               </div>
             </section>
           </div>
@@ -910,5 +957,84 @@ ${artifactFiles.map((f) => `- \`${f.path}\``).join('\n')}
         </div>
       </div>
     </div>
+
+    {/* File preview overlay — sits above the Submit modal so the user can
+        eyeball each artifact's exact content before publishing. */}
+    {previewFile && (
+      <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+        <div
+          className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+          onClick={() => setPreviewPath(null)}
+        />
+        <div
+          className={cn(
+            'relative w-full max-w-3xl max-h-[88vh] flex flex-col',
+            'rounded-2xl overflow-hidden',
+            'bg-[var(--color-surface)] shadow-2xl border border-[var(--color-border-light)]',
+            'animate-in fade-in zoom-in-95 duration-200'
+          )}
+        >
+          {/* Preview header */}
+          <div className="shrink-0 flex items-center justify-between gap-3 px-5 py-3 border-b border-[var(--color-border-light)]">
+            <div className="flex items-center gap-2 min-w-0">
+              <FileIcon path={previewFile.path} />
+              <div className="min-w-0">
+                <h3 className="text-sm font-semibold text-[var(--color-text-primary)] truncate">
+                  {previewFile.path.slice(versionDir.length + 1)}
+                </h3>
+                <p className="text-[11px] text-[var(--color-text-tertiary)] font-mono truncate">
+                  {previewFile.path}
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-1.5 shrink-0">
+              <span className="text-[11px] text-[var(--color-text-tertiary)] mr-1">
+                {formatBytes(new Blob([previewFile.content]).size)}
+              </span>
+              <button
+                onClick={handleCopyPreview}
+                title="Copy contents"
+                className={cn(
+                  'p-2 rounded-[var(--radius-md)] transition-all border',
+                  copiedPreview
+                    ? 'border-[var(--color-success)] bg-[var(--color-success-bg)] text-[var(--color-success)]'
+                    : 'border-[var(--color-border-light)] text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-secondary)]'
+                )}
+              >
+                {copiedPreview ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+              </button>
+              <button
+                onClick={() => setPreviewPath(null)}
+                title="Close preview"
+                className="p-2 rounded-[var(--radius-md)] text-[var(--color-text-tertiary)] hover:bg-[var(--color-surface-secondary)] transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+          </div>
+
+          {/* Preview body */}
+          <div className="flex-1 min-h-0 p-4">
+            <div className="h-full rounded-[var(--radius-md)] overflow-hidden border border-[var(--color-border-light)]">
+              <Editor
+                height="100%"
+                language={languageForPath(previewFile.path)}
+                theme={resolvedTheme === 'dark' ? 'vs-dark' : 'vs'}
+                value={previewFile.content}
+                options={{
+                  ...defaultEditorOptions,
+                  readOnly: true,
+                  minimap: { enabled: false },
+                  scrollBeyondLastLine: false,
+                  lineNumbers: 'on',
+                  fontSize: 13,
+                }}
+              />
+            </div>
+          </div>
+        </div>
+      </div>
+    )}
+    </>
   );
 }
