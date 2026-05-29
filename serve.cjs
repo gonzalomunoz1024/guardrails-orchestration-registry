@@ -317,7 +317,7 @@ window.__RUNTIME_CONFIG__ = ${JSON.stringify({ API_BASE_URL: frontendApiUrl }, n
 ├──────────────────────────────────────────────────────────────┤
 │  Server:    http://localhost:${String(config.port).padEnd(30)}│
 │  Backend:   ${config.apiUrl.padEnd(48)}│
-│  Proxying:  ${proxyMode ? 'Yes (/api/* → backend)' : 'No'}${proxyMode ? ''.padEnd(26) : ''.padEnd(40)}│
+│  Proxying:  ${proxyMode ? 'Yes (/v1/* → backend)' : 'No'}${proxyMode ? ''.padEnd(27) : ''.padEnd(40)}│
 └──────────────────────────────────────────────────────────────┘
 `);
   });
