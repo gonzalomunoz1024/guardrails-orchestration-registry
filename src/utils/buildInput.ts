@@ -42,7 +42,7 @@ export function assembleInput({
     guardrail: {
       id: guardrail.id || 'test-policy',
       name: guardrail.name || 'Test Policy',
-      version: guardrail.version || '1.0.0',
+      version: guardrail.version || '1.0',
       enforcementType: guardrail.enforcementType || 'MANDATORY',
     },
   };

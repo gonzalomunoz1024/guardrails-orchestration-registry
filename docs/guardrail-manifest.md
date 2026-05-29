@@ -260,7 +260,7 @@ kind: Guardrail
 metadata:
   name: admin-only
   displayName: "Admin Only"
-  version: 1.0.0
+  version: "1.0"
 spec:
   enforcement: MANDATORY
   stage: PRECHECK

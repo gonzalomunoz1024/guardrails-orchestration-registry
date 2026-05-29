@@ -10,7 +10,7 @@ kind: Guardrail
 metadata:
   name: checkout-service-deployment-gate     # DNS-1123 slug; the stable guardrail id
   displayName: "Checkout Service Deployment Gate"
-  version: 2.1.0
+  version: "2.1"
   description: >-
     Blocks checkout-service VM orders unless the source repository is registered
     and compliant, and the backing VM order targets an approved region.
