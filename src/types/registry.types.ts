@@ -6,6 +6,7 @@ import type { ResourceKind, Stage, EnforcementType } from './guardrail.types';
 
 // Presentation labels for the SCREAMING_SNAKE wire enums.
 export const RESOURCE_KIND_LABELS: Record<ResourceKind, string> = {
+  ANY: 'Any',
   CNAME: 'CNAME',
   MONGODB: 'MongoDB',
   VIRTUAL_MACHINE: 'Virtual Machine',
