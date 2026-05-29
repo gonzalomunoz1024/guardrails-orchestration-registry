@@ -18,10 +18,12 @@ import {
   Copy,
   Check,
   Loader2,
+  Pencil,
 } from 'lucide-react';
 import { useRegistryStore } from '@/store/registryStore';
-import { useUIStore } from '@/store';
+import { useUIStore, usePolicyStore } from '@/store';
 import { usePolicy } from '@/hooks';
+import { guardrailsApi } from '@/services/api';
 import { defaultEditorOptions } from '@/monaco/config';
 import { cn } from '@/utils';
 import type { PolicyTestCase, PolicyVersion } from '@/types';
@@ -149,10 +151,22 @@ function VersionRow({ version, isCurrent }: { version: PolicyVersion; isCurrent:
   );
 }
 
+/**
+ * RegistryPolicy.status is the frontend lowercase form; the studio (and the
+ * backend) speak SCREAMING_SNAKE GuardrailStatus. Map back when loading for edit.
+ */
+function toGuardrailStatus(s: string): 'ACTIVE' | 'INACTIVE' | 'DRAFT' {
+  if (s === 'active') return 'ACTIVE';
+  if (s === 'draft') return 'DRAFT';
+  return 'INACTIVE';
+}
+
 export function PolicyDetail() {
   const { selectedPolicyId, setView, navigateToBlastRadius } = useRegistryStore();
   const { resolvedTheme } = useUIStore();
+  const loadForEdit = usePolicyStore((s) => s.loadForEdit);
   const [activeTab, setActiveTab] = useState<Tab>('overview');
+  const [isLoadingEdit, setIsLoadingEdit] = useState(false);
 
   // Fetch policy from backend
   const { data: backendPolicy, isLoading } = usePolicy(selectedPolicyId);
@@ -173,6 +187,47 @@ export function PolicyDetail() {
       </div>
     );
   }
+
+  // Pre-load the input contract (schema + examples) for the version being
+  // edited so the studio has a real baseline. Best-effort — falls back to an
+  // empty schema if the backend doesn't have one published yet.
+  const handleEdit = async () => {
+    if (!policy) return;
+    setIsLoadingEdit(true);
+    let inputSchemaJson = '{}';
+    let inputExamples: { name: string; payload: string }[] = [];
+    try {
+      const contract = await guardrailsApi.getInputSchema(policy.id, policy.currentVersion);
+      if (contract.schema) inputSchemaJson = JSON.stringify(contract.schema, null, 2);
+      inputExamples = contract.examples ?? [];
+    } catch {
+      // Fall through with defaults.
+    }
+    const configJson = policy.configJson || '{}';
+    const configEnabled = configJson.trim() !== '' && configJson.trim() !== '{}';
+    loadForEdit({
+      regoCode: policy.regoCode,
+      configJson,
+      configEnabled,
+      inputSchemaJson,
+      inputExamples,
+      metadata: {
+        name: policy.name,
+        description: policy.description,
+        tags: policy.tags,
+        version: policy.currentVersion,
+        author: policy.author,
+      },
+      resourceKind: policy.resourceKind,
+      stage: policy.stage,
+      status: toGuardrailStatus(policy.status),
+      enforcementType: policy.enforcementType,
+      tags: policy.tags,
+      baseVersion: policy.currentVersion,
+    });
+    setIsLoadingEdit(false);
+    setView('create-policy');
+  };
 
   const tabs: { id: Tab; label: string }[] = [
     { id: 'overview', label: 'Overview' },
@@ -218,6 +273,24 @@ export function PolicyDetail() {
           </div>
 
           <div className="flex items-center gap-2">
+            <button
+              onClick={handleEdit}
+              disabled={isLoadingEdit}
+              title="Open this guardrail in the studio for editing"
+              className={cn(
+                'flex items-center gap-2 px-4 py-2 rounded-[var(--radius-md)]',
+                'bg-[var(--color-surface-secondary)] text-[var(--color-text-primary)]',
+                'font-medium transition-all hover:bg-[var(--color-border-light)]',
+                'disabled:opacity-50 disabled:cursor-not-allowed'
+              )}
+            >
+              {isLoadingEdit ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <Pencil className="w-4 h-4" />
+              )}
+              Edit
+            </button>
             <button
               onClick={() => navigateToBlastRadius(policy.id)}
               className={cn(
