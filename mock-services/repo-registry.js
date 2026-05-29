@@ -22,6 +22,7 @@ app.use(express.json());
 const REPOS = {
   'payments-api': {
     repoId: 'payments-api',
+    appId: 'app-payments',
     name: 'payments-api',
     org: 'acme',
     registered: true,
@@ -36,6 +37,7 @@ const REPOS = {
   },
   'marketing-site': {
     repoId: 'marketing-site',
+    appId: 'app-marketing',
     name: 'marketing-site',
     org: 'acme',
     registered: true,
@@ -50,6 +52,7 @@ const REPOS = {
   },
   'experimental-ml': {
     repoId: 'experimental-ml',
+    appId: 'app-experimental-ml',
     name: 'experimental-ml',
     org: 'acme',
     registered: false,
@@ -65,6 +68,30 @@ const REPOS = {
 };
 
 const exampleRepo = REPOS['payments-api'];
+
+/**
+ * Build a repo-shaped record for an unknown repoId so every GET resolves with
+ * `repoId` + `appId`. Used by `GET /repos/:repoId` to guarantee a 200 response
+ * for any caller-supplied id (no 404s) — handy for OPA guardrail testing where
+ * the input may carry arbitrary repo identifiers.
+ */
+function synthesizeRepo(repoId) {
+  return {
+    repoId,
+    appId: `app-${repoId}`,
+    name: repoId,
+    org: 'acme',
+    registered: false,
+    visibility: 'internal',
+    defaultBranch: 'main',
+    language: 'unknown',
+    owners: [],
+    hasCodeowners: false,
+    compliance: { tier: 'unrated', sox: false, pci: false },
+    topics: [],
+    registeredAt: null,
+  };
+}
 
 // ---------------------------------------------------------------------------
 // OpenAPI specification
@@ -112,7 +139,10 @@ const openapiSpec = {
         ],
         responses: {
           200: {
-            description: 'Repository registration record',
+            description:
+              'Repository registration record. Always returns 200; unknown ' +
+              'repoIds are synthesized so `repoId` and `appId` are present on ' +
+              'every response.',
             content: {
               'application/json': {
                 schema: { $ref: '#/components/schemas/Repo' },
@@ -120,7 +150,6 @@ const openapiSpec = {
               },
             },
           },
-          404: { description: 'Repository not found' },
         },
       },
     },
@@ -129,8 +158,10 @@ const openapiSpec = {
     schemas: {
       Repo: {
         type: 'object',
+        required: ['repoId', 'appId'],
         properties: {
           repoId: { type: 'string', example: 'payments-api' },
+          appId: { type: 'string', example: 'app-payments' },
           name: { type: 'string', example: 'payments-api' },
           org: { type: 'string', example: 'acme' },
           registered: {
@@ -186,8 +217,8 @@ app.use('/docs', swaggerUi.serveFiles(openapiSpec), swaggerUi.setup(openapiSpec)
 app.get('/repos', (_req, res) => res.json(Object.values(REPOS)));
 
 app.get('/repos/:repoId', (req, res) => {
-  const repo = REPOS[req.params.repoId];
-  if (!repo) return res.status(404).json({ error: 'Repository not found', repoId: req.params.repoId });
+  // Always 200 — synthesize an unknown repo so every caller gets repoId + appId.
+  const repo = REPOS[req.params.repoId] || synthesizeRepo(req.params.repoId);
   res.json(repo);
 });
 
