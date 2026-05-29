@@ -223,10 +223,21 @@ export function PolicyStudio() {
         <div className="flex items-center gap-2 shrink-0">
           <button
             onClick={() => setDetailsOpen(true)}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-[var(--radius-md)] text-sm font-medium text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-surface-secondary)] transition-colors"
+            title={
+              canSubmit
+                ? 'Edit guardrail details'
+                : `Missing: ${missingDetails.join(', ')}`
+            }
+            className="relative flex items-center gap-1.5 px-3 py-1.5 rounded-[var(--radius-md)] text-sm font-medium text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-surface-secondary)] transition-colors"
           >
             <Sliders className="w-4 h-4" />
             Details
+            {!canSubmit && (
+              <span
+                aria-label="Guardrail details incomplete"
+                className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-[var(--color-error)] ring-2 ring-[var(--color-surface)]"
+              />
+            )}
           </button>
           <button
             onClick={openBlast}

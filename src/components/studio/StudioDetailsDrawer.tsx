@@ -19,7 +19,10 @@ interface StudioDetailsDrawerProps {
   onClose: () => void;
 }
 
+// `ANY` is pinned to the top so the wildcard option is the easiest pick as the
+// list grows; the rest stay in display-label order.
 const resourceKinds: { value: ResourceKind; label: string }[] = [
+  { value: 'ANY', label: RESOURCE_KIND_LABELS.ANY },
   { value: 'CNAME', label: RESOURCE_KIND_LABELS.CNAME },
   { value: 'MONGODB', label: RESOURCE_KIND_LABELS.MONGODB },
   { value: 'VIRTUAL_MACHINE', label: RESOURCE_KIND_LABELS.VIRTUAL_MACHINE },
@@ -141,7 +144,7 @@ export function StudioDetailsDrawer({ isOpen, onClose }: StudioDetailsDrawerProp
         {/* Body */}
         <div className="flex-1 min-h-0 overflow-y-auto px-6 py-5 space-y-5">
           <div>
-            <Label>Guardrail name</Label>
+            <Label>Name</Label>
             <input
               value={metadata.name}
               onChange={(e) => updateMetadata({ name: e.target.value })}
@@ -166,8 +169,23 @@ export function StudioDetailsDrawer({ isOpen, onClose }: StudioDetailsDrawerProp
           </div>
 
           <div>
-            <Label>Resource kind</Label>
-            <Segmented value={resourceKind} options={resourceKinds} onChange={setResourceKind} />
+            <Label>Kind</Label>
+            <select
+              value={resourceKind}
+              onChange={(e) => setResourceKind(e.target.value as ResourceKind)}
+              className={fieldClass}
+            >
+              {resourceKinds.map((opt) => (
+                <option key={opt.value} value={opt.value}>
+                  {opt.label}
+                </option>
+              ))}
+            </select>
+            {resourceKind === 'ANY' && (
+              <p className="mt-1.5 text-xs text-[var(--color-text-tertiary)]">
+                Applies to every resource kind — useful for org-wide rules.
+              </p>
+            )}
           </div>
 
           <div>

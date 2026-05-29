@@ -10,7 +10,11 @@ export type GuardrailStatus = 'ACTIVE' | 'INACTIVE' | 'DRAFT';
 export type EnforcementType = 'MANDATORY' | 'OPTIONAL' | 'WARNING';
 /** Lifecycle stage a guardrail runs at (renamed from GuardrailKind). */
 export type Stage = 'PRECHECK' | 'APPROVAL' | 'POSTCHECK';
-export type ResourceKind = 'CNAME' | 'MONGODB' | 'VIRTUAL_MACHINE';
+/**
+ * `ANY` is a wildcard — the guardrail applies regardless of the resource kind.
+ * Useful for org-wide rules that aren't bound to a specific kind.
+ */
+export type ResourceKind = 'ANY' | 'CNAME' | 'MONGODB' | 'VIRTUAL_MACHINE';
 export type EvaluationVerdict = 'PASSED' | 'FAILED';
 
 /** Immutable composite key. A suite pins a guardrail by (guardrailId, version). */
