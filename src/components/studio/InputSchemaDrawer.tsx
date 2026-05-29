@@ -60,7 +60,7 @@ export function InputSchemaDrawer({ isOpen, onClose }: InputSchemaDrawerProps) {
       <div className="absolute inset-0 bg-black/40 backdrop-blur-sm animate-fade-in" onClick={onClose} />
       <div
         className={cn(
-          'absolute top-0 right-0 h-full w-full max-w-xl flex flex-col',
+          'absolute top-0 right-0 h-full w-full max-w-2xl flex flex-col',
           'bg-[var(--color-surface)] border-l border-[var(--color-border-light)] shadow-2xl animate-slide-in'
         )}
       >
@@ -133,7 +133,7 @@ export function InputSchemaDrawer({ isOpen, onClose }: InputSchemaDrawerProps) {
                 ? 'Auto mode tracks the Document as you edit it. Switch to Manual to refine types, descriptions, and required fields.'
                 : 'Manual mode — your edits are preserved. "Derive" overwrites from the current Document.'}
             </p>
-            <div className="h-[240px] rounded-[var(--radius-md)] overflow-hidden border border-[var(--color-border-light)]">
+            <div className="h-[60vh] min-h-[420px] rounded-[var(--radius-md)] overflow-hidden border border-[var(--color-border-light)]">
               <Editor
                 height="100%"
                 language="json"

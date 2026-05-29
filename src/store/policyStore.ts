@@ -154,11 +154,20 @@ export const usePolicyStore = create<PolicyState>()(
     }),
     {
       name: 'policy-storage',
-      version: 2,
-      // v1 → v2: resourceType removed; drop the stale field if present.
+      version: 3,
+      // Migrations:
+      //   v1 → v2: resourceType removed; drop the stale field if present.
+      //   v2 → v3: guardrail versions are MAJOR.MINOR only — truncate any
+      //            persisted 3-segment metadata.version (e.g. "1.0.0" → "1.0").
       migrate: (persisted: unknown) => {
         const state = (persisted ?? {}) as Record<string, unknown>;
         delete state.resourceType;
+        const meta = state.metadata as Record<string, unknown> | undefined;
+        if (meta && typeof meta.version === 'string') {
+          const m = meta.version.match(/^(\d+\.\d+)(?:\.\d+)?$/);
+          if (m) meta.version = m[1];
+          else meta.version = '1.0';
+        }
         return state as unknown as PolicyState;
       },
       partialize: (state) => ({

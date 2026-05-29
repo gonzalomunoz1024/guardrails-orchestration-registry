@@ -12,6 +12,13 @@ import {
   FolderTree,
   Copy,
   Check,
+  Shield,
+  User as UserIcon,
+  Tag,
+  Hash,
+  FileCode2,
+  FileJson,
+  Boxes,
 } from 'lucide-react';
 import JSZip from 'jszip';
 import { saveAs } from 'file-saver';
@@ -22,6 +29,7 @@ import { usePolicyStore } from '@/store';
 import { useGuardrailConfig } from '@/hooks/useGuardrailConfig';
 import { ComingSoonBanner } from '@/components/common/ComingSoonBanner';
 import type { EnforcementType, Stage, ResourceKind, GuardrailStatus } from '@/types/guardrail.types';
+import { STAGE_LABELS, ENFORCEMENT_LABELS, RESOURCE_KIND_LABELS } from '@/types';
 
 // Shared PAT for GitHub operations (bypasses OAuth App restrictions)
 const GITHUB_PAT = import.meta.env.VITE_GITHUB_PAT;
@@ -54,6 +62,48 @@ interface StepLog {
   step: string;
   status: 'pending' | 'running' | 'success' | 'error';
   message?: string;
+}
+
+/** Compact icon + label + value row for the Guardrail Details card. */
+function DetailRow({
+  icon: Icon,
+  label,
+  value,
+  mono,
+}: {
+  icon: React.ComponentType<{ className?: string }>;
+  label: string;
+  value: React.ReactNode;
+  mono?: boolean;
+}) {
+  return (
+    <>
+      <dt className="flex items-center gap-1.5 text-[var(--color-text-tertiary)] uppercase tracking-wider text-[10px] font-medium">
+        <Icon className="w-3 h-3" />
+        {label}
+      </dt>
+      <dd className={cn('min-w-0 text-[var(--color-text-primary)]', mono && 'font-mono text-[12px]')}>
+        {value}
+      </dd>
+    </>
+  );
+}
+
+/** Resolve a file icon from its extension; falls back to a generic doc icon. */
+function FileIcon({ path }: { path: string }) {
+  if (path.endsWith('.rego'))
+    return <FileCode2 className="w-3.5 h-3.5 text-[var(--color-info)]" />;
+  if (path.endsWith('.yaml') || path.endsWith('.yml'))
+    return <Boxes className="w-3.5 h-3.5 text-[var(--color-warning)]" />;
+  if (path.endsWith('.json'))
+    return <FileJson className="w-3.5 h-3.5 text-[var(--color-success)]" />;
+  return <FileText className="w-3.5 h-3.5 text-[var(--color-text-tertiary)]" />;
+}
+
+/** Compact "1.2 KB" / "412 B" formatter for the file-size hint. */
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  return `${(bytes / 1024).toFixed(1)} KB`;
 }
 
 export function SubmitPolicyModal({
@@ -458,9 +508,9 @@ ${artifactFiles.map((f) => `- \`${f.path}\``).join('\n')}
       {/* Modal */}
       <div
         className={cn(
-          'relative w-full max-w-2xl',
+          'relative w-full max-w-4xl max-h-[92vh] flex flex-col',
           'rounded-2xl overflow-hidden',
-          'bg-[var(--color-surface)] shadow-2xl',
+          'bg-[var(--color-surface)] shadow-2xl border border-[var(--color-border-light)]',
           'animate-in fade-in zoom-in-95 duration-200'
         )}
       >
@@ -488,24 +538,125 @@ ${artifactFiles.map((f) => `- \`${f.path}\``).join('\n')}
         </div>
 
         {/* Content */}
-        <div className="p-6 space-y-6">
-          {/* File Preview */}
-          <div className="rounded-xl bg-[var(--color-surface-secondary)] p-4">
-            <div className="flex items-center gap-2 mb-3">
-              <FolderTree className="w-4 h-4 text-[var(--color-text-tertiary)]" />
-              <span className="text-sm font-medium text-[var(--color-text-primary)]">
-                Files to be created
-              </span>
-            </div>
-            <div className="mb-1 text-xs text-[var(--color-text-tertiary)]">{versionDir}/</div>
-            <div className="space-y-1 font-mono text-sm text-[var(--color-text-secondary)]">
-              {buildArtifactFiles().map((f) => (
-                <div key={f.path} className="flex items-center gap-2">
-                  <span className="text-[var(--color-text-tertiary)]">└</span>
-                  <span>{f.path.slice(versionDir.length + 1)}</span>
+        <div className="flex-1 min-h-0 overflow-y-auto p-6 space-y-6">
+          {/* Details + Files (two-column on lg+) */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            {/* Guardrail Details */}
+            <section className="rounded-2xl border border-[var(--color-border-light)] bg-[var(--color-surface)] overflow-hidden">
+              <header className="flex items-center gap-2 px-5 py-3 border-b border-[var(--color-border-light)] bg-[var(--color-surface-secondary)]/60">
+                <Shield className="w-4 h-4 text-[var(--color-text-secondary)]" />
+                <h3 className="text-sm font-semibold text-[var(--color-text-primary)]">
+                  Guardrail Details
+                </h3>
+              </header>
+              <div className="p-5 space-y-4">
+                {/* Name + Description */}
+                <div>
+                  <h4 className="text-base font-semibold text-[var(--color-text-primary)] truncate">
+                    {metadata.name || 'Untitled guardrail'}
+                  </h4>
+                  {metadata.description && (
+                    <p className="mt-1 text-sm text-[var(--color-text-secondary)] line-clamp-3">
+                      {metadata.description}
+                    </p>
+                  )}
                 </div>
-              ))}
-            </div>
+
+                {/* Status chips row */}
+                <div className="flex flex-wrap gap-1.5">
+                  <span className={cn(
+                    'px-2.5 py-1 rounded-[var(--radius-sm)] text-xs font-semibold',
+                    metadata.status === 'ACTIVE'   && 'bg-[var(--color-success-bg)] text-[var(--color-success)]',
+                    metadata.status === 'DRAFT'    && 'bg-[var(--color-warning-bg)] text-[var(--color-warning)]',
+                    metadata.status === 'INACTIVE' && 'bg-[var(--color-surface-secondary)] text-[var(--color-text-secondary)]'
+                  )}>
+                    {metadata.status.charAt(0) + metadata.status.slice(1).toLowerCase()}
+                  </span>
+                  <span className="px-2.5 py-1 rounded-[var(--radius-sm)] text-xs font-semibold bg-[var(--color-info-bg)] text-[var(--color-info)]">
+                    {STAGE_LABELS[metadata.stage]}
+                  </span>
+                  <span className={cn(
+                    'px-2.5 py-1 rounded-[var(--radius-sm)] text-xs font-semibold',
+                    metadata.enforcementType === 'MANDATORY' && 'bg-[var(--color-info-bg)] text-[var(--color-info)]',
+                    metadata.enforcementType === 'WARNING'   && 'bg-[var(--color-warning-bg)] text-[var(--color-warning)]',
+                    metadata.enforcementType === 'OPTIONAL'  && 'bg-[var(--color-surface-secondary)] text-[var(--color-text-secondary)]'
+                  )}>
+                    {ENFORCEMENT_LABELS[metadata.enforcementType]}
+                  </span>
+                  <span className="px-2.5 py-1 rounded-[var(--radius-sm)] text-xs font-semibold bg-[var(--color-surface-secondary)] text-[var(--color-text-secondary)]">
+                    {RESOURCE_KIND_LABELS[metadata.resourceKind]}
+                  </span>
+                </div>
+
+                {/* Identity rows */}
+                <dl className="grid grid-cols-[6.5rem_1fr] gap-y-2 text-xs">
+                  <DetailRow icon={Hash} label="ID" value={policyId} mono />
+                  <DetailRow icon={GitBranch} label="Version" value={metadata.version} mono />
+                  <DetailRow icon={UserIcon} label="Owner" value={metadata.owner || user?.login || '—'} />
+                  <DetailRow
+                    icon={Tag}
+                    label="Tags"
+                    value={
+                      metadata.tags.length > 0 ? (
+                        <div className="flex flex-wrap gap-1">
+                          {metadata.tags.map((t) => (
+                            <span
+                              key={t}
+                              className="px-1.5 py-0.5 rounded-full text-[11px] bg-[var(--color-surface-secondary)] text-[var(--color-text-secondary)]"
+                            >
+                              {t}
+                            </span>
+                          ))}
+                        </div>
+                      ) : (
+                        <span className="text-[var(--color-text-tertiary)]">None</span>
+                      )
+                    }
+                  />
+                </dl>
+
+                <p className="text-[11px] text-[var(--color-text-tertiary)] leading-relaxed">
+                  Updating a published guardrail bumps the minor version; <code className="font-mono">(id, version)</code> is immutable.
+                </p>
+              </div>
+            </section>
+
+            {/* Files to be created */}
+            <section className="rounded-2xl border border-[var(--color-border-light)] bg-[var(--color-surface)] overflow-hidden">
+              <header className="flex items-center justify-between gap-2 px-5 py-3 border-b border-[var(--color-border-light)] bg-[var(--color-surface-secondary)]/60">
+                <div className="flex items-center gap-2">
+                  <FolderTree className="w-4 h-4 text-[var(--color-text-secondary)]" />
+                  <h3 className="text-sm font-semibold text-[var(--color-text-primary)]">
+                    Files to be created
+                  </h3>
+                </div>
+                <span className="px-2 py-0.5 rounded-full text-[11px] font-medium bg-[var(--color-surface-secondary)] text-[var(--color-text-secondary)]">
+                  {buildArtifactFiles().length} files
+                </span>
+              </header>
+              <div className="p-5">
+                <div className="flex items-center gap-1.5 text-xs text-[var(--color-text-tertiary)] font-mono">
+                  <FolderTree className="w-3.5 h-3.5" />
+                  {versionDir}/
+                </div>
+                <ul className="mt-2 space-y-1">
+                  {buildArtifactFiles().map((f, i, arr) => {
+                    const rel = f.path.slice(versionDir.length + 1);
+                    const last = i === arr.length - 1;
+                    return (
+                      <li key={f.path} className="flex items-center gap-2 font-mono text-sm text-[var(--color-text-secondary)]">
+                        <span className="text-[var(--color-text-tertiary)] w-3">{last ? '└' : '├'}</span>
+                        <FileIcon path={rel} />
+                        <span className="truncate">{rel}</span>
+                        <span className="ml-auto text-[10px] text-[var(--color-text-tertiary)]">
+                          {formatBytes(new Blob([f.content]).size)}
+                        </span>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </div>
+            </section>
           </div>
 
           {/* Action Cards */}
