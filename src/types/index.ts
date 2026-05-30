@@ -8,10 +8,6 @@ export * from './suite.types';
 export {
   type GuardrailDefinition,
   type GuardrailConfiguration,
-  type GuardrailListItem,
-  type CreateGuardrailRequest,
-  type UpdateGuardrailRequest,
-  type UpsertConfigurationRequest,
   type GuardrailStatus,
   type EnforcementType,
   type Stage,

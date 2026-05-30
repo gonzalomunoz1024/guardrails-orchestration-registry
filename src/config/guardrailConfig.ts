@@ -31,7 +31,7 @@ export const guardrailConfig: GuardrailAppConfig = {
   github: {
     owner: 'wftgitsas-CHIEF-TECH-OFC',
     repo: 'App-claut-schema-registry',
-    defaultBranch: 'main',
+    defaultBranch: 'feature/guardrails',
   },
   testInputs: {
     enabled: true,

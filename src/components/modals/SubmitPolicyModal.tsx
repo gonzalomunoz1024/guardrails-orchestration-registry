@@ -143,6 +143,7 @@ export function SubmitPolicyModal({
   // Global GitHub publish target.
   const UPSTREAM_OWNER = config.github.owner;
   const UPSTREAM_REPO = config.github.repo;
+  const TARGET_BRANCH = config.github.defaultBranch ?? 'main';
   const [githubStatus, setGithubStatus] = useState<SubmitStatus>('idle');
   const [githubError, setGithubError] = useState<string | null>(null);
   const [stepLogs, setStepLogs] = useState<StepLog[]>([]);
@@ -310,18 +311,17 @@ export function SubmitPolicyModal({
     const octokit = new Octokit({ auth: GITHUB_PAT });
     const branchPrefix = metadataOnly ? 'metadata' : 'policy';
     const branchName = `feature/${branchPrefix}-${policyId}-${Date.now()}`;
-    let defaultBranch = 'main';
+    const defaultBranch = TARGET_BRANCH;
     let baseSha = '';
 
-    // Step 1: Get repo info (default branch)
+    // Step 1: Verify repo + target branch exist
     updateStep('Get repository info', 'running');
     try {
-      const { data: repo } = await octokit.rest.repos.get({
+      await octokit.rest.repos.get({
         owner: UPSTREAM_OWNER,
         repo: UPSTREAM_REPO,
       });
-      defaultBranch = repo.default_branch;
-      updateStep('Get repository info', 'success', `Default branch: ${defaultBranch}`);
+      updateStep('Get repository info', 'success', `Target branch: ${defaultBranch}`);
     } catch (error) {
       const msg = error instanceof Error ? error.message : 'Unknown error';
       updateStep('Get repository info', 'error', msg);
