@@ -10,14 +10,8 @@ import type {
   GuardrailDefinition,
   GuardrailConfiguration,
   ConfigurationListItem,
-  CreateGuardrailRequest,
-  UpdateGuardrailRequest,
-  UpsertConfigurationRequest,
   EvaluationRecord,
   PaginatedResponse,
-  EnforcementType,
-  Stage,
-  ResourceKind,
   GuardrailRef,
 } from '@/types/guardrail.types';
 import type {
@@ -30,12 +24,7 @@ import type {
   TestInput,
   TestInputSource,
 } from '@/types/registry.types';
-import {
-  mapGuardrailToPolicy,
-  mapPolicyToCreateGuardrailRequest,
-  mapPolicyToUpdateGuardrailRequest,
-  mapPolicyConfigToUpsertRequest,
-} from '@/utils/guardrailMapper';
+import { mapGuardrailToPolicy } from '@/utils/guardrailMapper';
 
 // Base paths for the backend API — all endpoints live under /v1/utilities
 const GUARDRAILS_PATH = '/v1/utilities/registry/guardrails';
@@ -173,59 +162,6 @@ export const guardrailsApi = {
     }
   },
 
-  /**
-   * Create a new guardrail definition
-   */
-  createGuardrail: async (request: CreateGuardrailRequest): Promise<GuardrailDefinition> => {
-    try {
-      const response = await apiClient.post<GuardrailDefinition>(GUARDRAILS_PATH, request);
-      return response.data;
-    } catch (error) {
-      console.error('[guardrailsApi] Failed to create guardrail:', error);
-      throw new GuardrailsApiError(
-        'Failed to create guardrail',
-        (error as { response?: { status?: number } })?.response?.status,
-        GUARDRAILS_PATH,
-        error
-      );
-    }
-  },
-
-  /**
-   * Update an existing guardrail definition
-   */
-  updateGuardrail: async (id: string, request: UpdateGuardrailRequest): Promise<GuardrailDefinition> => {
-    try {
-      const response = await apiClient.put<GuardrailDefinition>(`${GUARDRAILS_PATH}/${id}`, request);
-      return response.data;
-    } catch (error) {
-      console.error(`[guardrailsApi] Failed to update guardrail ${id}:`, error);
-      throw new GuardrailsApiError(
-        `Failed to update guardrail with ID: ${id}`,
-        (error as { response?: { status?: number } })?.response?.status,
-        `${GUARDRAILS_PATH}/${id}`,
-        error
-      );
-    }
-  },
-
-  /**
-   * Delete a guardrail definition
-   */
-  deleteGuardrail: async (id: string): Promise<void> => {
-    try {
-      await apiClient.delete(`${GUARDRAILS_PATH}/${id}`);
-    } catch (error) {
-      console.error(`[guardrailsApi] Failed to delete guardrail ${id}:`, error);
-      throw new GuardrailsApiError(
-        `Failed to delete guardrail with ID: ${id}`,
-        (error as { response?: { status?: number } })?.response?.status,
-        `${GUARDRAILS_PATH}/${id}`,
-        error
-      );
-    }
-  },
-
   // ============================================
   // CONFIGURATION ENDPOINTS
   // ============================================
@@ -265,51 +201,6 @@ export const guardrailsApi = {
       console.error(`[guardrailsApi] Failed to get configuration for ${guardrailId}:`, error);
       throw new GuardrailsApiError(
         `Failed to fetch configuration for guardrail: ${guardrailId}`,
-        (error as { response?: { status?: number } })?.response?.status,
-        `${CONFIGURATIONS_PATH}/${guardrailId}`,
-        error
-      );
-    }
-  },
-
-  /**
-   * Create or update configuration for a guardrail (upsert)
-   */
-  upsertConfiguration: async (
-    guardrailId: string,
-    request: UpsertConfigurationRequest
-  ): Promise<GuardrailConfiguration> => {
-    try {
-      const response = await apiClient.put<GuardrailConfiguration>(
-        `${CONFIGURATIONS_PATH}/${guardrailId}`,
-        request
-      );
-      return response.data;
-    } catch (error) {
-      console.error(`[guardrailsApi] Failed to upsert configuration for ${guardrailId}:`, error);
-      throw new GuardrailsApiError(
-        `Failed to save configuration for guardrail: ${guardrailId}`,
-        (error as { response?: { status?: number } })?.response?.status,
-        `${CONFIGURATIONS_PATH}/${guardrailId}`,
-        error
-      );
-    }
-  },
-
-  /**
-   * Delete configuration for a guardrail
-   */
-  deleteConfiguration: async (guardrailId: string): Promise<void> => {
-    try {
-      await apiClient.delete(`${CONFIGURATIONS_PATH}/${guardrailId}`);
-    } catch (error) {
-      // 404 is acceptable - config might not exist
-      if ((error as { response?: { status?: number } })?.response?.status === 404) {
-        return;
-      }
-      console.error(`[guardrailsApi] Failed to delete configuration for ${guardrailId}:`, error);
-      throw new GuardrailsApiError(
-        `Failed to delete configuration for guardrail: ${guardrailId}`,
         (error as { response?: { status?: number } })?.response?.status,
         `${CONFIGURATIONS_PATH}/${guardrailId}`,
         error
@@ -601,73 +492,4 @@ export const guardrailsApi = {
     return mapGuardrailToPolicy(guardrail, config);
   },
 
-  /**
-   * Save a policy (create or update guardrail + configuration)
-   * This is a composed operation that handles both resources.
-   *
-   * @param policy - The policy data to save
-   * @param isNew - Whether this is a new policy (create) or existing (update)
-   * @param additionalFields - Backend-specific fields not in frontend model
-   */
-  savePolicy: async (
-    policy: Partial<RegistryPolicy>,
-    isNew: boolean,
-    additionalFields?: {
-      enforcementType?: EnforcementType;
-      stage?: Stage;
-      resourceKind?: ResourceKind;
-    }
-  ): Promise<{ guardrail: GuardrailDefinition; configuration: GuardrailConfiguration }> => {
-    let savedGuardrail: GuardrailDefinition;
-
-    // Step 1: Create or update the guardrail definition
-    if (isNew) {
-      const createRequest = mapPolicyToCreateGuardrailRequest(policy, additionalFields);
-      savedGuardrail = await guardrailsApi.createGuardrail(createRequest);
-    } else {
-      if (!policy.id) {
-        throw new GuardrailsApiError('Policy ID is required for update');
-      }
-      const updateRequest = mapPolicyToUpdateGuardrailRequest(policy);
-      savedGuardrail = await guardrailsApi.updateGuardrail(policy.id, updateRequest);
-    }
-
-    // Step 2: Save the configuration
-    const configRequest = mapPolicyConfigToUpsertRequest(policy.configJson || '{}');
-    let savedConfiguration: GuardrailConfiguration;
-
-    try {
-      savedConfiguration = await guardrailsApi.upsertConfiguration(savedGuardrail.guardrailId, configRequest);
-    } catch (configError) {
-      // If configuration save fails after guardrail was created, we have partial success
-      // Log the error but don't throw - return what we have
-      console.error(
-        `[guardrailsApi] Guardrail saved but configuration failed for ${savedGuardrail.guardrailId}:`,
-        configError
-      );
-
-      // Return with empty configuration
-      savedConfiguration = {
-        guardrailId: savedGuardrail.guardrailId,
-        global: {},
-      };
-    }
-
-    return {
-      guardrail: savedGuardrail,
-      configuration: savedConfiguration,
-    };
-  },
-
-  /**
-   * Delete a policy (guardrail + configuration)
-   */
-  deletePolicy: async (id: string): Promise<void> => {
-    // Delete configuration first (it depends on guardrail)
-    // If it doesn't exist, that's fine
-    await guardrailsApi.deleteConfiguration(id);
-
-    // Then delete the guardrail
-    await guardrailsApi.deleteGuardrail(id);
-  },
 };

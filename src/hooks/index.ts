@@ -4,15 +4,7 @@ export { useEvaluate } from './useEvaluate';
 export { useInputShape } from './useInputShape';
 export { useGitHubAuth } from './useGitHubAuth';
 export { useDatasources, useDatasource, useDatasourceValue } from './useDatasources';
-export {
-  usePolicies,
-  usePolicy,
-  useCreatePolicy,
-  useUpdatePolicy,
-  useDeletePolicy,
-  useSavePolicy,
-  policyKeys,
-} from './usePolicies';
+export { usePolicies, usePolicy, policyKeys } from './usePolicies';
 export {
   useEvaluations,
   useEvaluation,

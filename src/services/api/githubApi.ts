@@ -1,8 +1,5 @@
 import { Octokit } from 'octokit';
-import { useAuthStore } from '@/store/authStore';
 
-const REPO_OWNER = import.meta.env.VITE_GITHUB_REPO_OWNER || '';
-const REPO_NAME = import.meta.env.VITE_GITHUB_REPO_NAME || '';
 const CLIENT_ID = import.meta.env.VITE_GITHUB_CLIENT_ID || '';
 
 export interface GitHubUser {
@@ -18,23 +15,6 @@ export interface DeviceCodeResponse {
   verification_uri: string;
   expires_in: number;
   interval: number;
-}
-
-export interface CreatePRRequest {
-  policyName: string;
-  regoCode: string;
-  configJson: string;
-  metadata: {
-    description: string;
-    author: string;
-    tags: string[];
-  };
-}
-
-export interface CreatePRResponse {
-  prNumber: number;
-  prUrl: string;
-  branchName: string;
 }
 
 export const githubApi = {
@@ -178,114 +158,5 @@ export const githubApi = {
     } catch {
       return null;
     }
-  },
-
-  /**
-   * Create a Pull Request with policy files
-   */
-  createPullRequest: async (
-    request: CreatePRRequest
-  ): Promise<CreatePRResponse> => {
-    const token = useAuthStore.getState().accessToken;
-    if (!token) {
-      throw new Error('Not authenticated with GitHub');
-    }
-
-    if (!REPO_OWNER || !REPO_NAME) {
-      throw new Error('GitHub repository not configured. Set VITE_GITHUB_REPO_OWNER and VITE_GITHUB_REPO_NAME.');
-    }
-
-    const octokit = new Octokit({ auth: token });
-    const branchName = `policy/${request.policyName}-${Date.now()}`;
-
-    const { data: repo } = await octokit.rest.repos.get({
-      owner: REPO_OWNER,
-      repo: REPO_NAME,
-    });
-
-    const defaultBranch = repo.default_branch;
-
-    const { data: ref } = await octokit.rest.git.getRef({
-      owner: REPO_OWNER,
-      repo: REPO_NAME,
-      ref: `heads/${defaultBranch}`,
-    });
-
-    const baseSha = ref.object.sha;
-
-    await octokit.rest.git.createRef({
-      owner: REPO_OWNER,
-      repo: REPO_NAME,
-      ref: `refs/heads/${branchName}`,
-      sha: baseSha,
-    });
-
-    const policyPath = `policies/${request.policyName}.rego`;
-    await octokit.rest.repos.createOrUpdateFileContents({
-      owner: REPO_OWNER,
-      repo: REPO_NAME,
-      path: policyPath,
-      message: `Add policy: ${request.policyName}`,
-      content: btoa(request.regoCode),
-      branch: branchName,
-    });
-
-    const configPath = `configuration/${request.policyName}.json`;
-    const configContent = JSON.stringify(
-      JSON.parse(request.configJson),
-      null,
-      2
-    );
-
-    await octokit.rest.repos.createOrUpdateFileContents({
-      owner: REPO_OWNER,
-      repo: REPO_NAME,
-      path: configPath,
-      message: `Add configuration for policy: ${request.policyName}`,
-      content: btoa(configContent),
-      branch: branchName,
-    });
-
-    const prBody = `## New Policy: ${request.policyName}
-
-${request.metadata.description}
-
-### Files Added
-- \`${policyPath}\` - Rego policy
-- \`${configPath}\` - Policy configuration
-
-### Metadata
-- **Author**: ${request.metadata.author}
-- **Tags**: ${request.metadata.tags.join(', ') || 'None'}
-
----
-*Created via OPA Policy Registry*`;
-
-    const { data: pr } = await octokit.rest.pulls.create({
-      owner: REPO_OWNER,
-      repo: REPO_NAME,
-      title: `[Policy] Add ${request.policyName}`,
-      body: prBody,
-      head: branchName,
-      base: defaultBranch,
-    });
-
-    return {
-      prNumber: pr.number,
-      prUrl: pr.html_url,
-      branchName,
-    };
-  },
-
-  /**
-   * Get current authenticated user
-   */
-  getUser: async (): Promise<GitHubUser> => {
-    const token = useAuthStore.getState().accessToken;
-    if (!token) {
-      throw new Error('Not authenticated');
-    }
-
-    return githubApi.fetchUser(token);
   },
 };

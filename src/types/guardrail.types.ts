@@ -47,55 +47,8 @@ export interface ScopeExclusion {
 }
 
 /**
- * Guardrail Definition List Item - Backend DTO
- * GET /v1/utilities/registry/guardrails (list response)
- */
-export interface GuardrailListItem {
-  guardrailId: string;
-  guardrailName: string;
-  version: string;
-  status: GuardrailStatus;
-  enforcementType: EnforcementType;
-  stage: Stage;
-  resourceKind: ResourceKind;
-}
-
-/**
- * Create Guardrail Request - Backend DTO
- * POST /v1/utilities/registry/guardrails (creates at version 1.0)
- */
-export interface CreateGuardrailRequest {
-  guardrailId: string;
-  guardrailName: string;
-  description: string;
-  version: string;
-  status: GuardrailStatus;
-  enforcementType: EnforcementType;
-  stage: Stage;
-  resourceKind: ResourceKind;
-  owner: string;
-  scopeExclusions?: ScopeExclusion[];
-}
-
-/**
- * Update Guardrail Request - Backend DTO
- * PUT /v1/utilities/registry/guardrails/{guardrailId} — creates a NEW immutable version
- * (server derives the version; callers do not choose it).
- */
-export interface UpdateGuardrailRequest {
-  guardrailName?: string;
-  description?: string;
-  status?: GuardrailStatus;
-  enforcementType?: EnforcementType;
-  stage?: Stage;
-  resourceKind?: ResourceKind;
-  owner?: string;
-  scopeExclusions?: ScopeExclusion[];
-}
-
-/**
  * Guardrail Configuration - Backend DTO
- * GET/PUT /v1/utilities/registry/configurations/{guardrailId}
+ * GET /v1/utilities/registry/configurations/{guardrailId}
  */
 export interface GuardrailConfiguration {
   guardrailId: string;
@@ -109,15 +62,6 @@ export interface GuardrailConfiguration {
  */
 export interface ConfigurationListItem {
   guardrailId: string;
-  global: Record<string, unknown>;
-  lobOverrides?: Record<string, Record<string, unknown>>;
-}
-
-/**
- * Create/Update Configuration Request - Backend DTO
- * PUT /v1/utilities/registry/configurations/{guardrailId}
- */
-export interface UpsertConfigurationRequest {
   global: Record<string, unknown>;
   lobOverrides?: Record<string, Record<string, unknown>>;
 }
