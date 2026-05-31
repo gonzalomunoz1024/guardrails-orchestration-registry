@@ -15,6 +15,7 @@ import type {
   GuardrailStatus,
 } from '@/types/guardrail.types';
 import type { RegistryPolicy, PolicyStatus } from '@/types/registry.types';
+import { normalizeResourceKind } from './resourceKind';
 
 /** Backend GuardrailStatus → frontend PolicyStatus. */
 export function mapGuardrailStatusToPolicy(status: GuardrailStatus): PolicyStatus {
@@ -47,7 +48,7 @@ export function mapManifestToPolicy(
     id: metadata.name,
     name: metadata.displayName || metadata.name,
     description: metadata.description ?? '',
-    resourceKind: spec.target.resourceKind,
+    resourceKind: normalizeResourceKind(spec.target.resourceKind),
     stage: spec.stage,
     enforcementType: spec.enforcement,
     status: mapGuardrailStatusToPolicy(spec.status),
@@ -91,7 +92,7 @@ export function mapMetadataProjectionToPolicy(
     id: metadata.name,
     name: metadata.displayName || metadata.name,
     description: metadata.description ?? '',
-    resourceKind: metadata.resourceKind,
+    resourceKind: normalizeResourceKind(metadata.resourceKind),
     stage: metadata.stage,
     enforcementType: metadata.enforcement,
     status: mapGuardrailStatusToPolicy(metadata.status),

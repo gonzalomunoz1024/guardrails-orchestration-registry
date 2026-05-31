@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { ExternalDependency, PolicyMetadata } from '@/types';
 import type { ResourceKind, Stage, EnforcementType, GuardrailStatus } from '@/types/guardrail.types';
+import { normalizeResourceKind } from '@/utils/resourceKind';
 import type { InputExample } from './policyStore';
 
 /**
@@ -71,13 +72,24 @@ export const useDraftStore = create<DraftState>()(
     }),
     {
       name: 'guardrail-drafts',
-      version: 2,
-      // v1 → v2: drafts had no body and were never resumable. Drop them so
-      // the catalog stops listing un-resumable zombie rows.
+      version: 3,
+      // Migrations:
+      //   v1 → v2: drafts had no body and were never resumable. Drop them so
+      //            the catalog stops listing un-resumable zombie rows.
+      //   v2 → v3: resourceKind moved from SCREAMING_SNAKE to PascalCase
+      //            (VIRTUAL_MACHINE → VirtualMachine, etc.). Normalize the
+      //            top-level facet and the nested body field.
       migrate: (persisted: unknown) => {
         const state = (persisted ?? {}) as Record<string, unknown>;
         const drafts = Array.isArray(state.drafts) ? (state.drafts as GuardrailDraft[]) : [];
-        return { drafts: drafts.filter((d) => d && typeof d === 'object' && 'body' in d) } as unknown as DraftState;
+        const cleaned = drafts
+          .filter((d) => d && typeof d === 'object' && 'body' in d)
+          .map((d) => ({
+            ...d,
+            resourceKind: normalizeResourceKind(d.resourceKind),
+            body: { ...d.body, resourceKind: normalizeResourceKind(d.body?.resourceKind) },
+          }));
+        return { drafts: cleaned } as unknown as DraftState;
       },
     }
   )

@@ -15,10 +15,12 @@ export type EnforcementType = 'MANDATORY' | 'OPTIONAL' | 'WARNING';
 /** Lifecycle stage a guardrail runs at (renamed from GuardrailKind). */
 export type Stage = 'PRECHECK' | 'APPROVAL' | 'POSTCHECK';
 /**
- * `ANY` is a wildcard — the guardrail applies regardless of the resource kind.
- * Useful for org-wide rules that aren't bound to a specific kind.
+ * Resource kinds use the backend's PascalCase form on the wire (acronyms
+ * preserved, e.g. `CNAME`, `MongoDB`). `Any` is a wildcard — the guardrail
+ * applies regardless of the resource kind. Useful for org-wide rules that
+ * aren't bound to a specific kind.
  */
-export type ResourceKind = 'ANY' | 'CNAME' | 'MONGODB' | 'VIRTUAL_MACHINE';
+export type ResourceKind = 'Any' | 'CNAME' | 'MongoDB' | 'VirtualMachine';
 export type EvaluationVerdict = 'PASSED' | 'FAILED';
 
 /** Immutable composite key. A suite pins a guardrail by (guardrailId, version). */

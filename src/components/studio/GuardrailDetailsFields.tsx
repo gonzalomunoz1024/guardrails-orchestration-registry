@@ -14,13 +14,13 @@ import type {
   GuardrailStatus,
 } from '@/types/guardrail.types';
 
-// `ANY` is pinned to the top so the wildcard option is the easiest pick as the
-// list grows; the rest stay in display-label order.
+// `Any` is pinned to the top so the wildcard option is the easiest pick as
+// the list grows; the rest stay in display-label order.
 const resourceKinds: { value: ResourceKind; label: string }[] = [
-  { value: 'ANY', label: RESOURCE_KIND_LABELS.ANY },
+  { value: 'Any', label: RESOURCE_KIND_LABELS.Any },
   { value: 'CNAME', label: RESOURCE_KIND_LABELS.CNAME },
-  { value: 'MONGODB', label: RESOURCE_KIND_LABELS.MONGODB },
-  { value: 'VIRTUAL_MACHINE', label: RESOURCE_KIND_LABELS.VIRTUAL_MACHINE },
+  { value: 'MongoDB', label: RESOURCE_KIND_LABELS.MongoDB },
+  { value: 'VirtualMachine', label: RESOURCE_KIND_LABELS.VirtualMachine },
 ];
 
 const stages: { value: Stage; label: string }[] = [
@@ -183,7 +183,7 @@ export function GuardrailDetailsFields({
             </option>
           ))}
         </select>
-        {resourceKind === 'ANY' && (
+        {resourceKind === 'Any' && (
           <p className="mt-1.5 text-xs text-[var(--color-text-tertiary)]">
             Applies to every resource kind — useful for org-wide rules.
           </p>
