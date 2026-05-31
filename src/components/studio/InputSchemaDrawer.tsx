@@ -1,10 +1,16 @@
 import Editor from '@monaco-editor/react';
-import { X, Plus, Trash2, FileJson, Sparkles } from 'lucide-react';
+import { X, Plus, Trash2, FileJson, Sparkles, ShieldAlert, ShieldCheck, Wand2 } from 'lucide-react';
 import { usePolicyStore } from '@/store';
 import { useUIStore } from '@/store';
 import { defaultEditorOptions } from '@/monaco/config';
-import { cn, deriveSchemaFromJson } from '@/utils';
-import { useEffect } from 'react';
+import {
+  cn,
+  deriveSchemaFromJson,
+  RESERVED_FIELDS,
+  applyReservedFields,
+  findReservedFieldCollisions,
+} from '@/utils';
+import { useEffect, useMemo } from 'react';
 
 interface InputSchemaDrawerProps {
   isOpen: boolean;
@@ -35,6 +41,27 @@ export function InputSchemaDrawer({ isOpen, onClose }: InputSchemaDrawerProps) {
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
   }, [isOpen, onClose]);
+
+  // Parse the current schema once per render so the hint/collision panel
+  // can reflect what the editor actually contains right now.
+  const parsedSchema = useMemo(() => {
+    try {
+      return JSON.parse(inputSchemaJson || '{}') as Record<string, unknown>;
+    } catch {
+      return null;
+    }
+  }, [inputSchemaJson]);
+
+  const collisions = useMemo(
+    () => (parsedSchema ? findReservedFieldCollisions(parsedSchema) : []),
+    [parsedSchema]
+  );
+
+  const applyReserved = () => {
+    if (!parsedSchema) return;
+    setInputSchemaJson(JSON.stringify(applyReservedFields(parsedSchema), null, 2));
+    if (inputSchemaAuto) setInputSchemaAuto(false);
+  };
 
   if (!isOpen) return null;
 
@@ -133,6 +160,70 @@ export function InputSchemaDrawer({ isOpen, onClose }: InputSchemaDrawerProps) {
                 ? 'Auto mode tracks the Document as you edit it. Switch to Manual to refine types, descriptions, and required fields.'
                 : 'Manual mode — your edits are preserved. "Derive" overwrites from the current Document.'}
             </p>
+
+            {/* Orchestrator-reserved fields panel. The platform reads these on
+                every inbound document — the schema must always allow them at
+                their named locations with the right types. Customers may mark
+                them required for their own observability. */}
+            {collisions.length > 0 ? (
+              <div className="mb-3 rounded-[var(--radius-md)] border border-[var(--color-error)]/40 bg-[var(--color-error-bg)] px-3 py-2.5">
+                <div className="flex items-start gap-2">
+                  <ShieldAlert className="mt-0.5 w-4 h-4 text-[var(--color-error)] shrink-0" />
+                  <div className="min-w-0 flex-1 text-[11px] text-[var(--color-text-secondary)]">
+                    <p className="font-medium text-[var(--color-error)] mb-1">
+                      Reserved field type collision
+                    </p>
+                    <ul className="space-y-0.5">
+                      {collisions.map((c) => (
+                        <li key={c.path}>
+                          <code className="font-mono">{c.path}</code> must be{' '}
+                          <code className="font-mono">{c.expected}</code> (found{' '}
+                          <code className="font-mono">{c.found}</code>) — the orchestrator
+                          writes it as a {c.expected}.
+                        </li>
+                      ))}
+                    </ul>
+                    <button
+                      onClick={applyReserved}
+                      className="mt-2 inline-flex items-center gap-1 px-2 py-1 rounded-[var(--radius-sm)] text-xs font-medium bg-[var(--color-surface)] hover:bg-[var(--color-surface-secondary)] transition-colors text-[var(--color-text-primary)] border border-[var(--color-border-light)]"
+                    >
+                      <Wand2 className="w-3.5 h-3.5" />
+                      Fix reserved fields
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <details className="mb-3 rounded-[var(--radius-md)] border border-[var(--color-border-light)] bg-[var(--color-surface-secondary)]/60 px-3 py-2.5">
+                <summary className="cursor-pointer flex items-center gap-2 text-[11px] font-medium text-[var(--color-text-secondary)]">
+                  <ShieldCheck className="w-4 h-4 text-[var(--color-success)]" />
+                  Orchestrator-reserved fields
+                  <span className="text-[var(--color-text-tertiary)] font-normal">
+                    — always allowed; never disallow or re-type
+                  </span>
+                </summary>
+                <ul className="mt-2 space-y-1 text-[11px] text-[var(--color-text-secondary)]">
+                  {RESERVED_FIELDS.map((field) => (
+                    <li key={field.path} className="flex items-start gap-2">
+                      <code className="font-mono text-[var(--color-text-primary)] shrink-0">
+                        {field.path}
+                      </code>
+                      <span className="text-[var(--color-text-tertiary)]">
+                        {field.type} · {field.note}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+                <button
+                  onClick={applyReserved}
+                  className="mt-2 inline-flex items-center gap-1 px-2 py-1 rounded-[var(--radius-sm)] text-xs font-medium text-[var(--color-text-secondary)] hover:text-[var(--color-info)] hover:bg-[var(--color-surface)] transition-colors"
+                >
+                  <Wand2 className="w-3.5 h-3.5" />
+                  Apply reserved fields to current schema
+                </button>
+              </details>
+            )}
+
             <div className="h-[60vh] min-h-[420px] rounded-[var(--radius-md)] overflow-hidden border border-[var(--color-border-light)]">
               <Editor
                 height="100%"

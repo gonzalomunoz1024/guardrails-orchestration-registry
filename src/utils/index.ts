@@ -11,3 +11,4 @@ export * from './version';
 export * from './deriveSchema';
 export * from './slugify';
 export * from './resourceKind';
+export * from './reservedFields';
