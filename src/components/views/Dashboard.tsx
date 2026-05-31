@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import { useRegistryStore } from '@/store/registryStore';
 import { useDraftStore } from '@/store';
+import { startNewDraft } from '@/store/draftActions';
 import { usePolicies, useStats } from '@/hooks';
 import { cn } from '@/utils';
 import type { DashboardStats } from '@/types';
@@ -188,7 +189,10 @@ export function Dashboard() {
             <h3 className="font-semibold text-[var(--color-text-primary)] mb-4">Quick Actions</h3>
             <div className="space-y-2">
               <button
-                onClick={() => setView('create-policy')}
+                onClick={() => {
+                  startNewDraft();
+                  setView('create-policy');
+                }}
                 className={cn(
                   'w-full flex items-center gap-3 p-3 rounded-[var(--radius-md)]',
                   'bg-[var(--color-info)] text-white transition-all hover:opacity-90'

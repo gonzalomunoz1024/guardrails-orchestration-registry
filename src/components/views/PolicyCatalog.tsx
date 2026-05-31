@@ -17,6 +17,7 @@ import {
 import { useRegistryStore } from '@/store/registryStore';
 import { usePolicies } from '@/hooks';
 import { useDraftStore, usePolicyStore } from '@/store';
+import { startNewDraft, resumeDraft as resumeDraftAction } from '@/store/draftActions';
 import { cn, slugifyName } from '@/utils';
 import { RESOURCE_KIND_LABELS, type RegistryPolicy, type PolicyStatus } from '@/types';
 import type { GuardrailDraft } from '@/store/draftStore';
@@ -408,13 +409,20 @@ export function PolicyCatalog() {
 
   const totalCount = filteredDrafts.length + filteredPolicies.length;
 
-  const resumeDraft = () => setView('create-policy');
+  const currentDraftId = usePolicyStore((s) => s.draftId);
+
+  const resumeDraft = (draft: GuardrailDraft) => {
+    resumeDraftAction(draft);
+    setView('create-policy');
+  };
 
   const discardDraft = (draft: GuardrailDraft) => {
     removeDraft(draft.id);
-    // If the studio's persisted body is this draft, clear it too so it doesn't
-    // resurface the next time the user opens "Create New Guardrail".
-    if (slugifyName(currentPolicyName) === draft.id) resetPolicy();
+    // If the studio is currently editing this draft, reset so the next
+    // "Create Guardrail" / resume doesn't resurface a deleted body.
+    if (currentDraftId === draft.id || slugifyName(currentPolicyName) === draft.id) {
+      resetPolicy();
+    }
   };
 
   return (
@@ -503,7 +511,10 @@ export function PolicyCatalog() {
               </button>
             </div>
             <button
-              onClick={() => setView('create-policy')}
+              onClick={() => {
+                startNewDraft();
+                setView('create-policy');
+              }}
               className="flex items-center gap-2 px-4 py-2 rounded-[var(--radius-md)] bg-[var(--color-info)] text-white font-medium transition-all hover:opacity-90"
             >
               <Plus className="w-4 h-4" />
@@ -541,7 +552,7 @@ export function PolicyCatalog() {
                 <DraftCard
                   key={`draft-${draft.id}`}
                   draft={draft}
-                  onResume={resumeDraft}
+                  onResume={() => resumeDraft(draft)}
                   onDiscard={() => discardDraft(draft)}
                 />
               ))}
@@ -576,7 +587,7 @@ export function PolicyCatalog() {
                     <DraftRow
                       key={`draft-${draft.id}`}
                       draft={draft}
-                      onResume={resumeDraft}
+                      onResume={() => resumeDraft(draft)}
                       onDiscard={() => discardDraft(draft)}
                     />
                   ))}

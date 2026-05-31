@@ -9,6 +9,7 @@ import {
   Layers,
 } from 'lucide-react';
 import { useRegistryStore, type ViewType } from '@/store/registryStore';
+import { startNewDraft } from '@/store/draftActions';
 import { cn } from '@/utils';
 
 interface NavItem {
@@ -70,7 +71,12 @@ export function Sidebar() {
           {navItems.map((item) => (
             <button
               key={item.id}
-              onClick={() => setView(item.id)}
+              onClick={() => {
+                // Create Guardrail always starts fresh — stash the current
+                // studio body (if any) into draftStore so nothing is lost.
+                if (item.id === 'create-policy') startNewDraft();
+                setView(item.id);
+              }}
               className={cn(
                 'w-full flex items-center gap-3 px-3 py-2.5 rounded-[var(--radius-md)] transition-all',
                 isActive(item.id)

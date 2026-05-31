@@ -4,7 +4,8 @@ import { Play, Loader2, Sliders, Radius, Send, Check, Shield, FileCode2, FileJso
 import { InputModule } from '@/components/sandbox';
 import { OutputPanel } from '@/components/panels';
 import { EditorModal, SubmitPolicyModal } from '@/components/modals';
-import { usePolicyStore, useEvaluationStore, useUIStore, useDraftStore, useBlastRunStore } from '@/store';
+import { usePolicyStore, useEvaluationStore, useUIStore, useBlastRunStore } from '@/store';
+import { snapshotCurrentDraft } from '@/store/draftActions';
 import { useEvaluate, useDebounce } from '@/hooks';
 import { cn, isValidJson, toGuardrailYaml, deriveSchemaFromJson, incrementMinor } from '@/utils';
 import { StudioDetailsDrawer } from './StudioDetailsDrawer';
@@ -83,7 +84,6 @@ export function PolicyStudio() {
   } = usePolicyStore();
   const { result } = useEvaluationStore();
   const { resolvedTheme } = useUIStore();
-  const upsertDraft = useDraftStore((s) => s.upsertDraft);
 
   // Background blast-radius run state (drives the red dot + completion toast).
   const blastStatus = useBlastRunStore((s) => s.status);
@@ -186,18 +186,10 @@ export function PolicyStudio() {
   const canSubmit = missingDetails.length === 0;
 
   const handleSaveDraft = () => {
+    // saveDraft marks the studio clean; the snapshot writes the full body
+    // (including rego/schema/examples) into draftStore so Resume restores it.
     saveDraft();
-    if (policyId) {
-      upsertDraft({
-        id: policyId,
-        name: metadata.name,
-        resourceKind,
-        stage,
-        enforcementType,
-        status,
-        updatedAt: new Date().toISOString(),
-      });
-    }
+    snapshotCurrentDraft();
   };
 
   // Surface a completion toast when a (possibly minimized) blast-radius run finishes.
