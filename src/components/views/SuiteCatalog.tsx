@@ -51,7 +51,7 @@ function SuiteCard({ suite, onClick }: { suite: GuardrailSuite; onClick: () => v
             </span>
           </div>
           <h3 className="font-semibold text-[var(--color-text-primary)] group-hover:text-[var(--color-info)] transition-colors">
-            {suite.name}
+            {suite.displayName}
           </h3>
         </div>
         <ChevronRight className="w-5 h-5 text-[var(--color-text-tertiary)] group-hover:text-[var(--color-info)] transition-colors" />
@@ -82,7 +82,7 @@ export function SuiteCatalog() {
     if (!searchQuery) return suites;
     const q = searchQuery.toLowerCase();
     return suites.filter(
-      (s) => s.name.toLowerCase().includes(q) || s.description.toLowerCase().includes(q)
+      (s) => s.displayName.toLowerCase().includes(q) || s.description.toLowerCase().includes(q)
     );
   }, [suites, searchQuery]);
 

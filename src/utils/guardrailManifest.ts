@@ -5,7 +5,16 @@ import type { EnforcementType, Stage, ResourceKind } from '@/types/guardrail.typ
 
 export interface ManifestInputSchema {
   file: string;
+  /** Parsed JSON Schema body — embedded into spec.inputSchema.content. */
+  content?: Record<string, unknown>;
   examples: string[];
+}
+
+export interface ManifestConfiguration {
+  /** Path of the sibling configuration artifact (relative to the version dir). */
+  file?: string;
+  /** Parsed configuration data — embedded into spec.configuration.content. */
+  content?: Record<string, unknown>;
 }
 
 /**
@@ -35,6 +44,12 @@ export interface GuardrailManifestArgs {
   configFile?: string;
   /** Published input schema contract reference. */
   inputSchema?: ManifestInputSchema;
+  /**
+   * Configuration override — when present, the parsed `content` is embedded
+   * into spec.configuration.content so a POST /registry/manifests also upserts
+   * the configurations collection server-side.
+   */
+  configuration?: ManifestConfiguration;
 }
 
 function slugify(name: string): string {
@@ -135,14 +150,22 @@ export function buildGuardrailManifest(args: GuardrailManifestArgs): Record<stri
   if (args.inputSchema) {
     spec.inputSchema = {
       file: args.inputSchema.file,
+      // Embedding the JSON Schema body is part of the declarative contract —
+      // the registry stores spec.inputSchema.content on every manifest write.
+      ...(args.inputSchema.content ? { content: args.inputSchema.content } : {}),
       ...(args.inputSchema.examples.length > 0 ? { examples: args.inputSchema.examples } : {}),
     };
   }
 
   if (configEnabled) {
     spec.configuration = {
-      file: args.configFile ?? 'configuration.yaml',
-      lookup: { table: 'guardrail_configuration', onMissing: 'fail' },
+      file: args.configuration?.file ?? args.configFile ?? 'configuration.yaml',
+      // Backend's MongoLookupTableAdapter reads from this collection name.
+      lookup: { table: 'guardrail_configurations', onMissing: 'fail' },
+      filter: { byResourceKind: false },
+      // Embedding `content` causes POST /manifests to also upsert the
+      // configurations collection keyed by {name}@{version}.
+      ...(args.configuration?.content ? { content: args.configuration.content } : {}),
     };
   }
 

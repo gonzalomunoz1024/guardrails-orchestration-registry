@@ -32,7 +32,7 @@ function MemberRow({ member }: { member: SuiteMember }) {
   const [expanded, setExpanded] = useState(false);
   const ref: GuardrailRef = { guardrailId: member.guardrailId, version: member.version };
   const { data: contract, isLoading } = useMemberContract(expanded ? ref : null);
-  const dangling = !member.guardrailName;
+  const dangling = !member.displayName;
 
   return (
     <div className="border border-[var(--color-border-light)] rounded-[var(--radius-md)] overflow-hidden">
@@ -48,7 +48,7 @@ function MemberRow({ member }: { member: SuiteMember }) {
           )}
           <div className="text-left min-w-0">
             <p className="font-medium text-[var(--color-text-primary)] truncate">
-              {member.guardrailName || member.guardrailId}
+              {member.displayName || member.guardrailId}
               {dangling && (
                 <span className="ml-2 text-xs text-[var(--color-error)]">(version not found)</span>
               )}
@@ -72,9 +72,9 @@ function MemberRow({ member }: { member: SuiteMember }) {
               {STAGE_LABELS[member.stage]}
             </span>
           )}
-          {member.enforcementType && (
+          {member.enforcement && (
             <span className="hidden md:inline px-2 py-0.5 rounded-full text-xs bg-[var(--color-surface-secondary)] text-[var(--color-text-secondary)]">
-              {ENFORCEMENT_LABELS[member.enforcementType]}
+              {ENFORCEMENT_LABELS[member.enforcement]}
             </span>
           )}
         </div>
@@ -147,7 +147,7 @@ export function SuiteDetail() {
 
   const handleDelete = () => {
     if (!suite) return;
-    if (!window.confirm(`Delete suite "${suite.name}"? This cannot be undone.`)) return;
+    if (!window.confirm(`Delete suite "${suite.displayName}"? This cannot be undone.`)) return;
     deleteSuite.mutate(suite.suiteId, { onSuccess: () => setView('suites') });
   };
 
@@ -190,11 +190,11 @@ export function SuiteDetail() {
           </button>
           <div className="flex items-start justify-between gap-4">
             <div className="min-w-0">
-              <h1 className="text-2xl font-semibold text-[var(--color-text-primary)]">{suite.name}</h1>
+              <h1 className="text-2xl font-semibold text-[var(--color-text-primary)]">{suite.displayName}</h1>
               <p className="mt-1 text-sm text-[var(--color-text-secondary)]">{suite.description}</p>
               <div className="mt-3 flex flex-wrap items-center gap-4 text-xs text-[var(--color-text-tertiary)]">
                 <span className="flex items-center gap-1.5"><User className="w-3.5 h-3.5" />{suite.owner}</span>
-                <span className="flex items-center gap-1.5"><Calendar className="w-3.5 h-3.5" />{formatDate(suite.createdAt)}</span>
+                <span className="flex items-center gap-1.5"><Calendar className="w-3.5 h-3.5" />{formatDate(suite.createdAt ?? '')}</span>
                 <span className="flex items-center gap-1.5"><Package className="w-3.5 h-3.5" />{suite.members.length} guardrails</span>
               </div>
             </div>

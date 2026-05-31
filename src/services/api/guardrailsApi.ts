@@ -1,15 +1,33 @@
 /**
  * Guardrails API Service
  *
- * Handles communication with the Guardrails Orchestrator Service backend.
- * Maps backend guardrail/configuration endpoints to frontend policy operations.
+ * Talks to the tap-guardrails-registry-service. All reads use the new
+ * /v1/utilities/registry/{manifests,guardrails,configurations,rego} endpoints
+ * documented in REGISTRY_API.md. Writes go through the GitHub PR flow
+ * (SubmitPolicyModal), not via this service.
+ *
+ * Endpoint map (frontend need → wire endpoint):
+ *   list policies          GET /registry/manifests
+ *   list versions of one   GET /registry/manifests/{name}
+ *   get one manifest       GET /registry/manifests/{name}/{version}
+ *   get input schema       GET /registry/guardrails/{name}/{version}/schema
+ *   get header projection  GET /registry/guardrails/{name}/{version}/metadata
+ *   list configurations    GET /registry/configurations
+ *   get configuration      GET /registry/configurations/{name}/{version}
+ *   get rego source        GET /registry/rego/{name}/{version}/source  (text/plain)
+ *   evaluations            GET /evaluations/*  (orchestrator-side, unchanged)
+ *   test inputs            GET /registry/test-inputs
+ *   OPA bundle             GET /registry/opa/bundle  (application/gzip)
+ *
+ * /registry/stats is consumed but no longer in the spec — see
+ * docs/missing-endpoints.md.
  */
 
 import { apiClient } from './client';
 import type {
-  GuardrailDefinition,
-  GuardrailConfiguration,
-  ConfigurationListItem,
+  GuardrailManifestDocument,
+  GuardrailMetadataProjection,
+  GuardrailConfigurationDocument,
   EvaluationRecord,
   PaginatedResponse,
   GuardrailRef,
@@ -24,18 +42,19 @@ import type {
   TestInput,
   TestInputSource,
 } from '@/types/registry.types';
-import { mapGuardrailToPolicy } from '@/utils/guardrailMapper';
+import { mapManifestToPolicy } from '@/utils/guardrailMapper';
 
-// Base paths for the backend API — all endpoints live under /v1/utilities
+// Base paths — all endpoints live under /v1/utilities
+const MANIFESTS_PATH = '/v1/utilities/registry/manifests';
 const GUARDRAILS_PATH = '/v1/utilities/registry/guardrails';
 const CONFIGURATIONS_PATH = '/v1/utilities/registry/configurations';
+const REGO_PATH = '/v1/utilities/registry/rego';
+const OPA_BUNDLE_PATH = '/v1/utilities/registry/opa/bundle';
 const EVALUATIONS_PATH = '/v1/utilities/evaluations';
 const STATS_PATH = '/v1/utilities/registry/stats';
 const TEST_INPUTS_PATH = '/v1/utilities/registry/test-inputs';
 
-/**
- * Error class for API errors with additional context
- */
+/** API error with status + endpoint context. */
 export class GuardrailsApiError extends Error {
   constructor(
     message: string,
@@ -48,215 +67,188 @@ export class GuardrailsApiError extends Error {
   }
 }
 
-/**
- * Guardrails API Service
- */
+function statusOf(error: unknown): number | undefined {
+  return (error as { response?: { status?: number } } | undefined)?.response?.status;
+}
+
 export const guardrailsApi = {
   // ============================================
-  // GUARDRAIL DEFINITION ENDPOINTS
+  // MANIFESTS — canonical guardrail records
+  // ============================================
+
+  /** GET /registry/manifests — every persisted manifest in the registry. */
+  listManifests: async (): Promise<GuardrailManifestDocument[]> => {
+    try {
+      const response = await apiClient.get<GuardrailManifestDocument[]>(MANIFESTS_PATH);
+      return response.data;
+    } catch (error) {
+      console.error('[guardrailsApi] Failed to list manifests:', error);
+      throw new GuardrailsApiError('Failed to fetch manifests', statusOf(error), MANIFESTS_PATH, error);
+    }
+  },
+
+  /** GET /registry/manifests/{name} — every version of one guardrail (newest first). */
+  listManifestsByName: async (name: string): Promise<GuardrailManifestDocument[]> => {
+    const path = `${MANIFESTS_PATH}/${name}`;
+    try {
+      const response = await apiClient.get<GuardrailManifestDocument[]>(path);
+      return response.data;
+    } catch (error) {
+      console.error(`[guardrailsApi] Failed to list manifests for ${name}:`, error);
+      throw new GuardrailsApiError(`Failed to fetch versions for ${name}`, statusOf(error), path, error);
+    }
+  },
+
+  /** GET /registry/manifests/{name}/{version} — a single pinned manifest. */
+  getManifest: async (name: string, version: string): Promise<GuardrailManifestDocument> => {
+    const path = `${MANIFESTS_PATH}/${name}/${version}`;
+    try {
+      const response = await apiClient.get<GuardrailManifestDocument>(path);
+      return response.data;
+    } catch (error) {
+      console.error(`[guardrailsApi] Failed to get manifest ${name}@${version}:`, error);
+      throw new GuardrailsApiError(`Failed to fetch manifest ${name}@${version}`, statusOf(error), path, error);
+    }
+  },
+
+  // ============================================
+  // GUARDRAIL PROJECTIONS (over manifests)
   // ============================================
 
   /**
-   * List all guardrail definitions
-   */
-  listGuardrails: async (): Promise<GuardrailDefinition[]> => {
-    try {
-      const response = await apiClient.get<GuardrailDefinition[]>(GUARDRAILS_PATH);
-      return response.data;
-    } catch (error) {
-      console.error('[guardrailsApi] Failed to list guardrails:', error);
-      throw new GuardrailsApiError(
-        'Failed to fetch guardrails list',
-        (error as { response?: { status?: number } })?.response?.status,
-        GUARDRAILS_PATH,
-        error
-      );
-    }
-  },
-
-  /**
-   * Get a single guardrail definition by ID
-   */
-  getGuardrail: async (id: string): Promise<GuardrailDefinition> => {
-    try {
-      const response = await apiClient.get<GuardrailDefinition>(`${GUARDRAILS_PATH}/${id}`);
-      return response.data;
-    } catch (error) {
-      console.error(`[guardrailsApi] Failed to get guardrail ${id}:`, error);
-      throw new GuardrailsApiError(
-        `Failed to fetch guardrail with ID: ${id}`,
-        (error as { response?: { status?: number } })?.response?.status,
-        `${GUARDRAILS_PATH}/${id}`,
-        error
-      );
-    }
-  },
-
-  /**
-   * List all immutable versions of a guardrail (newest first per the backend).
-   * GET /v1/utilities/registry/guardrails/{id}/versions
-   */
-  getGuardrailVersions: async (id: string): Promise<GuardrailRef[]> => {
-    try {
-      const response = await apiClient.get<GuardrailRef[]>(`${GUARDRAILS_PATH}/${id}/versions`);
-      return response.data;
-    } catch (error) {
-      console.error(`[guardrailsApi] Failed to list versions for guardrail ${id}:`, error);
-      throw new GuardrailsApiError(
-        `Failed to fetch versions for guardrail: ${id}`,
-        (error as { response?: { status?: number } })?.response?.status,
-        `${GUARDRAILS_PATH}/${id}/versions`,
-        error
-      );
-    }
-  },
-
-  /**
-   * Get a single immutable version of a guardrail.
-   * GET /v1/utilities/registry/guardrails/{id}/versions/{version}
-   */
-  getGuardrailVersion: async (id: string, version: string): Promise<GuardrailDefinition> => {
-    try {
-      const response = await apiClient.get<GuardrailDefinition>(
-        `${GUARDRAILS_PATH}/${id}/versions/${version}`
-      );
-      return response.data;
-    } catch (error) {
-      console.error(`[guardrailsApi] Failed to get guardrail ${id}@${version}:`, error);
-      throw new GuardrailsApiError(
-        `Failed to fetch guardrail ${id}@${version}`,
-        (error as { response?: { status?: number } })?.response?.status,
-        `${GUARDRAILS_PATH}/${id}/versions/${version}`,
-        error
-      );
-    }
-  },
-
-  /**
-   * Get the published input contract for a guardrail version.
-   * GET /v1/utilities/registry/guardrails/{id}/versions/{version}/input-schema
+   * GET /registry/guardrails/{name}/{version}/schema — JSON Schema stored at
+   * spec.inputSchema.content. 404 when the manifest has no embedded schema.
    */
   getInputSchema: async (
-    id: string,
+    name: string,
     version: string
   ): Promise<{ schema: Record<string, unknown> | null; examples: { name: string; payload: string }[] }> => {
-    const path = `${GUARDRAILS_PATH}/${id}/versions/${version}/input-schema`;
+    const path = `${GUARDRAILS_PATH}/${name}/${version}/schema`;
     try {
-      const response = await apiClient.get<{
-        schema: Record<string, unknown> | null;
-        examples?: { name: string; payload: string }[];
-      }>(path);
-      return { schema: response.data.schema ?? null, examples: response.data.examples ?? [] };
-    } catch (error) {
-      // No published contract yet is not fatal — adopters just see "none".
-      if ((error as { response?: { status?: number } })?.response?.status === 404) {
-        return { schema: null, examples: [] };
+      const response = await apiClient.get<
+        | Record<string, unknown>
+        | { schema: Record<string, unknown> | null; examples?: { name: string; payload: string }[] }
+      >(path);
+      const data = response.data;
+      // The backend may return the JSON Schema directly or wrap it in { schema, examples }.
+      if (data && typeof data === 'object' && 'schema' in data) {
+        const wrapped = data as { schema: Record<string, unknown> | null; examples?: { name: string; payload: string }[] };
+        return { schema: wrapped.schema ?? null, examples: wrapped.examples ?? [] };
       }
-      console.error(`[guardrailsApi] Failed to get input schema for ${id}@${version}:`, error);
-      throw new GuardrailsApiError(
-        `Failed to fetch input schema for ${id}@${version}`,
-        (error as { response?: { status?: number } })?.response?.status,
-        path,
-        error
-      );
+      return { schema: (data as Record<string, unknown>) ?? null, examples: [] };
+    } catch (error) {
+      if (statusOf(error) === 404) return { schema: null, examples: [] };
+      console.error(`[guardrailsApi] Failed to get input schema for ${name}@${version}:`, error);
+      throw new GuardrailsApiError(`Failed to fetch input schema for ${name}@${version}`, statusOf(error), path, error);
+    }
+  },
+
+  /**
+   * GET /registry/guardrails/{name}/{version}/metadata — flat header projection.
+   * Returns the manifest's metadata + spec fields adopters need without the
+   * full manifest body. 404 when the manifest does not exist.
+   */
+  getMetadata: async (name: string, version: string): Promise<GuardrailMetadataProjection> => {
+    const path = `${GUARDRAILS_PATH}/${name}/${version}/metadata`;
+    try {
+      const response = await apiClient.get<GuardrailMetadataProjection>(path);
+      return response.data;
+    } catch (error) {
+      console.error(`[guardrailsApi] Failed to get metadata for ${name}@${version}:`, error);
+      throw new GuardrailsApiError(`Failed to fetch metadata for ${name}@${version}`, statusOf(error), path, error);
     }
   },
 
   // ============================================
-  // CONFIGURATION ENDPOINTS
+  // CONFIGURATIONS
   // ============================================
 
-  /**
-   * List all configurations
-   */
-  listConfigurations: async (): Promise<ConfigurationListItem[]> => {
+  /** GET /registry/configurations — every persisted configuration document. */
+  listConfigurations: async (): Promise<GuardrailConfigurationDocument[]> => {
     try {
-      const response = await apiClient.get<ConfigurationListItem[]>(CONFIGURATIONS_PATH);
+      const response = await apiClient.get<GuardrailConfigurationDocument[]>(CONFIGURATIONS_PATH);
       return response.data;
     } catch (error) {
       console.error('[guardrailsApi] Failed to list configurations:', error);
-      throw new GuardrailsApiError(
-        'Failed to fetch configurations list',
-        (error as { response?: { status?: number } })?.response?.status,
-        CONFIGURATIONS_PATH,
-        error
-      );
+      throw new GuardrailsApiError('Failed to fetch configurations', statusOf(error), CONFIGURATIONS_PATH, error);
     }
   },
 
-  /**
-   * Get configuration for a specific guardrail
-   */
-  getConfiguration: async (guardrailId: string): Promise<GuardrailConfiguration | null> => {
+  /** GET /registry/configurations/{name}/{version} — single configuration; null on 404. */
+  getConfiguration: async (
+    name: string,
+    version: string
+  ): Promise<GuardrailConfigurationDocument | null> => {
+    const path = `${CONFIGURATIONS_PATH}/${name}/${version}`;
     try {
-      const response = await apiClient.get<GuardrailConfiguration>(
-        `${CONFIGURATIONS_PATH}/${guardrailId}`
-      );
+      const response = await apiClient.get<GuardrailConfigurationDocument>(path);
       return response.data;
     } catch (error) {
-      // 404 is expected if no configuration exists yet
-      if ((error as { response?: { status?: number } })?.response?.status === 404) {
-        return null;
-      }
-      console.error(`[guardrailsApi] Failed to get configuration for ${guardrailId}:`, error);
-      throw new GuardrailsApiError(
-        `Failed to fetch configuration for guardrail: ${guardrailId}`,
-        (error as { response?: { status?: number } })?.response?.status,
-        `${CONFIGURATIONS_PATH}/${guardrailId}`,
-        error
-      );
+      if (statusOf(error) === 404) return null;
+      console.error(`[guardrailsApi] Failed to get configuration ${name}@${version}:`, error);
+      throw new GuardrailsApiError(`Failed to fetch configuration ${name}@${version}`, statusOf(error), path, error);
     }
   },
 
   // ============================================
-  // EVALUATION ENDPOINTS
+  // REGO
   // ============================================
 
-  /**
-   * Get all evaluations (paginated)
-   */
-  listEvaluations: async (
-    page = 0,
-    size = 20
-  ): Promise<PaginatedResponse<EvaluationRecord>> => {
+  /** GET /registry/rego/{name}/{version}/source — raw rego text/plain. */
+  getRegoSource: async (name: string, version: string): Promise<string> => {
+    const path = `${REGO_PATH}/${name}/${version}/source`;
     try {
-      const response = await apiClient.get<PaginatedResponse<EvaluationRecord>>(
-        `${EVALUATIONS_PATH}/all`,
-        { params: { page, size } }
-      );
+      const response = await apiClient.get<string>(path, {
+        responseType: 'text',
+        transformResponse: (data) => data,
+      });
+      return typeof response.data === 'string' ? response.data : String(response.data ?? '');
+    } catch (error) {
+      if (statusOf(error) === 404) return '';
+      console.error(`[guardrailsApi] Failed to get rego source for ${name}@${version}:`, error);
+      throw new GuardrailsApiError(`Failed to fetch rego source for ${name}@${version}`, statusOf(error), path, error);
+    }
+  },
+
+  /** GET /registry/opa/bundle — USTAR tar.gz of every rego policy. */
+  getOpaBundle: async (): Promise<Blob> => {
+    try {
+      const response = await apiClient.get<Blob>(OPA_BUNDLE_PATH, { responseType: 'blob' });
+      return response.data;
+    } catch (error) {
+      console.error('[guardrailsApi] Failed to fetch OPA bundle:', error);
+      throw new GuardrailsApiError('Failed to fetch OPA bundle', statusOf(error), OPA_BUNDLE_PATH, error);
+    }
+  },
+
+  // ============================================
+  // EVALUATIONS (orchestrator-side; path unchanged)
+  // ============================================
+
+  listEvaluations: async (page = 0, size = 20): Promise<PaginatedResponse<EvaluationRecord>> => {
+    const path = `${EVALUATIONS_PATH}/all`;
+    try {
+      const response = await apiClient.get<PaginatedResponse<EvaluationRecord>>(path, {
+        params: { page, size },
+      });
       return response.data;
     } catch (error) {
       console.error('[guardrailsApi] Failed to list evaluations:', error);
-      throw new GuardrailsApiError(
-        'Failed to fetch evaluations list',
-        (error as { response?: { status?: number } })?.response?.status,
-        `${EVALUATIONS_PATH}/all`,
-        error
-      );
+      throw new GuardrailsApiError('Failed to fetch evaluations', statusOf(error), path, error);
     }
   },
 
-  /**
-   * Get a single evaluation by event ID
-   */
   getEvaluation: async (eventId: string): Promise<EvaluationRecord> => {
+    const path = `${EVALUATIONS_PATH}/${eventId}`;
     try {
-      const response = await apiClient.get<EvaluationRecord>(`${EVALUATIONS_PATH}/${eventId}`);
+      const response = await apiClient.get<EvaluationRecord>(path);
       return response.data;
     } catch (error) {
       console.error(`[guardrailsApi] Failed to get evaluation ${eventId}:`, error);
-      throw new GuardrailsApiError(
-        `Failed to fetch evaluation with ID: ${eventId}`,
-        (error as { response?: { status?: number } })?.response?.status,
-        `${EVALUATIONS_PATH}/${eventId}`,
-        error
-      );
+      throw new GuardrailsApiError(`Failed to fetch evaluation ${eventId}`, statusOf(error), path, error);
     }
   },
 
-  /**
-   * Get evaluations by correlation ID
-   */
   getEvaluationsByCorrelationId: async (correlationId: string): Promise<EvaluationRecord[]> => {
     try {
       const response = await apiClient.get<EvaluationRecord[]>(EVALUATIONS_PATH, {
@@ -265,75 +257,56 @@ export const guardrailsApi = {
       return response.data;
     } catch (error) {
       console.error(`[guardrailsApi] Failed to get evaluations for correlation ${correlationId}:`, error);
-      throw new GuardrailsApiError(
-        `Failed to fetch evaluations for correlation: ${correlationId}`,
-        (error as { response?: { status?: number } })?.response?.status,
-        EVALUATIONS_PATH,
-        error
-      );
+      throw new GuardrailsApiError(`Failed to fetch evaluations for ${correlationId}`, statusOf(error), EVALUATIONS_PATH, error);
     }
   },
 
-  /**
-   * Get evaluation history for an application
-   */
   getEvaluationsByAppId: async (appId: string): Promise<EvaluationRecord[]> => {
+    const path = `${EVALUATIONS_PATH}/app/${appId}`;
     try {
-      const response = await apiClient.get<EvaluationRecord[]>(`${EVALUATIONS_PATH}/app/${appId}`);
+      const response = await apiClient.get<EvaluationRecord[]>(path);
       return response.data;
     } catch (error) {
       console.error(`[guardrailsApi] Failed to get evaluations for app ${appId}:`, error);
-      throw new GuardrailsApiError(
-        `Failed to fetch evaluations for app: ${appId}`,
-        (error as { response?: { status?: number } })?.response?.status,
-        `${EVALUATIONS_PATH}/app/${appId}`,
-        error
-      );
+      throw new GuardrailsApiError(`Failed to fetch evaluations for app ${appId}`, statusOf(error), path, error);
     }
   },
 
   // ============================================
-  // STATS ENDPOINTS
+  // STATS — endpoint is missing from REGISTRY_API.md (see docs/missing-endpoints.md)
   // ============================================
 
   /**
-   * Get registry statistics for a given time range
+   * GET /registry/stats — not documented in the new REGISTRY_API.md but the
+   * Dashboard still calls it. Backend needs to re-implement against the
+   * guardrail_manifests collection. See docs/missing-endpoints.md.
    */
   getStats: async (timeRange: TimeRange = '24h'): Promise<RegistryStats> => {
     try {
-      const response = await apiClient.get<RegistryStats>(STATS_PATH, {
-        params: { timeRange },
-      });
+      const response = await apiClient.get<RegistryStats>(STATS_PATH, { params: { timeRange } });
       return response.data;
     } catch (error) {
-      console.error(`[guardrailsApi] Failed to get stats for timeRange ${timeRange}:`, error);
-      throw new GuardrailsApiError(
-        `Failed to fetch registry stats`,
-        (error as { response?: { status?: number } })?.response?.status,
-        STATS_PATH,
-        error
-      );
+      console.error(`[guardrailsApi] Failed to get stats for ${timeRange}:`, error);
+      throw new GuardrailsApiError('Failed to fetch registry stats', statusOf(error), STATS_PATH, error);
     }
   },
 
   // ============================================
-  // TEST INPUTS ENDPOINTS (OpenSearch Scroll)
+  // TEST INPUTS (OpenSearch scroll)
   // ============================================
 
   /**
-   * Map a raw OpenSearch source to a normalized TestInput
-   * Handles nested structure: _source.spec.metadata contains appId, organization, etc.
+   * Normalize a raw OpenSearch hit into a TestInput. Handles both `source`
+   * and `_source` envelopes; pulls appId/organization/environment from
+   * spec.metadata first, falling back to top-level fields.
    */
   _mapSourceToTestInput: (item: TestInputSource, index: number): TestInput => {
-    // Backend may return 'source' or '_source' field
     const source = item.source || item._source;
 
-    // The structure is: _source.spec.metadata.{appId, organization, ...}
     const spec = (source?.spec as Record<string, unknown>) || {};
     const specMetadata = (spec.metadata as Record<string, unknown>) || {};
     const topMetadata = (source?.metadata as Record<string, unknown>) || {};
 
-    // Extract fields from spec.metadata (primary) or fallback to top-level
     const appId =
       (specMetadata.appId as string) ||
       (specMetadata.applicationId as string) ||
@@ -356,29 +329,22 @@ export const guardrailsApi = {
       (specMetadata.resourceKind as string) ||
       undefined;
 
-    // Generate an ID from item.id, metadata, or use index
     const id =
       item.id ||
       (topMetadata.eventId as string) ||
       (topMetadata.correlationId as string) ||
       `test-input-${index}`;
 
-    // Generate a name from available fields
     const name =
       (specMetadata.name as string) ||
       (source?.name as string) ||
       (topMetadata.eventId as string) ||
       `Test Input ${id.slice(0, 12)}`;
 
-    // Description from source or generate one
     const guardrailId = specMetadata.guardrailId || source?.guardrailId;
     const description =
       (source?.description as string) ||
       (guardrailId ? `Evaluation for guardrail: ${guardrailId}` : undefined);
-
-    // The actual input to use for policy testing - use the entire _source as the input
-    // This allows the full evaluation context to be used when testing policies
-    const input = source || {};
 
     return {
       id,
@@ -389,18 +355,15 @@ export const guardrailsApi = {
       environment: env,
       resourceType: resType,
       resourceKind: resKind,
-      input,
+      input: source || {},
       metadata: topMetadata,
     };
   },
 
   /**
-   * Fetch test inputs for policy testing (scope-based)
-   * Uses OpenSearch scroll API for pagination
-   *
-   * @param filters - Optional filters for applicationId, organization, environment, etc.
-   * @param scrollId - Scroll ID from previous request for pagination (omit for initial request)
-   * @param limit - Number of results per batch (default: 50)
+   * GET /registry/test-inputs — recent evaluation inputs from OpenSearch.
+   * Pass `scrollId` to continue a previous scroll; filters apply only on the
+   * initial request.
    */
   getTestInputs: async (
     filters?: TestInputFilters,
@@ -409,12 +372,9 @@ export const guardrailsApi = {
   ): Promise<TestInputsResponse> => {
     try {
       const params: Record<string, string | number> = { limit };
-
-      // If scrollId is provided, only pass scrollId (filters are in scroll context)
       if (scrollId) {
         params.scrollId = scrollId;
       } else {
-        // Initial request - include filters
         if (filters?.applicationId) params.applicationId = filters.applicationId;
         if (filters?.organization) params.organization = filters.organization;
         if (filters?.environment) params.environment = filters.environment;
@@ -425,71 +385,68 @@ export const guardrailsApi = {
       const response = await apiClient.get<TestInputsRawResponse>(TEST_INPUTS_PATH, { params });
       const rawResponse = response.data;
 
-      // Map raw OpenSearch response to normalized format
-      // Backend may return either 'hits' or 'sources' array
       const sources = rawResponse.hits || rawResponse.sources || [];
       const testInputs = sources.map((item, index) => guardrailsApi._mapSourceToTestInput(item, index));
-
-      // Determine if there are more results to fetch
-      // If we received fewer sources than the limit, we've reached the end
       const hasMore = sources.length >= limit && rawResponse.scrollId !== null;
 
-      return {
-        scrollId: rawResponse.scrollId,
-        total: rawResponse.total,
-        hasMore,
-        testInputs,
-      };
+      return { scrollId: rawResponse.scrollId, total: rawResponse.total, hasMore, testInputs };
     } catch (error) {
       console.error('[guardrailsApi] Failed to fetch test inputs:', error);
-      throw new GuardrailsApiError(
-        'Failed to fetch test inputs',
-        (error as { response?: { status?: number } })?.response?.status,
-        TEST_INPUTS_PATH,
-        error
-      );
+      throw new GuardrailsApiError('Failed to fetch test inputs', statusOf(error), TEST_INPUTS_PATH, error);
     }
   },
 
   // ============================================
-  // COMPOSED OPERATIONS (Frontend-friendly)
+  // COMPOSED OPERATIONS
   // ============================================
 
   /**
-   * Get all policies (guardrails with their configurations)
-   * Maps backend data to frontend RegistryPolicy model
+   * Get every policy, joining the latest manifest per name with its persisted
+   * configuration content. The manifest list is the source of truth for what
+   * a policy is; configuration is a side table keyed by {name, version}.
    */
   listPolicies: async (): Promise<RegistryPolicy[]> => {
-    // Fetch guardrails and configurations in parallel
-    const [guardrails, configurations] = await Promise.all([
-      guardrailsApi.listGuardrails(),
+    const [manifests, configurations] = await Promise.all([
+      guardrailsApi.listManifests(),
       guardrailsApi.listConfigurations(),
     ]);
 
-    // Create a map of configurations by guardrailId
-    const configMap = new Map<string, GuardrailConfiguration>();
-    configurations.forEach((config) => {
-      configMap.set(config.guardrailId, config as GuardrailConfiguration);
-    });
+    const configByKey = new Map<string, GuardrailConfigurationDocument>();
+    for (const c of configurations) configByKey.set(`${c.name}@${c.version}`, c);
 
-    // Map guardrails to policies with their configurations
-    return guardrails.map((guardrail) =>
-      mapGuardrailToPolicy(guardrail, configMap.get(guardrail.guardrailId) || null)
-    );
+    return manifests.map((m) => {
+      const key = `${m.metadata.name}@${m.metadata.version}`;
+      return mapManifestToPolicy(m, configByKey.get(key) ?? null);
+    });
   },
 
   /**
-   * Get a single policy by ID (guardrail + configuration)
-   * Maps backend data to frontend RegistryPolicy model
+   * Get one policy by id. `id` is the manifest's metadata.name; we resolve to
+   * the latest version unless a specific version is requested via getPolicyAt.
    */
   getPolicy: async (id: string): Promise<RegistryPolicy> => {
-    // Fetch guardrail and configuration in parallel
-    const [guardrail, config] = await Promise.all([
-      guardrailsApi.getGuardrail(id),
-      guardrailsApi.getConfiguration(id),
-    ]);
-
-    return mapGuardrailToPolicy(guardrail, config);
+    const versions = await guardrailsApi.listManifestsByName(id);
+    if (versions.length === 0) {
+      throw new GuardrailsApiError(`No manifest found for ${id}`, 404, `${MANIFESTS_PATH}/${id}`);
+    }
+    // Manifests come back newest first per the spec.
+    const latest = versions[0];
+    const config = await guardrailsApi.getConfiguration(latest.metadata.name, latest.metadata.version);
+    return mapManifestToPolicy(latest, config);
   },
 
+  /** Get a policy pinned to a specific version. Mirrors suite member resolution. */
+  getPolicyAt: async (ref: GuardrailRef): Promise<RegistryPolicy> => {
+    const [manifest, config] = await Promise.all([
+      guardrailsApi.getManifest(ref.guardrailId, ref.version),
+      guardrailsApi.getConfiguration(ref.guardrailId, ref.version),
+    ]);
+    return mapManifestToPolicy(manifest, config);
+  },
+
+  /** List every (name, version) ref for a guardrail name — used by version pickers. */
+  getGuardrailVersions: async (name: string): Promise<GuardrailRef[]> => {
+    const manifests = await guardrailsApi.listManifestsByName(name);
+    return manifests.map((m) => ({ guardrailId: m.metadata.name, version: m.metadata.version }));
+  },
 };

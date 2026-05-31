@@ -1,8 +1,12 @@
 /**
- * Backend DTO Types for Guardrails Orchestrator Service
+ * Backend DTO Types for the Guardrails Registry Service.
  *
- * These types represent the actual backend API contracts.
- * The frontend uses RegistryPolicy, which is mapped from these types.
+ * Shapes mirror the wire format documented in REGISTRY_API.md (apiVersion
+ * "guardrails.dev/v1alpha1"). The canonical record is the manifest; reads
+ * come back either as full manifests or as flat projections from
+ * /registry/guardrails/{name}/{version}/{schema,metadata}. The frontend uses
+ * RegistryPolicy as its internal model, populated from these wire types via
+ * the guardrailMapper.
  */
 
 // Enums matching backend values (SCREAMING_SNAKE on the wire)
@@ -23,52 +27,162 @@ export interface GuardrailRef {
   version: string;
 }
 
-/**
- * Guardrail Definition - Backend DTO (an immutable versioned record)
- * GET/POST/PUT /v1/utilities/registry/guardrails
- */
-export interface GuardrailDefinition {
-  guardrailId: string;
-  guardrailName: string;
-  description: string;
-  version: string; // MAJOR.MINOR, e.g. "1.0"
-  status: GuardrailStatus;
-  enforcementType: EnforcementType;
+// ---------------------------------------------------------------------------
+// Manifest wire shape — POST/PUT /v1/utilities/registry/manifests*
+// ---------------------------------------------------------------------------
+
+export interface GuardrailManifestMetadata {
+  name: string;
+  displayName?: string;
+  version: string;
+  description?: string;
+  owner?: string;
+  labels?: string[];
+}
+
+export interface GuardrailPolicyRef {
+  file: string;
+  package: string;
+}
+
+export interface GuardrailDocumentRef {
+  /** Where the orchestrator sources the document being evaluated. */
+  source: string;
+}
+
+export interface GuardrailInputSchemaRef {
+  /** Path of the published input schema artifact in the GitHub repo. */
+  file: string;
+  /**
+   * Embedded JSON Schema body. Required as part of the declarative contract —
+   * the registry stores this on every manifest write.
+   */
+  content?: Record<string, unknown>;
+  /** Optional list of example input paths published alongside the schema. */
+  examples?: string[];
+}
+
+export interface GuardrailConfigurationLookup {
+  table: string; // 'guardrail_configurations'
+  onMissing?: 'fail' | 'allow' | 'deny';
+}
+
+export interface GuardrailConfigurationFilter {
+  byResourceKind?: boolean;
+}
+
+export interface GuardrailConfigurationRef {
+  file: string;
+  lookup?: GuardrailConfigurationLookup;
+  filter?: GuardrailConfigurationFilter;
+  /**
+   * Embedded configuration data. When present, the registry extracts this
+   * into the guardrail_configurations collection on manifest write.
+   */
+  content?: Record<string, unknown>;
+}
+
+export interface GuardrailManifestSpec {
+  enforcement: EnforcementType;
   stage: Stage;
+  status: GuardrailStatus;
+  target: { resourceKind: ResourceKind };
+  policy: GuardrailPolicyRef;
+  document: GuardrailDocumentRef;
+  inputSchema?: GuardrailInputSchemaRef;
+  configuration?: GuardrailConfigurationRef;
+  /** Reserved for future use; orchestrator may consume these. */
+  externalDependencies?: Record<string, unknown>[];
+}
+
+/**
+ * The canonical persisted manifest. Returned by:
+ *   GET /v1/utilities/registry/manifests
+ *   GET /v1/utilities/registry/manifests/{name}
+ *   GET /v1/utilities/registry/manifests/{name}/{version}
+ */
+export interface GuardrailManifestDocument {
+  id?: string;
+  apiVersion: string;
+  kind: string;
+  metadata: GuardrailManifestMetadata;
+  spec: GuardrailManifestSpec;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+/**
+ * Flat header projection from
+ *   GET /v1/utilities/registry/guardrails/{name}/{version}/metadata
+ */
+export interface GuardrailMetadataProjection {
+  name: string;
+  displayName?: string;
+  version: string;
+  description?: string;
+  owner?: string;
+  enforcement: EnforcementType;
+  stage: Stage;
+  status: GuardrailStatus;
   resourceKind: ResourceKind;
-  owner: string;
-  scopeExclusions?: ScopeExclusion[];
-  createdAt: string;
+  policyPackage?: string;
 }
 
-export interface ScopeExclusion {
-  lob: string;
-  reason?: string;
-}
+// ---------------------------------------------------------------------------
+// Configuration wire shape — /v1/utilities/registry/configurations*
+// ---------------------------------------------------------------------------
 
 /**
- * Guardrail Configuration - Backend DTO
- * GET /v1/utilities/registry/configurations/{guardrailId}
+ * Persisted configuration document, keyed by `{name}@{version}`. Returned by:
+ *   GET /v1/utilities/registry/configurations
+ *   GET /v1/utilities/registry/configurations/{name}
+ *   GET /v1/utilities/registry/configurations/{name}/{version}
+ *   POST/PUT /v1/utilities/registry/configurations/{name}/{version}
+ *
+ * The orchestrator's MongoLookupTableAdapter returns `content` verbatim to OPA
+ * as `input.configuration`, so the content shape is intentionally flat.
  */
-export interface GuardrailConfiguration {
-  guardrailId: string;
-  global: Record<string, unknown>;
-  lobOverrides?: Record<string, Record<string, unknown>>;
+export interface GuardrailConfigurationDocument {
+  id: string;
+  name: string;
+  version: string;
+  content: Record<string, unknown>;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
+// ---------------------------------------------------------------------------
+// Rego wire shape — /v1/utilities/registry/rego*
+// ---------------------------------------------------------------------------
+
 /**
- * Configuration List Item - Backend DTO
- * GET /v1/utilities/registry/configurations
+ * Persisted rego policy document. Returned by:
+ *   GET /v1/utilities/registry/rego
+ *   GET /v1/utilities/registry/rego/{name}
+ *   GET /v1/utilities/registry/rego/{name}/{version}
+ *   POST/PUT /v1/utilities/registry/rego/{name}/{version}
+ *
+ * Use /v1/utilities/registry/rego/{name}/{version}/source for the raw rego
+ * text/plain body.
  */
-export interface ConfigurationListItem {
-  guardrailId: string;
-  global: Record<string, unknown>;
-  lobOverrides?: Record<string, Record<string, unknown>>;
+export interface GuardrailRegoDocument {
+  id: string;
+  name: string;
+  version: string;
+  packageName: string;
+  source: string;
+  sha256: string;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
+// ---------------------------------------------------------------------------
+// Evaluation records (orchestrator-side; path unchanged)
+// ---------------------------------------------------------------------------
+
 /**
- * Evaluation Record - Backend DTO
- * GET /v1/utilities/evaluations/{eventId}
+ * Evaluation Record — Backend DTO from
+ *   GET /v1/utilities/evaluations/{eventId}
  */
 export interface EvaluationRecord {
   eventId: string;
@@ -112,8 +226,8 @@ export interface IndividualEvaluation {
 }
 
 /**
- * Paginated Evaluation List - Backend DTO
- * GET /v1/utilities/evaluations/all
+ * Paginated Evaluation List — Backend DTO from
+ *   GET /v1/utilities/evaluations/all
  */
 export interface PaginatedEvaluations {
   page: number;
@@ -123,9 +237,7 @@ export interface PaginatedEvaluations {
   content: EvaluationRecord[];
 }
 
-/**
- * Paginated Response - Generic Backend DTO
- */
+/** Paginated Response — Generic Backend DTO */
 export interface PaginatedResponse<T> {
   page: number;
   size: number;
@@ -134,9 +246,7 @@ export interface PaginatedResponse<T> {
   content: T[];
 }
 
-/**
- * API Error Response - Backend DTO
- */
+/** API Error Response — Backend DTO */
 export interface ApiErrorResponse {
   error: string;
   message: string;

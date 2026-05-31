@@ -5,6 +5,10 @@
  * specific immutable guardrail versions by (guardrailId, version). Incrementing
  * a guardrail never changes what a suite references — the suite keeps resolving
  * the version it pinned until an owner explicitly re-pins it.
+ *
+ * Wire shape mirrors REGISTRY_API.md §6. The primary key is `suiteId`; POST
+ * /registry/suites is an idempotent upsert on `suiteId`. PUT applies a partial
+ * update; omitted fields are preserved.
  */
 import type {
   GuardrailRef,
@@ -18,10 +22,12 @@ export type SuiteStatus = 'ACTIVE' | 'INACTIVE' | 'DRAFT';
 
 /** A pinned member of a suite, enriched with display facets when resolved. */
 export interface SuiteMember extends GuardrailRef {
-  guardrailName?: string;
+  /** Human-readable name (from manifest metadata.displayName). */
+  displayName?: string;
   description?: string;
   stage?: Stage;
-  enforcementType?: EnforcementType;
+  /** Enforcement level (wire field is `enforcement`, not `enforcementType`). */
+  enforcement?: EnforcementType;
   resourceKind?: ResourceKind;
   status?: GuardrailStatus;
   /** Path/URL to the member version's published input-schema artifact. */
@@ -30,24 +36,35 @@ export interface SuiteMember extends GuardrailRef {
 
 export interface GuardrailSuite {
   suiteId: string;
-  name: string;
+  displayName: string;
   description: string;
   owner: string;
+  /**
+   * Defaults to ACTIVE server-side when omitted on POST; INACTIVE and DRAFT
+   * suites are not evaluatable (orchestrator gates on status == ACTIVE).
+   */
   status: SuiteStatus;
   members: SuiteMember[];
-  createdAt: string;
+  /** Members whose (guardrailId, version) does not resolve in guardrail_manifests. */
+  nonApplicableMembers?: GuardrailRef[];
+  createdAt?: string;
+  updatedAt?: string;
 }
 
+/** Upsert payload. POST keys on `suiteId`; blank/missing suiteId is 400. */
 export interface CreateSuiteRequest {
-  name: string;
+  suiteId: string;
+  displayName: string;
   description: string;
   owner: string;
-  status: SuiteStatus;
+  /** Optional on POST. Server defaults to ACTIVE. */
+  status?: SuiteStatus;
   members: GuardrailRef[];
 }
 
+/** Partial update; omitted fields keep the existing value. */
 export interface UpdateSuiteRequest {
-  name?: string;
+  displayName?: string;
   description?: string;
   status?: SuiteStatus;
   members?: GuardrailRef[];
