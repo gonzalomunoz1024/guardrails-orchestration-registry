@@ -3,8 +3,9 @@ import { Panel, Group, Separator } from 'react-resizable-panels';
 import { Play, Loader2, Sliders, Radius, Send, Check, Shield, FileCode2, FileJson, X } from 'lucide-react';
 import { InputModule } from '@/components/sandbox';
 import { OutputPanel } from '@/components/panels';
-import { EditorModal, SubmitPolicyModal } from '@/components/modals';
+import { EditorModal, NewGuardrailDetailsModal, SubmitPolicyModal } from '@/components/modals';
 import { usePolicyStore, useEvaluationStore, useUIStore, useBlastRunStore } from '@/store';
+import { useRegistryStore } from '@/store/registryStore';
 import { snapshotCurrentDraft } from '@/store/draftActions';
 import { useEvaluate, useDebounce } from '@/hooks';
 import { cn, isValidJson, toGuardrailYaml, deriveSchemaFromJson, incrementMinor } from '@/utils';
@@ -99,6 +100,15 @@ export function PolicyStudio() {
   const [submitOpen, setSubmitOpen] = useState(false);
   const [expandedEditor, setExpandedEditor] = useState<'input' | 'config' | 'output' | 'rego' | 'manifest' | null>(null);
   const [autoRun, setAutoRun] = useState(true);
+  // Open the create-details modal on mount when the studio holds a fresh
+  // draft (no name yet AND not editing an existing immutable version). Once
+  // the user hits Done the modal stays closed for this session even if they
+  // later blank the name field.
+  const [createModalOpen, setCreateModalOpen] = useState(
+    () => !metadata.name.trim() && baseVersion === null
+  );
+  const setView = useRegistryStore((s) => s.setView);
+  const resetPolicy = usePolicyStore((s) => s.resetPolicy);
 
   const policyId = slugifyName(metadata.name);
 
@@ -356,6 +366,27 @@ export function PolicyStudio() {
       </div>
 
       {/* Drawers & modals */}
+      <NewGuardrailDetailsModal
+        isOpen={createModalOpen}
+        onDone={() => {
+          // Re-point `package policy` to the slug the user just entered so
+          // the rego header lines up with the guardrail name from the start.
+          const slug = slugifyName(metadata.name);
+          if (slug) {
+            if (/^package\s+[a-z0-9_.]+/m.test(regoCode)) {
+              setRegoCode(regoCode.replace(/^package\s+[a-z0-9_.]+/m, `package ${slug}`));
+            }
+          }
+          setCreateModalOpen(false);
+        }}
+        onCancel={() => {
+          // Back out: drop the blank draft and return to the catalog.
+          setCreateModalOpen(false);
+          resetPolicy();
+          setView('policies');
+        }}
+      />
+
       <StudioDetailsDrawer isOpen={detailsOpen} onClose={() => setDetailsOpen(false)} />
 
       <InputSchemaDrawer isOpen={schemaOpen} onClose={() => setSchemaOpen(false)} />
@@ -428,7 +459,7 @@ export function PolicyStudio() {
           enforcementType,
           stage,
           resourceKind,
-          owner: metadata.author || 'current-user',
+          owner: metadata.author,
           tags,
         }}
       />
