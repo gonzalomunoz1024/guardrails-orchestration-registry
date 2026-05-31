@@ -1,20 +1,22 @@
 /**
- * Guardrail Mapper
+ * Maps between backend wire DTOs and the frontend RegistryPolicy model.
  *
- * Maps between backend Guardrail DTOs and frontend RegistryPolicy models.
- * Handles the naming mismatch (backend: guardrail, frontend: policy).
+ * The wire shape (manifest) is faithful to REGISTRY_API.md; the frontend
+ * shape (RegistryPolicy) is what the UI is built around. Keep the mapping
+ * lossless where possible — anything the UI doesn't currently render but
+ * the backend persists should pass through untouched so we don't accidentally
+ * drop data on a round-trip read.
  */
 
 import type {
-  GuardrailDefinition,
-  GuardrailConfiguration,
+  GuardrailManifestDocument,
+  GuardrailConfigurationDocument,
+  GuardrailMetadataProjection,
   GuardrailStatus,
 } from '@/types/guardrail.types';
 import type { RegistryPolicy, PolicyStatus } from '@/types/registry.types';
 
-/**
- * Maps backend GuardrailStatus to frontend PolicyStatus
- */
+/** Backend GuardrailStatus → frontend PolicyStatus. */
 export function mapGuardrailStatusToPolicy(status: GuardrailStatus): PolicyStatus {
   switch (status) {
     case 'ACTIVE':
@@ -29,37 +31,35 @@ export function mapGuardrailStatusToPolicy(status: GuardrailStatus): PolicyStatu
 }
 
 /**
- * Maps a Guardrail Definition + Configuration to a RegistryPolicy
- *
- * Note: Many frontend fields don't exist in the backend and will use defaults:
- * - regoCode: Empty string (not stored in backend)
- * - testCases: Empty array (not in backend)
- * - stats: Zeroed (not in backend)
- * - versions: Empty (not in backend)
- * - tags: Empty (not in backend)
+ * Map a full manifest document (+ optional configuration content) into a
+ * RegistryPolicy. The frontend `id` is the manifest's metadata.name (which is
+ * the slug used as the registry primary key). regoCode stays empty here —
+ * the UI fetches the raw rego source separately via guardrailsApi.getRegoSource.
  */
-export function mapGuardrailToPolicy(
-  guardrail: GuardrailDefinition,
-  config?: GuardrailConfiguration | null
+export function mapManifestToPolicy(
+  manifest: GuardrailManifestDocument,
+  config?: GuardrailConfigurationDocument | null
 ): RegistryPolicy {
+  const { metadata, spec } = manifest;
+  const content = config?.content ?? spec.configuration?.content ?? {};
+
   return {
-    id: guardrail.guardrailId,
-    name: guardrail.guardrailName,
-    description: guardrail.description,
-    resourceKind: guardrail.resourceKind,
-    stage: guardrail.stage,
-    enforcementType: guardrail.enforcementType,
-    status: mapGuardrailStatusToPolicy(guardrail.status),
-    tags: [], // Not in backend
-    author: guardrail.owner,
-    createdAt: guardrail.createdAt,
-    currentVersion: guardrail.version,
-    versions: [], // Fed by the versions endpoint
-    regoCode: '', // Not stored in backend guardrail definition
-    configJson: config ? JSON.stringify(config.global, null, 2) : '{}',
-    testCases: [], // Not in backend
+    id: metadata.name,
+    name: metadata.displayName || metadata.name,
+    description: metadata.description ?? '',
+    resourceKind: spec.target.resourceKind,
+    stage: spec.stage,
+    enforcementType: spec.enforcement,
+    status: mapGuardrailStatusToPolicy(spec.status),
+    tags: metadata.labels ?? [],
+    author: metadata.owner ?? '',
+    createdAt: manifest.createdAt ?? '',
+    currentVersion: metadata.version,
+    versions: [],
+    regoCode: '',
+    configJson: JSON.stringify(content, null, 2),
+    testCases: [],
     stats: {
-      // Would need separate stats endpoint
       totalEvaluations: 0,
       allowRate: 0,
       denyRate: 0,
@@ -68,3 +68,34 @@ export function mapGuardrailToPolicy(
   };
 }
 
+/**
+ * Map a metadata projection (flat header) into a partial RegistryPolicy.
+ * Useful for suite member resolution where we don't want to pull the full
+ * manifest body for every pinned (name, version) pair.
+ */
+export function mapMetadataProjectionToPolicy(
+  metadata: GuardrailMetadataProjection
+): Pick<
+  RegistryPolicy,
+  | 'id'
+  | 'name'
+  | 'description'
+  | 'resourceKind'
+  | 'stage'
+  | 'enforcementType'
+  | 'status'
+  | 'author'
+  | 'currentVersion'
+> {
+  return {
+    id: metadata.name,
+    name: metadata.displayName || metadata.name,
+    description: metadata.description ?? '',
+    resourceKind: metadata.resourceKind,
+    stage: metadata.stage,
+    enforcementType: metadata.enforcement,
+    status: mapGuardrailStatusToPolicy(metadata.status),
+    author: metadata.owner ?? '',
+    currentVersion: metadata.version,
+  };
+}

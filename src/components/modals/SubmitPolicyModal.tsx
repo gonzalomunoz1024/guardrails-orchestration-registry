@@ -219,6 +219,17 @@ export function SubmitPolicyModal({
     .filter((e) => e.payload.trim())
     .map((e, i) => ({ file: `examples/${slugExample(e.name, i)}.json`, payload: e.payload }));
 
+  // Parse the authored JSON Schema once; embedded into spec.inputSchema.content
+  // so the manifest is self-contained per REGISTRY_API.md.
+  const parseInputSchema = (): Record<string, unknown> | undefined => {
+    if (!inputSchemaJson) return undefined;
+    try {
+      return JSON.parse(inputSchemaJson);
+    } catch {
+      return undefined;
+    }
+  };
+
   const generateManifestYaml = (): string =>
     toGuardrailYaml({
       metadata: {
@@ -237,7 +248,14 @@ export function SubmitPolicyModal({
       externalDeps,
       policyFile: 'policy.rego',
       configFile: 'configuration.yaml',
-      inputSchema: { file: 'input-schema.json', examples: exampleArtifacts.map((e) => e.file) },
+      inputSchema: {
+        file: 'input-schema.json',
+        content: parseInputSchema(),
+        examples: exampleArtifacts.map((e) => e.file),
+      },
+      configuration: configEnabled
+        ? { file: 'configuration.yaml', content: getConfigObject() }
+        : undefined,
     });
 
   // Generate the kube-like GuardrailConfiguration (configuration.yaml).

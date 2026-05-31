@@ -22,13 +22,14 @@ import {
   useMemberContract,
 } from '@/hooks/useSuites';
 import { cn } from '@/utils';
+import { slugifyName } from '@/utils/slugify';
 import { RESOURCE_KIND_LABELS, STAGE_LABELS } from '@/types';
 import type { SuiteStatus } from '@/types/suite.types';
 import type { GuardrailRef } from '@/types/guardrail.types';
 
 interface DraftMember {
   guardrailId: string;
-  guardrailName: string;
+  displayName: string;
   version: string; // pinned version
   resourceKind?: keyof typeof RESOURCE_KIND_LABELS;
   stage?: keyof typeof STAGE_LABELS;
@@ -57,7 +58,7 @@ function MemberPin({
     <div className="rounded-[var(--radius-md)] border border-[var(--color-border-light)] bg-[var(--color-surface)] p-3">
       <div className="flex items-center justify-between gap-3">
         <div className="min-w-0">
-          <p className="font-medium text-[var(--color-text-primary)] truncate">{member.guardrailName}</p>
+          <p className="font-medium text-[var(--color-text-primary)] truncate">{member.displayName}</p>
           <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-xs text-[var(--color-text-tertiary)]">
             {member.resourceKind && <span>{RESOURCE_KIND_LABELS[member.resourceKind]}</span>}
             {member.stage && <span>· {STAGE_LABELS[member.stage]}</span>}
@@ -127,13 +128,13 @@ export function SuiteBuilder() {
   // Prefill from an existing suite when editing.
   useEffect(() => {
     if (isEditing && existingSuite && !hydrated) {
-      setName(existingSuite.name);
+      setName(existingSuite.displayName);
       setDescription(existingSuite.description);
       setStatus(existingSuite.status);
       setMembers(
         existingSuite.members.map((m) => ({
           guardrailId: m.guardrailId,
-          guardrailName: m.guardrailName || m.guardrailId,
+          displayName: m.displayName || m.guardrailId,
           version: m.version,
           resourceKind: m.resourceKind,
           stage: m.stage,
@@ -154,10 +155,10 @@ export function SuiteBuilder() {
     );
   }, [policies, pinnedIds, search]);
 
-  const addMember = (guardrailId: string, guardrailName: string, version: string, rk?: DraftMember['resourceKind'], st?: DraftMember['stage']) => {
+  const addMember = (guardrailId: string, displayName: string, version: string, rk?: DraftMember['resourceKind'], st?: DraftMember['stage']) => {
     setMembers((prev) => [
       ...prev,
-      { guardrailId, guardrailName, version, resourceKind: rk, stage: st },
+      { guardrailId, displayName, version, resourceKind: rk, stage: st },
     ]);
   };
 
@@ -177,12 +178,14 @@ export function SuiteBuilder() {
     const refs: GuardrailRef[] = members.map((m) => ({ guardrailId: m.guardrailId, version: m.version }));
     if (isEditing && selectedSuiteId) {
       updateSuite.mutate(
-        { suiteId: selectedSuiteId, request: { name, description, status, members: refs } },
+        { suiteId: selectedSuiteId, request: { displayName: name, description, status, members: refs } },
         { onSuccess: (suite) => navigateToSuite(suite) }
       );
     } else {
+      // POST upserts on suiteId; derive a stable slug from the display name.
+      const suiteId = slugifyName(name).replace(/_/g, '-');
       createSuite.mutate(
-        { name, description, owner, status, members: refs },
+        { suiteId, displayName: name, description, owner, status, members: refs },
         { onSuccess: (suite) => navigateToSuite(suite) }
       );
     }
