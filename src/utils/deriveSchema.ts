@@ -3,7 +3,15 @@
  * publish the input contract that suite adopters must satisfy. The schema
  * describes the document (the caller-supplied portion of the OPA input); the
  * platform injects `guardrail` / `configuration` / `external` at runtime.
+ *
+ * The derived schema always carries the orchestrator-reserved envelope
+ * (apiVersion / kind / metadata / spec.metadata) at the right types so it
+ * never accidentally disallows what the platform always writes — even if
+ * the customer omitted those keys from their sample document. See
+ * src/utils/reservedFields.ts.
  */
+
+import { applyReservedFields } from './reservedFields';
 
 function schemaForValue(value: unknown): Record<string, unknown> {
   if (value === null) return { type: 'null' };
@@ -30,10 +38,11 @@ function schemaForValue(value: unknown): Record<string, unknown> {
 
 /** Build a draft-07 schema object from an already-parsed sample value. */
 export function deriveSchema(value: unknown): Record<string, unknown> {
-  return {
+  const base = {
     $schema: 'http://json-schema.org/draft-07/schema#',
     ...schemaForValue(value ?? {}),
   };
+  return applyReservedFields(base);
 }
 
 /** Derive a pretty-printed JSON Schema string from a sample document string. */

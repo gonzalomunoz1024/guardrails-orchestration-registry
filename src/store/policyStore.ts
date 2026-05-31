@@ -128,9 +128,22 @@ deny[msg] if {
 }
 `;
 
+// Seeds the orchestrator-reserved envelope (apiVersion / kind / metadata /
+// spec) so authors immediately see the shape the platform expects. Customer-
+// specific fields live underneath spec — the comment block in the rego shows
+// how to read them.
 const defaultInputJson = `{
-  "user": {
-    "role": "admin"
+  "apiVersion": "guardrails.dev/v1alpha1",
+  "kind": "Resource",
+  "metadata": {
+    "correlationId": "00000000-0000-0000-0000-000000000000",
+    "name": "example-resource"
+  },
+  "spec": {
+    "metadata": {
+      "appId": "app-123",
+      "organization": "platform"
+    }
   }
 }`;
 
