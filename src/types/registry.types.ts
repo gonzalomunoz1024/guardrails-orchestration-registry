@@ -4,12 +4,13 @@ export type PolicyStatus = 'draft' | 'review' | 'approved' | 'active' | 'depreca
 export type { ResourceKind, Stage, EnforcementType, GuardrailStatus } from './guardrail.types';
 import type { ResourceKind, Stage, EnforcementType } from './guardrail.types';
 
-// Presentation labels for the SCREAMING_SNAKE wire enums.
+// Resource kinds use the backend's PascalCase form (acronyms preserved); the
+// labels below are for display only.
 export const RESOURCE_KIND_LABELS: Record<ResourceKind, string> = {
-  ANY: 'Any',
+  Any: 'Any',
   CNAME: 'CNAME',
-  MONGODB: 'MongoDB',
-  VIRTUAL_MACHINE: 'Virtual Machine',
+  MongoDB: 'MongoDB',
+  VirtualMachine: 'Virtual Machine',
 };
 export const STAGE_LABELS: Record<Stage, string> = {
   PRECHECK: 'PreCheck',

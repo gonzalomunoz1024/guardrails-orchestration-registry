@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { ExternalDependency, PolicyMetadata } from '@/types';
 import type { ResourceKind, Stage, EnforcementType, GuardrailStatus } from '@/types/guardrail.types';
+import { normalizeResourceKind } from '@/utils/resourceKind';
 import type { GuardrailDraftBody } from './draftStore';
 
 export interface InputExample {
@@ -142,7 +143,7 @@ const initialState = {
   configEnabled: false,
   externalDeps: [] as ExternalDependency[],
   metadata: initialMetadata,
-  resourceKind: 'VIRTUAL_MACHINE' as ResourceKind,
+  resourceKind: 'VirtualMachine' as ResourceKind,
   stage: 'PRECHECK' as Stage,
   status: 'DRAFT' as GuardrailStatus,
   enforcementType: 'MANDATORY' as EnforcementType,
@@ -237,11 +238,14 @@ export const usePolicyStore = create<PolicyState>()(
     }),
     {
       name: 'policy-storage',
-      version: 3,
+      version: 4,
       // Migrations:
       //   v1 → v2: resourceType removed; drop the stale field if present.
       //   v2 → v3: guardrail versions are MAJOR.MINOR only — truncate any
       //            persisted 3-segment metadata.version (e.g. "1.0.0" → "1.0").
+      //   v3 → v4: resourceKind moved from SCREAMING_SNAKE to PascalCase to
+      //            match the backend wire format (VIRTUAL_MACHINE →
+      //            VirtualMachine, MONGODB → MongoDB, ANY → Any).
       migrate: (persisted: unknown) => {
         const state = (persisted ?? {}) as Record<string, unknown>;
         delete state.resourceType;
@@ -250,6 +254,9 @@ export const usePolicyStore = create<PolicyState>()(
           const m = meta.version.match(/^(\d+\.\d+)(?:\.\d+)?$/);
           if (m) meta.version = m[1];
           else meta.version = '1.0';
+        }
+        if (typeof state.resourceKind === 'string') {
+          state.resourceKind = normalizeResourceKind(state.resourceKind);
         }
         return state as unknown as PolicyState;
       },

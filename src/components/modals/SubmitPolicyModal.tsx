@@ -27,7 +27,7 @@ import { Octokit } from 'octokit';
 import Editor from '@monaco-editor/react';
 import { cn, toGuardrailYaml, toGuardrailConfigurationYaml } from '@/utils';
 import { useAuthStore } from '@/store/authStore';
-import { usePolicyStore, useUIStore } from '@/store';
+import { usePolicyStore, useUIStore, useDraftStore } from '@/store';
 import { defaultEditorOptions } from '@/monaco/config';
 import { useGuardrailConfig } from '@/hooks/useGuardrailConfig';
 import { ComingSoonBanner } from '@/components/common/ComingSoonBanner';
@@ -133,6 +133,8 @@ export function SubmitPolicyModal({
     inputExamples,
     baseVersion,
   } = usePolicyStore();
+  const removeDraft = useDraftStore((s) => s.removeDraft);
+  const setDraftId = usePolicyStore((s) => s.setDraftId);
   const { resolvedTheme } = useUIStore();
   // Metadata-only publishes (no contract change) target the existing version
   // dir and only rewrite guardrail.yaml + configuration.yaml. The pre-flight
@@ -579,6 +581,17 @@ ${artifactFiles.map((f) => `- \`${f.path}\``).join('\n')}
       updateStep('Create Pull Request', 'success', `PR #${pr.number}`);
       setPrUrl(pr.html_url);
       setGithubStatus('success');
+
+      // The guardrail is now in flight to the backend (PR → merge → registry
+      // pickup). The local draft has served its purpose; drop it from the
+      // catalog so we don't show the same guardrail twice (once as Local
+      // draft, once as the published row).
+      const { draftId } = usePolicyStore.getState();
+      if (draftId) removeDraft(draftId);
+      if (policyId && policyId !== draftId) removeDraft(policyId);
+      // Unlink the studio from the just-removed draft so the next Save Draft
+      // mints a fresh id instead of resurrecting this one.
+      setDraftId(null);
     } catch (error) {
       const msg = error instanceof Error ? error.message : 'Unknown error';
       updateStep('Create Pull Request', 'error', msg);
