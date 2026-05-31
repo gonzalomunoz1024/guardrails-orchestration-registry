@@ -10,7 +10,7 @@ export const RESOURCE_KIND_LABELS: Record<ResourceKind, string> = {
   Any: 'Any',
   CNAME: 'CNAME',
   MongoDB: 'MongoDB',
-  VirtualMachine: 'Virtual Machine',
+  VirtualMachine: 'VirtualMachine',
 };
 export const STAGE_LABELS: Record<Stage, string> = {
   PRECHECK: 'PreCheck',

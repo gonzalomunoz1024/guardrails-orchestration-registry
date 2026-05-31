@@ -78,17 +78,6 @@ export function NewGuardrailDetailsModal({ isOpen, onDone, onCancel }: NewGuardr
         {/* Body */}
         <div className="flex-1 min-h-0 overflow-y-auto px-6 py-5">
           <GuardrailDetailsFields showVersionHint={false} />
-
-          {/* Live preview of the derived rego package, so the link between
-              the name field and the rego header is obvious. */}
-          <div className="mt-5 rounded-[var(--radius-md)] bg-[var(--color-surface-secondary)] border border-[var(--color-border-light)] px-3 py-2.5">
-            <p className="text-[10px] font-medium text-[var(--color-text-tertiary)] uppercase tracking-wider">
-              Rego package
-            </p>
-            <code className="mt-1 block font-mono text-sm text-[var(--color-text-primary)]">
-              package {slug || <span className="text-[var(--color-text-tertiary)]">—</span>}
-            </code>
-          </div>
         </div>
 
         {/* Footer */}
