@@ -12,11 +12,12 @@ import {
   ChevronRight,
   ChevronUp,
   Layers,
+  AlertTriangle,
 } from 'lucide-react';
 import { usePolicyStore, useUIStore } from '@/store';
 import { useInputShape } from '@/hooks';
 import { defaultEditorOptions } from '@/monaco/config';
-import { cn, isValidJson, parseJson } from '@/utils';
+import { cn, isValidJson, parseJson, findMissingReservedFields } from '@/utils';
 import type { GuardrailInfo } from '@/utils';
 import { ExternalDependenciesSection } from './ExternalDependenciesSection';
 import { CombinedInputPreview } from './CombinedInputPreview';
@@ -229,6 +230,13 @@ export function InputModule({ guardrailInfo, onExpandInput, onExpandConfig }: In
   const configKeys = countKeys(configJson);
   const fetchedCount = externalDeps.filter((d) => d.status === 'success').length;
 
+  // Orchestrator-reserved paths missing from the sample document. We only
+  // compute when the JSON parses — the section already shows an Invalid JSON
+  // chip in the header for the broken case, so stacking another warning would
+  // be noise.
+  const parsedInput = isValidJson(inputJson) ? parseJson(inputJson) : null;
+  const missingReserved = parsedInput !== null ? findMissingReservedFields(parsedInput) : [];
+
   return (
     <div className="h-full flex flex-col min-h-0">
       <div className="flex items-center justify-between mb-2 gap-2">
@@ -299,6 +307,31 @@ export function InputModule({ guardrailInfo, onExpandInput, onExpandConfig }: In
             </>
           }
         >
+          {missingReserved.length > 0 && (
+            <div className="px-3 pt-3">
+              <div className="flex items-start gap-2 rounded-[var(--radius-md)] border border-[var(--color-warning)]/30 bg-[var(--color-warning-bg)] px-3 py-2.5">
+                <AlertTriangle className="w-4 h-4 text-[var(--color-warning)] shrink-0 mt-0.5" />
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs font-semibold text-[var(--color-text-primary)]">
+                    Missing orchestrator-reserved {missingReserved.length === 1 ? 'field' : 'fields'}
+                  </p>
+                  <p className="mt-0.5 text-[11px] text-[var(--color-text-secondary)]">
+                    Inbound traffic always carries these. Add them to your sample so the policy
+                    sees the same shape it will see in production.
+                  </p>
+                  <ul className="mt-1.5 flex flex-wrap gap-1.5">
+                    {missingReserved.map((path) => (
+                      <li key={path}>
+                        <code className="text-[11px] font-mono px-1.5 py-0.5 rounded bg-[var(--color-surface)] text-[var(--color-warning)] border border-[var(--color-warning)]/30">
+                          {path}
+                        </code>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              </div>
+            </div>
+          )}
           <div className="h-[200px]">
             <GuardedEditor
               theme={editorTheme}

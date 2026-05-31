@@ -27,6 +27,15 @@ export interface ReservedField {
   type: 'string' | 'object';
   /** Human-readable note for the UI hint panel. */
   note: string;
+  /**
+   * Whether the Studio should warn when this path is missing from a sample
+   * document. The orchestrator itself doesn't require any reserved field, but
+   * authors should know which envelope keys real inbound traffic will carry —
+   * a guardrail that doesn't account for `spec.metadata.appId` will silently
+   * misbehave in production. correlationId is the one exception: the server
+   * mints a UUID when absent, so an author leaving it out of a sample is fine.
+   */
+  required: boolean;
 }
 
 export const RESERVED_FIELDS: ReservedField[] = [
@@ -34,46 +43,55 @@ export const RESERVED_FIELDS: ReservedField[] = [
     path: 'apiVersion',
     type: 'string',
     note: 'Routes inbound documents to the correct resource converter. Any string works today.',
+    required: true,
   },
   {
     path: 'kind',
     type: 'string',
     note: 'Surfaced in inbound logs. No routing or validation impact.',
+    required: true,
   },
   {
     path: 'metadata',
     type: 'object',
     note: 'Customer-driven envelope; forwarded verbatim into input.document.metadata.',
+    required: true,
   },
   {
     path: 'metadata.correlationId',
     type: 'string',
     note: 'Mongo _id of the evaluation record. Server mints a UUID when absent.',
+    required: false,
   },
   {
     path: 'metadata.name',
     type: 'string',
     note: 'Logical resource name; surfaced on the evaluation record.',
+    required: true,
   },
   {
     path: 'spec',
     type: 'object',
     note: 'Customer-driven envelope; forwarded verbatim into input.document.spec.',
+    required: true,
   },
   {
     path: 'spec.metadata',
     type: 'object',
     note: 'Customer metadata block under spec; carries appId / organization.',
+    required: true,
   },
   {
     path: 'spec.metadata.appId',
     type: 'string',
     note: "Drives applicability matching against each guardrail's applicability rules.",
+    required: true,
   },
   {
     path: 'spec.metadata.organization',
     type: 'string',
     note: 'Used to derive the LOB on the evaluation record and downstream events.',
+    required: true,
   },
 ];
 
@@ -145,6 +163,59 @@ export function applyReservedFields(schema: SchemaObject): SchemaObject {
     setPropertyAtPath(root, field.path, leaf);
   }
   return root;
+}
+
+/** Walk a plain JSON value down a dot-path; returns the value at the leaf or
+ *  undefined if any segment is missing or traverses a non-object. */
+function getValueAtPath(value: unknown, path: string): unknown {
+  const segments = path.split('.');
+  let cursor: unknown = value;
+  for (const segment of segments) {
+    if (cursor === null || typeof cursor !== 'object' || Array.isArray(cursor)) {
+      return undefined;
+    }
+    cursor = (cursor as Record<string, unknown>)[segment];
+    if (cursor === undefined) return undefined;
+  }
+  return cursor;
+}
+
+/**
+ * Find which `required` reserved fields are missing from a parsed inbound
+ * document. Returns the dot-paths in declaration order so the UI can list
+ * the most-shallow issues first (apiVersion before spec.metadata.appId).
+ *
+ * "Missing" means either:
+ *   - the path doesn't exist, or
+ *   - the value at the path is the wrong shape (e.g. `metadata` is a string
+ *     instead of an object).
+ *
+ * Empty strings count as present — leaving the value blank is the customer's
+ * problem, not a missing-field problem.
+ */
+export function findMissingReservedFields(doc: unknown): string[] {
+  if (doc === null || typeof doc !== 'object' || Array.isArray(doc)) {
+    // A non-object document is missing every reserved path by definition;
+    // surfacing the full list would be noise, so report the root issue only.
+    return RESERVED_FIELDS.filter((f) => f.required).map((f) => f.path);
+  }
+  const missing: string[] = [];
+  for (const field of RESERVED_FIELDS) {
+    if (!field.required) continue;
+    const value = getValueAtPath(doc, field.path);
+    if (value === undefined) {
+      missing.push(field.path);
+      continue;
+    }
+    if (field.type === 'object') {
+      if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+        missing.push(field.path);
+      }
+    } else if (field.type === 'string') {
+      if (typeof value !== 'string') missing.push(field.path);
+    }
+  }
+  return missing;
 }
 
 export interface ReservedFieldCollision {
