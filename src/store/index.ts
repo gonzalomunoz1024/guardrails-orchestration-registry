@@ -5,5 +5,6 @@ export { useUIStore } from './uiStore';
 export { useRegistryStore } from './registryStore';
 export type { ViewType } from './registryStore';
 export { useDraftStore } from './draftStore';
-export type { GuardrailDraft } from './draftStore';
+export type { GuardrailDraft, GuardrailDraftBody } from './draftStore';
+export { snapshotCurrentDraft, startNewDraft, resumeDraft } from './draftActions';
 export { useBlastRunStore } from './blastRunStore';

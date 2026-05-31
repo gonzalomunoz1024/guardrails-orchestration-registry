@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import Editor from '@monaco-editor/react';
-import { Minimize2 } from 'lucide-react';
+import { Minimize2, Wand2 } from 'lucide-react';
 import { cn } from '@/utils';
 import { defaultEditorOptions } from '@/monaco/config';
 
@@ -41,6 +41,19 @@ export function EditorModal({
       document.body.style.overflow = '';
     };
   }, [isOpen, onClose]);
+
+  // Pretty-print the current value if it parses as JSON; silently no-op
+  // otherwise so a half-typed document doesn't get clobbered.
+  const beautify = () => {
+    if (!onChange) return;
+    try {
+      onChange(JSON.stringify(JSON.parse(value), null, 2));
+    } catch {
+      /* leave invalid JSON untouched */
+    }
+  };
+
+  const canBeautify = language === 'json' && !readOnly && !!onChange;
 
   if (!isOpen) return null;
 
@@ -92,6 +105,22 @@ export function EditorModal({
             <span className="text-xs text-[var(--color-text-tertiary)] mr-2">
               {language === 'json' ? 'JSON' : 'Rego'} • {value.split('\n').length} lines
             </span>
+            {canBeautify && (
+              <button
+                onClick={beautify}
+                title="Pretty-print the JSON body"
+                className={cn(
+                  "flex items-center gap-2 px-3 py-1.5 rounded-lg",
+                  "text-sm font-medium text-[var(--color-text-secondary)]",
+                  "bg-[var(--color-surface-secondary)]",
+                  "hover:bg-[var(--color-border-light)] transition-all",
+                  "border border-[var(--color-border-light)]"
+                )}
+              >
+                <Wand2 className="w-4 h-4" />
+                Beautify
+              </button>
+            )}
             <button
               onClick={onClose}
               className={cn(

@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { ExternalDependency, PolicyMetadata } from '@/types';
 import type { ResourceKind, Stage, EnforcementType, GuardrailStatus } from '@/types/guardrail.types';
+import type { GuardrailDraftBody } from './draftStore';
 
 export interface InputExample {
   name: string;
@@ -38,6 +39,13 @@ interface PolicyState {
   /** ISO timestamp of the last explicit "Save draft", or null. */
   lastSavedAt: string | null;
   isDirty: boolean;
+  /**
+   * Stable identity for the draft currently in the studio. Set when a draft
+   * is loaded or saved; cleared by resetPolicy. Used so renames don't fork
+   * the draft into a new row, and so we can stash the active studio body
+   * into draftStore when starting a new guardrail.
+   */
+  draftId: string | null;
 
   setRegoCode: (code: string) => void;
   setInputJson: (json: string) => void;
@@ -60,6 +68,10 @@ interface PolicyState {
   markClean: () => void;
   /** Load an existing guardrail into the studio and pin the baseline. */
   loadForEdit: (payload: LoadForEditPayload) => void;
+  /** Replace the entire studio body from a saved draft snapshot. */
+  loadDraft: (draftId: string, body: GuardrailDraftBody) => void;
+  /** Set the draft id explicitly (used when minting on first save). */
+  setDraftId: (id: string | null) => void;
 }
 
 /**
@@ -144,6 +156,7 @@ const initialState = {
   inputExamples: [] as InputExample[],
   lastSavedAt: null as string | null,
   isDirty: false,
+  draftId: null as string | null,
 };
 
 export const usePolicyStore = create<PolicyState>()(
@@ -185,9 +198,19 @@ export const usePolicyStore = create<PolicyState>()(
       saveDraft: () => set({ lastSavedAt: new Date().toISOString(), isDirty: false }),
       resetPolicy: () => set({ ...initialState }),
       markClean: () => set({ isDirty: false }),
+      setDraftId: (draftId) => set({ draftId }),
+      loadDraft: (draftId, body) =>
+        set({
+          ...initialState,
+          ...body,
+          draftId,
+          isDirty: false,
+          lastSavedAt: new Date().toISOString(),
+        }),
       loadForEdit: (p) =>
         set({
           ...initialState,
+          draftId: null,
           regoCode: p.regoCode,
           configJson: p.configJson,
           configEnabled: p.configEnabled,
@@ -250,6 +273,7 @@ export const usePolicyStore = create<PolicyState>()(
         inputSchemaAuto: state.inputSchemaAuto,
         inputExamples: state.inputExamples,
         lastSavedAt: state.lastSavedAt,
+        draftId: state.draftId,
       }),
     }
   )
