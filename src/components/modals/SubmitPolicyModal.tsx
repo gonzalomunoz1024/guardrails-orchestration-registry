@@ -29,7 +29,8 @@ import { Octokit } from 'octokit';
 import Editor from '@monaco-editor/react';
 import { cn, toGuardrailYaml, toGuardrailConfigurationYaml } from '@/utils';
 import { useAuthStore } from '@/store/authStore';
-import { usePolicyStore, useUIStore } from '@/store';
+import { usePolicyStore, useUIStore, useDraftStore } from '@/store';
+import { snapshotCurrentDraft } from '@/store/draftActions';
 import { defaultEditorOptions } from '@/monaco/config';
 import { useGuardrailConfig } from '@/hooks/useGuardrailConfig';
 import { ComingSoonBanner } from '@/components/common/ComingSoonBanner';
@@ -599,6 +600,16 @@ ${artifactFiles.map((f) => `- \`${f.path}\``).join('\n')}
       // the draft now the catalog would show nothing during that window. The
       // catalog dedupes by id, so the draft is suppressed automatically the
       // moment the backend's policies list returns the published row.
+      //
+      // Snapshot first so a Submit-without-Save-Draft path still produces a
+      // tracked row, then tag the draft with the PR url. The catalog uses
+      // that tag to flip the badge from "Local draft" to "In review".
+      const persistedDraft = snapshotCurrentDraft();
+      const targetDraftId = persistedDraft?.id ?? usePolicyStore.getState().draftId;
+      if (targetDraftId) {
+        useDraftStore.getState().markDraftSubmitted(targetDraftId, pr.html_url);
+      }
+
       // Unlink the studio from the draft so the next Save Draft mints a
       // fresh id instead of layering more edits onto this published version.
       setDraftId(null);

@@ -39,6 +39,11 @@ export interface GuardrailDraftBody {
  *
  * Top-level fields are display facets (used by the catalog list). The full
  * studio state lives under `body` so Resume can restore it.
+ *
+ * When the studio submits a PR for this draft we tag it with `prUrl` +
+ * `submittedAt` so the catalog can flip the row from "Local draft" to
+ * "In review" until the backend indexes the merged manifest (at which point
+ * the catalog's id dedupe hides the draft and the published row takes over).
  */
 export interface GuardrailDraft {
   id: string;
@@ -49,6 +54,10 @@ export interface GuardrailDraft {
   status: GuardrailStatus;
   updatedAt: string;
   body: GuardrailDraftBody;
+  /** GitHub PR URL once Submit succeeded. Presence flips the catalog badge. */
+  prUrl?: string;
+  /** ISO timestamp of the PR creation. */
+  submittedAt?: string;
 }
 
 interface DraftState {
@@ -56,6 +65,8 @@ interface DraftState {
   upsertDraft: (draft: GuardrailDraft) => void;
   removeDraft: (id: string) => void;
   getDraft: (id: string) => GuardrailDraft | undefined;
+  /** Tag a draft as in-review after a PR was opened. No-op if id is unknown. */
+  markDraftSubmitted: (id: string, prUrl: string) => void;
 }
 
 export const useDraftStore = create<DraftState>()(
@@ -69,6 +80,12 @@ export const useDraftStore = create<DraftState>()(
       removeDraft: (id) =>
         set((state) => ({ drafts: state.drafts.filter((d) => d.id !== id) })),
       getDraft: (id) => get().drafts.find((d) => d.id === id),
+      markDraftSubmitted: (id, prUrl) =>
+        set((state) => ({
+          drafts: state.drafts.map((d) =>
+            d.id === id ? { ...d, prUrl, submittedAt: new Date().toISOString() } : d
+          ),
+        })),
     }),
     {
       name: 'guardrail-drafts',

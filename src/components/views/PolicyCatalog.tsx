@@ -12,6 +12,8 @@ import {
   RefreshCw,
   Plus,
   FilePen,
+  GitPullRequest,
+  ExternalLink,
   Trash2,
 } from 'lucide-react';
 import { useRegistryStore } from '@/store/registryStore';
@@ -231,6 +233,7 @@ interface DraftCardProps {
 
 /** Local-only draft entry rendered alongside backend guardrails. */
 function DraftCard({ draft, onResume, onDiscard }: DraftCardProps) {
+  const inReview = !!draft.prUrl;
   return (
     <div
       className={cn(
@@ -252,7 +255,7 @@ function DraftCard({ draft, onResume, onDiscard }: DraftCardProps) {
           e.stopPropagation();
           onDiscard();
         }}
-        title="Discard draft"
+        title={inReview ? 'Dismiss this local copy (the PR is unaffected)' : 'Discard draft'}
         className="absolute top-3 right-3 z-10 p-1.5 rounded-[var(--radius-sm)] text-[var(--color-text-tertiary)] opacity-0 group-hover:opacity-100 hover:text-[var(--color-error)] hover:bg-[var(--color-surface-secondary)] transition-all"
       >
         <Trash2 className="w-4 h-4" />
@@ -260,10 +263,17 @@ function DraftCard({ draft, onResume, onDiscard }: DraftCardProps) {
 
       <div className="relative pointer-events-none">
         <div className="flex items-center gap-2 mb-1">
-          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-[var(--color-warning-bg)] text-[var(--color-warning)]">
-            <FilePen className="w-3 h-3" />
-            Local draft
-          </span>
+          {inReview ? (
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-[var(--color-info-bg)] text-[var(--color-info)]">
+              <GitPullRequest className="w-3 h-3" />
+              In review
+            </span>
+          ) : (
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-[var(--color-warning-bg)] text-[var(--color-warning)]">
+              <FilePen className="w-3 h-3" />
+              Local draft
+            </span>
+          )}
           <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-[var(--color-surface-secondary)] text-[var(--color-text-secondary)]">
             {RESOURCE_KIND_LABELS[draft.resourceKind]}
           </span>
@@ -272,15 +282,36 @@ function DraftCard({ draft, onResume, onDiscard }: DraftCardProps) {
           {draft.name || 'Untitled draft'}
         </h3>
         <p className="mt-2 text-sm text-[var(--color-text-secondary)]">
-          Saved in your browser, never sent to the backend.
+          {inReview
+            ? 'Pull request open. The catalog will swap to the published guardrail once the PR is merged and the registry indexes it.'
+            : 'Saved in your browser, never sent to the backend.'}
         </p>
 
         <div className="mt-4 pt-4 border-t border-[var(--color-border-light)] flex items-center justify-between text-xs text-[var(--color-text-tertiary)]">
-          <span>Saved {timeAgo(draft.updatedAt)}</span>
-          <span className="flex items-center gap-1 text-[var(--color-info)] font-medium">
-            Resume
-            <ChevronRight className="w-3 h-3" />
+          <span>
+            {inReview && draft.submittedAt
+              ? `Submitted ${timeAgo(draft.submittedAt)}`
+              : `Saved ${timeAgo(draft.updatedAt)}`}
           </span>
+          {inReview && draft.prUrl ? (
+            // pointer-events-auto: the parent overlay swallows clicks; the
+            // PR link needs to escape so users can actually open the PR.
+            <a
+              href={draft.prUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={(e) => e.stopPropagation()}
+              className="pointer-events-auto flex items-center gap-1 text-[var(--color-info)] font-medium hover:underline"
+            >
+              View PR
+              <ExternalLink className="w-3 h-3" />
+            </a>
+          ) : (
+            <span className="flex items-center gap-1 text-[var(--color-info)] font-medium">
+              Resume
+              <ChevronRight className="w-3 h-3" />
+            </span>
+          )}
         </div>
       </div>
     </div>
@@ -294,6 +325,7 @@ interface DraftRowProps {
 }
 
 function DraftRow({ draft, onResume, onDiscard }: DraftRowProps) {
+  const inReview = !!draft.prUrl;
   return (
     <tr
       onClick={onResume}
@@ -302,16 +334,38 @@ function DraftRow({ draft, onResume, onDiscard }: DraftRowProps) {
       <td className="px-4 py-4">
         <div>
           <div className="flex items-center gap-2">
-            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-[var(--color-warning-bg)] text-[var(--color-warning)]">
-              <FilePen className="w-3 h-3" />
-              Local draft
-            </span>
+            {inReview ? (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-[var(--color-info-bg)] text-[var(--color-info)]">
+                <GitPullRequest className="w-3 h-3" />
+                In review
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-[var(--color-warning-bg)] text-[var(--color-warning)]">
+                <FilePen className="w-3 h-3" />
+                Local draft
+              </span>
+            )}
             <p className="font-medium text-[var(--color-text-primary)]">
               {draft.name || 'Untitled draft'}
             </p>
           </div>
           <p className="text-sm text-[var(--color-text-tertiary)]">
-            Saved in your browser, never sent to the backend.
+            {inReview ? (
+              <>
+                Pull request open ·{' '}
+                <a
+                  href={draft.prUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={(e) => e.stopPropagation()}
+                  className="text-[var(--color-info)] hover:underline"
+                >
+                  View PR
+                </a>
+              </>
+            ) : (
+              'Saved in your browser, never sent to the backend.'
+            )}
           </p>
         </div>
       </td>
@@ -321,10 +375,17 @@ function DraftRow({ draft, onResume, onDiscard }: DraftRowProps) {
         </span>
       </td>
       <td className="px-4 py-4">
-        <span className="flex items-center gap-1.5 text-sm text-[var(--color-text-secondary)]">
-          <AlertCircle className="w-4 h-4 text-[var(--color-text-tertiary)]" />
-          Draft
-        </span>
+        {inReview ? (
+          <span className="flex items-center gap-1.5 text-sm text-[var(--color-info)]">
+            <GitPullRequest className="w-4 h-4" />
+            Review
+          </span>
+        ) : (
+          <span className="flex items-center gap-1.5 text-sm text-[var(--color-text-secondary)]">
+            <AlertCircle className="w-4 h-4 text-[var(--color-text-tertiary)]" />
+            Draft
+          </span>
+        )}
       </td>
       <td className="px-4 py-4 text-sm text-[var(--color-text-tertiary)]">—</td>
       <td className="px-4 py-4 text-sm text-[var(--color-text-tertiary)]">—</td>
@@ -411,11 +472,16 @@ export function PolicyCatalog() {
   // see the same guardrail twice — the published row supersedes the draft.
   // (The draft is intentionally kept around between "PR created" and
   // "backend indexed it" so the catalog isn't empty during that window.)
+  //
+  // Historical drafts may carry underscored ids (from the old mintDraftId
+  // before it switched to dashes) while the backend always exposes dashed
+  // ids. Normalize both sides so the dedupe works across that mismatch.
   const filteredDrafts = useMemo(() => {
     if (selectedStatus && selectedStatus !== 'draft') return [];
-    const publishedIds = new Set(policies.map((p) => p.id));
+    const normalizeId = (s: string) => s.toLowerCase().replace(/_/g, '-');
+    const publishedIds = new Set(policies.map((p) => normalizeId(p.id)));
     return drafts.filter((d) => {
-      if (publishedIds.has(d.id)) return false;
+      if (publishedIds.has(normalizeId(d.id))) return false;
       const matchesSearch =
         !searchQuery || (d.name || '').toLowerCase().includes(searchQuery.toLowerCase());
       const matchesResourceKind =

@@ -9,7 +9,11 @@ import { useDraftStore, type GuardrailDraft, type GuardrailDraftBody } from './d
 import { slugifyName } from '@/utils/slugify';
 
 function mintDraftId(name: string): string {
-  const slug = slugifyName(name);
+  // Match the form the published manifest uses for metadata.name — dashed
+  // slug, not the underscored form slugifyName produces for rego packages.
+  // Otherwise the catalog's draft-vs-published dedupe (by id) mis-matches
+  // and the user sees the same guardrail twice ("Local draft" + DRAFT).
+  const slug = slugifyName(name).replace(/_/g, '-');
   if (slug) return slug;
   return `untitled-${Date.now()}`;
 }
