@@ -453,6 +453,10 @@ export function ExternalDependencyModal({ dep, isOpen, onClose }: ExternalDepend
   const [copiedUrl, setCopiedUrl] = useState<string | null>(null);
   const [customBaseUrl, setCustomBaseUrl] = useState(dep.baseUrl);
   const [customSpecUrl, setCustomSpecUrl] = useState(dep.specUrl);
+  // Local-state mirror of the dep name while the author types — committed on
+  // blur with sanitization + uniqueness so they can use real characters
+  // (dots, spaces) without us mangling them mid-edit.
+  const [customName, setCustomName] = useState(dep.name);
 
   const isCustom = dep.serviceId === CUSTOM_SERVICE_ID;
 
@@ -760,6 +764,13 @@ export function ExternalDependencyModal({ dep, isOpen, onClose }: ExternalDepend
     }
   }, [isOpen, dep.specUrl, dep.baseUrl, dep.operationId, loadSpec]);
 
+  // Mirror the dep name into our local input state when it changes externally
+  // (service swap, modal reopen with a different dep). Otherwise the local
+  // field would drift from the persisted name.
+  useEffect(() => {
+    setCustomName(dep.name);
+  }, [dep.name]);
+
   // Hydrate extras for the active operation when the modal opens, so authors
   // see their previously-saved query keys instead of an empty section.
   // Declared params/body are intentionally NOT hydrated here — that's a
@@ -876,26 +887,55 @@ export function ExternalDependencyModal({ dep, isOpen, onClose }: ExternalDepend
           </div>
 
           {isCustom && (
-            <div className="flex flex-wrap items-center gap-2">
-              <input
-                value={customBaseUrl}
-                onChange={(e) => setCustomBaseUrl(e.target.value)}
-                placeholder="Base URL (https://api.example.com)"
-                className="flex-1 min-w-[160px] px-2 py-1.5 rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-[var(--color-surface)] text-xs font-mono text-[var(--color-text-primary)] outline-none focus:border-[var(--color-info)]"
-              />
-              <input
-                value={customSpecUrl}
-                onChange={(e) => setCustomSpecUrl(e.target.value)}
-                placeholder="OpenAPI spec URL (…/openapi.json)"
-                className="flex-1 min-w-[160px] px-2 py-1.5 rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-[var(--color-surface)] text-xs font-mono text-[var(--color-text-primary)] outline-none focus:border-[var(--color-info)]"
-              />
-              <button
-                onClick={() => updateExternalDep(dep.id, { baseUrl: customBaseUrl, specUrl: customSpecUrl })}
-                disabled={!customSpecUrl}
-                className="px-3 py-1.5 rounded-[var(--radius-sm)] bg-[var(--color-info)] text-white text-xs font-medium disabled:opacity-50"
-              >
-                Load
-              </button>
+            <div className="space-y-2">
+              {/* Reference name. Without this the dep defaults to "external"
+                  and the combined input ends up reading input.external.external,
+                  which is both confusing and collides if more than one
+                  custom dep is added. Sanitized + de-duped on blur so typing
+                  stays smooth but the key under input.external is always a
+                  valid identifier. */}
+              <div className="flex flex-wrap items-center gap-2">
+                <label className="flex items-center gap-2 flex-1 min-w-[200px]">
+                  <span className="text-[11px] text-[var(--color-text-secondary)] shrink-0">
+                    Reference name
+                  </span>
+                  <input
+                    value={customName}
+                    onChange={(e) => setCustomName(e.target.value)}
+                    onBlur={() => {
+                      const next = makeUniqueName(customName.trim() || 'external');
+                      setCustomName(next);
+                      if (next !== dep.name) updateExternalDep(dep.id, { name: next });
+                    }}
+                    placeholder="my_api"
+                    className="flex-1 min-w-[120px] px-2 py-1.5 rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-[var(--color-surface)] text-xs font-mono text-[var(--color-text-primary)] outline-none focus:border-[var(--color-info)]"
+                  />
+                </label>
+                <span className="text-[10px] text-[var(--color-text-tertiary)] font-mono">
+                  input.external.<span className="text-[var(--color-text-secondary)]">{dep.name || '…'}</span>
+                </span>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <input
+                  value={customBaseUrl}
+                  onChange={(e) => setCustomBaseUrl(e.target.value)}
+                  placeholder="Base URL (https://api.example.com)"
+                  className="flex-1 min-w-[160px] px-2 py-1.5 rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-[var(--color-surface)] text-xs font-mono text-[var(--color-text-primary)] outline-none focus:border-[var(--color-info)]"
+                />
+                <input
+                  value={customSpecUrl}
+                  onChange={(e) => setCustomSpecUrl(e.target.value)}
+                  placeholder="OpenAPI spec URL (…/openapi.json)"
+                  className="flex-1 min-w-[160px] px-2 py-1.5 rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-[var(--color-surface)] text-xs font-mono text-[var(--color-text-primary)] outline-none focus:border-[var(--color-info)]"
+                />
+                <button
+                  onClick={() => updateExternalDep(dep.id, { baseUrl: customBaseUrl, specUrl: customSpecUrl })}
+                  disabled={!customSpecUrl}
+                  className="px-3 py-1.5 rounded-[var(--radius-sm)] bg-[var(--color-info)] text-white text-xs font-medium disabled:opacity-50"
+                >
+                  Load
+                </button>
+              </div>
             </div>
           )}
 
