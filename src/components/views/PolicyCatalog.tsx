@@ -395,9 +395,17 @@ export function PolicyCatalog() {
 
   // Drafts are pinned at the top — they're locally saved authoring state, so
   // the same search/kind filters apply but the status filter only matches DRAFT.
+  //
+  // Once the backend has indexed a submitted guardrail, its slug shows up in
+  // the policies list. Suppress the matching local draft so the user doesn't
+  // see the same guardrail twice — the published row supersedes the draft.
+  // (The draft is intentionally kept around between "PR created" and
+  // "backend indexed it" so the catalog isn't empty during that window.)
   const filteredDrafts = useMemo(() => {
     if (selectedStatus && selectedStatus !== 'draft') return [];
+    const publishedIds = new Set(policies.map((p) => p.id));
     return drafts.filter((d) => {
+      if (publishedIds.has(d.id)) return false;
       const matchesSearch =
         !searchQuery || (d.name || '').toLowerCase().includes(searchQuery.toLowerCase());
       const matchesResourceKind =
@@ -405,7 +413,7 @@ export function PolicyCatalog() {
         d.resourceKind.toLowerCase().includes(selectedResourceKind.toLowerCase());
       return matchesSearch && matchesResourceKind;
     });
-  }, [drafts, searchQuery, selectedResourceKind, selectedStatus]);
+  }, [drafts, policies, searchQuery, selectedResourceKind, selectedStatus]);
 
   const totalCount = filteredDrafts.length + filteredPolicies.length;
 

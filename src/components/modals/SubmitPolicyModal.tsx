@@ -1,4 +1,6 @@
 import { useState, useEffect } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
+import { policyKeys } from '@/hooks/usePolicies';
 import {
   X,
   GitBranch,
@@ -27,7 +29,7 @@ import { Octokit } from 'octokit';
 import Editor from '@monaco-editor/react';
 import { cn, toGuardrailYaml, toGuardrailConfigurationYaml } from '@/utils';
 import { useAuthStore } from '@/store/authStore';
-import { usePolicyStore, useUIStore, useDraftStore } from '@/store';
+import { usePolicyStore, useUIStore } from '@/store';
 import { defaultEditorOptions } from '@/monaco/config';
 import { useGuardrailConfig } from '@/hooks/useGuardrailConfig';
 import { ComingSoonBanner } from '@/components/common/ComingSoonBanner';
@@ -141,7 +143,7 @@ export function SubmitPolicyModal({
     inputExamples,
     baseVersion,
   } = usePolicyStore();
-  const removeDraft = useDraftStore((s) => s.removeDraft);
+  const queryClient = useQueryClient();
   const setDraftId = usePolicyStore((s) => s.setDraftId);
   const { resolvedTheme } = useUIStore();
   // Metadata-only publishes (no contract change) target the existing version
@@ -592,15 +594,20 @@ ${artifactFiles.map((f) => `- \`${f.path}\``).join('\n')}
       setGithubStatus('success');
 
       // The guardrail is now in flight to the backend (PR → merge → registry
-      // pickup). The local draft has served its purpose; drop it from the
-      // catalog so we don't show the same guardrail twice (once as Local
-      // draft, once as the published row).
-      const { draftId } = usePolicyStore.getState();
-      if (draftId) removeDraft(draftId);
-      if (policyId && policyId !== draftId) removeDraft(policyId);
-      // Unlink the studio from the just-removed draft so the next Save Draft
-      // mints a fresh id instead of resurrecting this one.
+      // pickup). We deliberately keep the local draft around — there's a gap
+      // between "PR created" and "backend has indexed it", and if we deleted
+      // the draft now the catalog would show nothing during that window. The
+      // catalog dedupes by id, so the draft is suppressed automatically the
+      // moment the backend's policies list returns the published row.
+      // Unlink the studio from the draft so the next Save Draft mints a
+      // fresh id instead of layering more edits onto this published version.
       setDraftId(null);
+
+      // Invalidate the cached catalog + this guardrail's detail so the next
+      // navigation refetches and the freshly-published version shows up
+      // without the user having to hard-refresh the page. The actual data
+      // visibility still depends on the backend having picked up the PR.
+      queryClient.invalidateQueries({ queryKey: policyKeys.all });
     } catch (error) {
       const msg = error instanceof Error ? error.message : 'Unknown error';
       updateStep('Create Pull Request', 'error', msg);
