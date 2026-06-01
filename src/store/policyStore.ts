@@ -130,23 +130,12 @@ deny[msg] if {
 }
 `;
 
-// Seeds the orchestrator-reserved envelope (apiVersion / kind / metadata /
-// spec) so authors immediately see the shape the platform expects. The
-// reserved sub-keys customers actually hydrate (name / appId / organization)
-// live at the top-level metadata block; spec is fully customer-owned and
-// forwarded verbatim to OPA. correlationId is intentionally omitted — the
-// server mints one when absent, so showing a placeholder UUID would imply
-// the frontend hydrates it (it doesn't).
-const defaultInputJson = `{
-  "apiVersion": "guardrails.dev/v1alpha1",
-  "kind": "Resource",
-  "metadata": {
-    "name": "example-resource",
-    "appId": "app-123",
-    "organization": "platform"
-  },
-  "spec": {}
-}`;
+// The Document editor starts blank. A pre-filled "Resource" example with
+// placeholder appId / organization implied those values were wired up to
+// something real and gave new authors a false sense of orientation. The
+// reserved-fields warning banner in the editor is the right teaching
+// surface for what the platform expects — let it do that job.
+const defaultInputJson = '{}';
 
 const defaultConfigJson = '{}';
 

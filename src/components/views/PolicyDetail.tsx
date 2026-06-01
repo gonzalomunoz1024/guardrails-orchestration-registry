@@ -188,12 +188,24 @@ export function PolicyDetail() {
     );
   }
 
+  // Versions are newest-first per the registry contract; the head is the
+  // latest published version. A stale Edit (editing 1.0 when 1.1 exists)
+  // would either collide with the existing 1.1 on a contract bump or
+  // mutate an immutable historical record on a metadata-only PUT — both
+  // break the immutable-version contract. The button is disabled below
+  // when this is true so the only editable target is the latest.
+  const latestVersion = policy.versions[0]?.version;
+  const isLatest = !latestVersion || policy.currentVersion === latestVersion;
+
   // Re-fetch the input contract AND the rego source for the version being
   // edited so the studio's baseline is authoritative, even if the cached
   // policy got loaded before those pieces were wired in. Best-effort: empty
   // schema / empty rego if the backend doesn't have one published yet.
   const handleEdit = async () => {
     if (!policy) return;
+    // Belt-and-braces: the button is disabled when not on the latest, but
+    // any caller-spawned path would also fall through here as a no-op.
+    if (!isLatest) return;
     setIsLoadingEdit(true);
     const [contract, regoSource] = await Promise.all([
       guardrailsApi
@@ -280,8 +292,12 @@ export function PolicyDetail() {
           <div className="flex items-center gap-2">
             <button
               onClick={handleEdit}
-              disabled={isLoadingEdit}
-              title="Open this guardrail in the studio for editing"
+              disabled={isLoadingEdit || !isLatest}
+              title={
+                isLatest
+                  ? 'Open this guardrail in the studio for editing'
+                  : `Editing is locked — v${policy.currentVersion} is no longer the latest version (v${latestVersion} exists). Open the latest to publish further changes.`
+              }
               className={cn(
                 'flex items-center gap-2 px-4 py-2 rounded-[var(--radius-md)]',
                 'bg-[var(--color-surface-secondary)] text-[var(--color-text-primary)]',
@@ -333,6 +349,11 @@ export function PolicyDetail() {
           <div className="flex items-center gap-2 text-[var(--color-text-secondary)]">
             <GitBranch className="w-4 h-4" />
             v{policy.currentVersion}
+            {!isLatest && (
+              <span className="ml-1 px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-[var(--color-warning-bg)] text-[var(--color-warning)]">
+                superseded by v{latestVersion}
+              </span>
+            )}
           </div>
         </div>
 

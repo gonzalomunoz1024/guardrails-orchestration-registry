@@ -235,6 +235,22 @@ export function PolicyStudio() {
             />
             <div className="flex items-center gap-2 text-xs text-[var(--color-text-tertiary)]">
               <code className="font-mono">package {policyId || '—'}</code>
+              <span>·</span>
+              {/* Visible version chip — surfaces the auto-bump so an author
+                  can see the moment a rego/schema/examples edit promotes
+                  the loaded version. Colored info when bumped, neutral
+                  when metadata-only. */}
+              {baseVersion && metadata.version !== baseVersion ? (
+                <span
+                  title={`Contract changed — bumped from v${baseVersion}`}
+                  className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-mono font-medium bg-[var(--color-info-bg)] text-[var(--color-info)]"
+                >
+                  v{metadata.version}
+                  <span className="text-[var(--color-text-tertiary)]">← was v{baseVersion}</span>
+                </span>
+              ) : (
+                <code className="font-mono">v{metadata.version}</code>
+              )}
               {savedLabel && (
                 <>
                   <span>·</span>

@@ -130,7 +130,9 @@ export function Dashboard() {
             )}
             {recentPolicies.map((policy) => (
               <button
-                key={policy.id}
+                // (id, version) — same id can appear at multiple versions in
+                // the recent list and React would otherwise collide on key.
+                key={`${policy.id}@${policy.currentVersion}`}
                 onClick={() => navigateToPolicy(policy)}
                 className="w-full p-4 flex items-center justify-between hover:bg-[var(--color-surface-secondary)] transition-colors text-left"
               >
@@ -142,16 +144,21 @@ export function Dashboard() {
                     {policy.description}
                   </p>
                 </div>
-                <span
-                  className={cn(
-                    'ml-4 px-2.5 py-1 rounded-full text-xs font-medium capitalize',
-                    policy.status === 'active' && 'bg-[var(--color-success-bg)] text-[var(--color-success)]',
-                    policy.status === 'review' && 'bg-[var(--color-warning-bg)] text-[var(--color-warning)]',
-                    policy.status === 'draft' && 'bg-[var(--color-surface-secondary)] text-[var(--color-text-tertiary)]'
-                  )}
-                >
-                  {policy.status}
-                </span>
+                <div className="ml-4 flex items-center gap-2 shrink-0">
+                  <span className="px-2 py-0.5 rounded-full text-xs font-mono bg-[var(--color-surface-secondary)] text-[var(--color-text-secondary)]">
+                    v{policy.currentVersion}
+                  </span>
+                  <span
+                    className={cn(
+                      'px-2.5 py-1 rounded-full text-xs font-medium capitalize',
+                      policy.status === 'active' && 'bg-[var(--color-success-bg)] text-[var(--color-success)]',
+                      policy.status === 'review' && 'bg-[var(--color-warning-bg)] text-[var(--color-warning)]',
+                      policy.status === 'draft' && 'bg-[var(--color-surface-secondary)] text-[var(--color-text-tertiary)]'
+                    )}
+                  >
+                    {policy.status}
+                  </span>
+                </div>
               </button>
             ))}
           </div>
