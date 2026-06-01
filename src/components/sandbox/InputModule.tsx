@@ -287,7 +287,7 @@ export function InputModule({ guardrailInfo, onExpandInput, onExpandConfig }: In
         <CollapsibleSection
           icon={<FileText className="w-4 h-4" />}
           title="Document"
-          badge="input.*"
+          badge="input.document.*"
           invalid={!isValidJson(inputJson)}
           open={open.document}
           onToggle={() => toggle('document')}

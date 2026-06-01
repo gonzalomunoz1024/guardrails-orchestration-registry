@@ -110,17 +110,19 @@ const defaultRegoCode = `package policy
 
 default allow := false
 
-# Example: Check input data directly
+# Example: Check a field on the inbound document. The orchestrator nests the
+# inbound document under input.document — apiVersion / kind / metadata / spec
+# all live there, not at input.* directly.
 allow if {
-    input.user.role == "admin"
+    input.document.metadata.appId == "app-123"
 }
 
-# Example: Use configuration data
+# Example: Use configuration data merged in at input.configuration
 allow if {
     input.configuration.allowAll == true
 }
 
-# Example: Deny with message based on guardrail
+# Example: Deny with message based on guardrail metadata
 deny[msg] if {
     input.guardrail.enforcementType == "MANDATORY"
     not allow

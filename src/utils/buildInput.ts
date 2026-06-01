@@ -23,8 +23,12 @@ export interface AssembleInputArgs {
  * metadata. This is the single source of truth for the input shape, shared by
  * evaluation, the combined-input preview, and the Rego autocomplete.
  *
+ * The orchestrator nests the inbound document under `input.document` (it does
+ * NOT spread it at root). We mirror that so policies authored in the Studio
+ * resolve the same paths in production.
+ *
  * Shape:
- *   { ...resource, guardrail, configuration, external: { <name>: <data> } }
+ *   { document: <resource>, guardrail, configuration?, external?: { <name>: <data> } }
  */
 export function assembleInput({
   resource,
@@ -38,7 +42,7 @@ export function assembleInput({
   }
 
   const bundle: Record<string, unknown> = {
-    ...resource,
+    document: resource,
     guardrail: {
       id: guardrail.id || 'test-policy',
       name: guardrail.name || 'Test Policy',

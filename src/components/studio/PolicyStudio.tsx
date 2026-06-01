@@ -411,7 +411,7 @@ export function PolicyStudio() {
         isOpen={expandedEditor === 'input'}
         onClose={() => setExpandedEditor(null)}
         title="Document"
-        subtitle="The resource being evaluated (input.*)"
+        subtitle="The resource being evaluated (input.document.*)"
         language="json"
         value={inputJson}
         onChange={setInputJson}
