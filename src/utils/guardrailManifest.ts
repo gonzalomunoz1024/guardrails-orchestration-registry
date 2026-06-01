@@ -9,6 +9,7 @@ import type {
   PolicyMetadata,
 } from '@/types';
 import type { EnforcementType, Stage, ResourceKind } from '@/types/guardrail.types';
+import { versionSuffix } from './regoPackage';
 
 export interface ManifestInputSchema {
   file: string;
@@ -159,7 +160,11 @@ export function buildGuardrailManifest(args: GuardrailManifestArgs): Record<stri
     },
     policy: {
       file: args.policyFile ?? 'policy.rego',
-      package: `data.${name.replace(/-/g, '_')}`,
+      // Per-version namespace so OPA's bundle compiler can hold multiple
+      // versions of the same guardrail at once. Without the version suffix
+      // two versions both publish `data.<slug>.allow` and the bundle fails
+      // to compile (multiple default rules in the same namespace).
+      package: `data.${name.replace(/-/g, '_')}.${versionSuffix(meta.version as string)}`,
     },
     document: {
       source: 'request',

@@ -27,7 +27,12 @@ import JSZip from 'jszip';
 import { saveAs } from 'file-saver';
 import { Octokit } from 'octokit';
 import Editor from '@monaco-editor/react';
-import { cn, toGuardrailYaml, toGuardrailConfigurationYaml } from '@/utils';
+import {
+  cn,
+  toGuardrailYaml,
+  toGuardrailConfigurationYaml,
+  appendVersionToRegoPackage,
+} from '@/utils';
 import { useAuthStore } from '@/store/authStore';
 import { usePolicyStore, useUIStore, useDraftStore } from '@/store';
 import { snapshotCurrentDraft } from '@/store/draftActions';
@@ -294,8 +299,14 @@ export function SubmitPolicyModal({
       }
       return files;
     }
+    // Rewrite the first `package` directive in the rego so this version
+    // lives at `data.<slug>.v<major>_<minor>`. Without this, every version
+    // publishes the same package and OPA's bundle compiler refuses to
+    // merge them (multiple default rules in the same namespace). The
+    // studio's in-editor rego is untouched — only the published artifact.
+    const versionedRego = appendVersionToRegoPackage(regoCode, metadata.version);
     const files: { path: string; content: string }[] = [
-      { path: `${versionDir}/policy.rego`, content: regoCode },
+      { path: `${versionDir}/policy.rego`, content: versionedRego },
       { path: `${versionDir}/guardrail.yaml`, content: generateManifestYaml() },
       { path: `${versionDir}/input-schema.json`, content: inputSchemaJson || '{}' },
     ];
