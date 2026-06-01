@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   Filter,
   Grid,
@@ -362,6 +362,16 @@ export function PolicyCatalog() {
 
   // Fetch policies from backend with fallback to mock data
   const { data: backendPolicies, isLoading, error, refetch } = usePolicies();
+
+  // One-shot log so the "Using cached data" fallback is always paired with
+  // a concrete reason in the console — otherwise the user sees the banner
+  // with no breadcrumb to chase. The interceptor logs the HTTP failure
+  // itself; this captures whatever React Query held onto.
+  useEffect(() => {
+    if (error) {
+      console.error('[PolicyCatalog] backend fetch failed:', error);
+    }
+  }, [error]);
 
   // Use backend data if available, otherwise fall back to mock data
   const policies = backendPolicies ?? [];

@@ -427,10 +427,24 @@ export const guardrailsApi = {
    * a policy is; configuration is a side table keyed by {name, version}.
    */
   listPolicies: async (): Promise<RegistryPolicy[]> => {
-    const [manifests, configurations] = await Promise.all([
-      guardrailsApi.listManifests(),
-      guardrailsApi.listConfigurations(),
-    ]);
+    // Configurations are auxiliary — losing them shouldn't fail the catalog.
+    // Fall back to an empty list and log so we can triage from the console.
+    let manifests: GuardrailManifestDocument[];
+    let configurations: GuardrailConfigurationDocument[] = [];
+    try {
+      [manifests, configurations] = await Promise.all([
+        guardrailsApi.listManifests(),
+        guardrailsApi
+          .listConfigurations()
+          .catch((err): GuardrailConfigurationDocument[] => {
+            console.warn('[guardrailsApi] listConfigurations failed; serving catalog without config bodies:', err);
+            return [];
+          }),
+      ]);
+    } catch (err) {
+      console.error('[guardrailsApi] listManifests failed; cannot build catalog:', err);
+      throw err;
+    }
 
     const configByKey = new Map<string, GuardrailConfigurationDocument>();
     for (const c of configurations) configByKey.set(`${c.name}@${c.version}`, c);
@@ -438,10 +452,16 @@ export const guardrailsApi = {
     // /registry/manifests returns *every* persisted version. The catalog is
     // meant to show one row per guardrail (the latest); older versions live
     // behind the detail view's Versions tab. Group by metadata.name, keep
-    // the highest MAJOR.MINOR per group, and map only those.
+    // the highest MAJOR.MINOR per group, and map only those. Defensive on
+    // every read — a single broken record (e.g. malformed YAML on disk)
+    // should be skipped with a log, not kill the entire catalog.
     const latestByName = new Map<string, GuardrailManifestDocument>();
     for (const m of manifests) {
-      const name = m.metadata.name;
+      const name = m?.metadata?.name;
+      if (!name) {
+        console.warn('[guardrailsApi] Skipping manifest with no metadata.name:', m);
+        continue;
+      }
       const incumbent = latestByName.get(name);
       if (!incumbent) {
         latestByName.set(name, m);
@@ -454,10 +474,20 @@ export const guardrailsApi = {
       if (newer) latestByName.set(name, m);
     }
 
-    return Array.from(latestByName.values()).map((m) => {
-      const key = `${m.metadata.name}@${m.metadata.version}`;
-      return mapManifestToPolicy(m, { config: configByKey.get(key) ?? null });
-    });
+    const policies: RegistryPolicy[] = [];
+    for (const m of latestByName.values()) {
+      try {
+        const key = `${m.metadata.name}@${m.metadata.version}`;
+        policies.push(mapManifestToPolicy(m, { config: configByKey.get(key) ?? null }));
+      } catch (err) {
+        console.error(
+          `[guardrailsApi] Failed to map manifest ${m?.metadata?.name}@${m?.metadata?.version} — skipping. Raw manifest:`,
+          m,
+          err
+        );
+      }
+    }
+    return policies;
   },
 
   /**

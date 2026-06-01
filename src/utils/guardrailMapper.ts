@@ -53,37 +53,44 @@ export interface MapManifestExtras {
  * manifest's metadata.name (which is the slug used as the registry primary
  * key). The Versions tab pulls from `siblings`; the Rego tab pulls from
  * `regoCode`. Both default to empty when the caller doesn't supply them.
+ *
+ * Every field is read defensively: a broken manifest (one shipped through the
+ * registry with a missing `spec.target` block, an unexpected enum, etc.)
+ * shouldn't crash the catalog mapping for the *other* manifests. Anything
+ * missing falls back to the matching defaults the studio already accepts.
  */
 export function mapManifestToPolicy(
   manifest: GuardrailManifestDocument,
   extras: MapManifestExtras = {}
 ): RegistryPolicy {
-  const { metadata, spec } = manifest;
+  const metadata = manifest?.metadata ?? ({} as GuardrailManifestDocument['metadata']);
+  const spec = manifest?.spec ?? ({} as GuardrailManifestDocument['spec']);
   const { config, regoCode = '', siblings = [] } = extras;
   const content = config?.content ?? spec.configuration?.content ?? {};
+  const target = spec.target ?? ({} as { resourceKind: unknown });
 
   return {
-    id: metadata.name,
-    name: metadata.displayName || metadata.name,
+    id: metadata.name ?? '',
+    name: metadata.displayName || metadata.name || '(unnamed)',
     description: metadata.description ?? '',
-    resourceKind: normalizeResourceKind(spec.target.resourceKind),
+    resourceKind: normalizeResourceKind(target.resourceKind),
     stage: spec.stage,
     enforcementType: spec.enforcement,
     status: mapGuardrailStatusToPolicy(spec.status),
     tags: metadata.labels ?? [],
     author: metadata.owner ?? '',
-    createdAt: manifest.createdAt ?? '',
-    currentVersion: metadata.version,
+    createdAt: manifest?.createdAt ?? '',
+    currentVersion: metadata.version ?? '0.0',
     // The Versions tab is informational — listing every published version
     // with its owner/timestamp. The full rego per historical version is not
     // fetched eagerly; expanding a row could lazy-load it, but today the row
     // just renders what the manifest carries.
     versions: siblings.map((m) => ({
-      version: m.metadata.version,
-      createdAt: m.createdAt ?? '',
-      createdBy: m.metadata.owner ?? '',
-      changelog: m.metadata.description ?? '',
-      regoCode: m.metadata.version === metadata.version ? regoCode : '',
+      version: m?.metadata?.version ?? '0.0',
+      createdAt: m?.createdAt ?? '',
+      createdBy: m?.metadata?.owner ?? '',
+      changelog: m?.metadata?.description ?? '',
+      regoCode: m?.metadata?.version === metadata.version ? regoCode : '',
     })),
     regoCode,
     configJson: JSON.stringify(content, null, 2),
