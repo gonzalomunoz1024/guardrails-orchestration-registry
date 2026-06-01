@@ -34,6 +34,8 @@ import type {
   SwaggerOperation,
 } from '@/types';
 import { SwaggerFieldList } from './SwaggerFieldList';
+import { InputStructurePreview } from './InputStructurePreview';
+import { useInputShape } from '@/hooks';
 
 interface ExternalDependencyModalProps {
   dep: ExternalDependency;
@@ -86,6 +88,12 @@ interface BindingRowProps {
   /** Preview string of the resolved value (for document/config sources). */
   resolvedPreview: string;
   idPrefix: string;
+  /**
+   * Notify the parent which document/configuration path the user is pointing
+   * at right now (or null when no path input has focus). The Input Structure
+   * panel uses this to highlight the matching key.
+   */
+  onPathFocus?: (info: { source: 'document' | 'configuration'; value: string } | null) => void;
 }
 
 /**
@@ -105,6 +113,7 @@ function BindingRow({
   configPaths,
   resolvedPreview,
   idPrefix,
+  onPathFocus,
 }: BindingRowProps) {
   const listId = `${idPrefix}-${name}`;
   const suggestions = cfg.source === 'document' ? docPaths : configPaths;
@@ -163,7 +172,20 @@ function BindingRow({
             <input
               list={listId}
               value={cfg.value}
-              onChange={(e) => onChange({ value: e.target.value })}
+              onChange={(e) => {
+                onChange({ value: e.target.value });
+                onPathFocus?.({
+                  source: cfg.source as 'document' | 'configuration',
+                  value: e.target.value,
+                });
+              }}
+              onFocus={() =>
+                onPathFocus?.({
+                  source: cfg.source as 'document' | 'configuration',
+                  value: cfg.value,
+                })
+              }
+              onBlur={() => onPathFocus?.(null)}
               placeholder={`path in ${cfg.source} (e.g. user.role)`}
               className={valueClass}
             />
@@ -200,6 +222,7 @@ interface ExtraQueryParamsSectionProps {
   docPaths: string[];
   configPaths: string[];
   idPrefix: string;
+  onPathFocus?: (info: { source: 'document' | 'configuration'; value: string } | null) => void;
 }
 
 /**
@@ -219,6 +242,7 @@ function ExtraQueryParamsSection({
   docPaths,
   configPaths,
   idPrefix,
+  onPathFocus,
 }: ExtraQueryParamsSectionProps) {
   return (
     <div className="space-y-2.5">
@@ -255,6 +279,7 @@ function ExtraQueryParamsSection({
             docPaths={docPaths}
             configPaths={configPaths}
             idPrefix={`${idPrefix}-${idx}`}
+            onPathFocus={onPathFocus}
           />
         ))
       )}
@@ -271,6 +296,7 @@ interface ExtraQueryParamRowProps {
   docPaths: string[];
   configPaths: string[];
   idPrefix: string;
+  onPathFocus?: (info: { source: 'document' | 'configuration'; value: string } | null) => void;
 }
 
 function ExtraQueryParamRow({
@@ -282,6 +308,7 @@ function ExtraQueryParamRow({
   docPaths,
   configPaths,
   idPrefix,
+  onPathFocus,
 }: ExtraQueryParamRowProps) {
   const listId = `${idPrefix}-list`;
   const suggestions = entry.param.source === 'document' ? docPaths : configPaths;
@@ -319,7 +346,20 @@ function ExtraQueryParamRow({
             <input
               list={listId}
               value={entry.param.value}
-              onChange={(e) => onChangeParam({ value: e.target.value })}
+              onChange={(e) => {
+                onChangeParam({ value: e.target.value });
+                onPathFocus?.({
+                  source: entry.param.source as 'document' | 'configuration',
+                  value: e.target.value,
+                });
+              }}
+              onFocus={() =>
+                onPathFocus?.({
+                  source: entry.param.source as 'document' | 'configuration',
+                  value: entry.param.value,
+                })
+              }
+              onBlur={() => onPathFocus?.(null)}
               placeholder={`path in ${entry.param.source} (e.g. metadata.appId)`}
               className={valueClass}
             />
@@ -367,6 +407,30 @@ export function ExternalDependencyModal({ dep, isOpen, onClose }: ExternalDepend
   // `attributes.app_id=CLAUT`). Stored as an array so duplicate keys and
   // insertion order are preservable.
   const [extrasByOp, setExtrasByOp] = useState<Record<string, ExternalExtraQueryParam[]>>({});
+  // Which document/configuration path the user is currently pointing at, so
+  // the Input Structure panel on the left can highlight it. Cleared on blur.
+  const [activePathInfo, setActivePathInfo] = useState<
+    { source: 'document' | 'configuration'; value: string } | null
+  >(null);
+
+  // The full assembled input shape — same one the rest of the studio shows
+  // when "Combined input" is toggled. Lets the author see exactly where each
+  // path picker is pointing without leaving the dependency modal.
+  const combinedInput = useInputShape({
+    id: dep.id,
+    name: dep.name,
+    version: '1.0',
+    enforcementType: 'MANDATORY',
+  });
+
+  // Translate the current focus into an absolute path inside the combined
+  // input ("document.metadata.appId", "configuration.foo"). Only an exact
+  // match highlights — partial paths render no highlight, which keeps the UI
+  // calm while authors type.
+  const activePath =
+    activePathInfo && activePathInfo.value.trim()
+      ? `${activePathInfo.source}.${activePathInfo.value.trim()}`
+      : null;
   const [responses, setResponses] = useState<Record<string, ExecResult>>({});
   const [executing, setExecuting] = useState<string | null>(null);
   const [copiedUrl, setCopiedUrl] = useState<string | null>(null);
@@ -717,7 +781,7 @@ export function ExternalDependencyModal({ dep, isOpen, onClose }: ExternalDepend
 
       <div
         className={cn(
-          'relative w-full max-w-3xl max-h-[88vh] flex flex-col',
+          'relative w-full max-w-6xl max-h-[88vh] flex flex-col',
           'rounded-[var(--radius-xl)] overflow-hidden bg-[var(--color-surface)] shadow-2xl',
           'animate-fade-in'
         )}
@@ -899,8 +963,16 @@ export function ExternalDependencyModal({ dep, isOpen, onClose }: ExternalDepend
           )}
         </div>
 
-        {/* Body */}
-        <div className="flex-1 min-h-0 overflow-y-auto px-6 py-4 space-y-2">
+        {/* Body — two-column. Left: live Input Structure reference, so the
+            author can see exactly what `document.*` and `configuration.*`
+            keys exist while building parameters. Right: the existing config
+            flow. Focusing a path-source input highlights the matching key
+            on the left and scrolls it into view. */}
+        <div className="flex-1 min-h-0 flex">
+          <aside className="shrink-0 w-[38%] min-w-[280px] max-w-[480px] border-r border-[var(--color-border-light)] bg-[var(--color-surface-secondary)]/40 p-4 flex flex-col min-h-0">
+            <InputStructurePreview input={combinedInput} activePath={activePath} />
+          </aside>
+          <div className="flex-1 min-w-0 min-h-0 overflow-y-auto px-6 py-4 space-y-2">
           {!dep.serviceId && (
             <div className="flex flex-col items-center justify-center gap-2 py-16 text-center">
               <ExternalLink className="w-7 h-7 text-[var(--color-text-tertiary)]" />
@@ -1000,6 +1072,7 @@ export function ExternalDependencyModal({ dep, isOpen, onClose }: ExternalDepend
                             configPaths={configPaths}
                             resolvedPreview={resolved[p.name]}
                             idPrefix={`p-${op.id}`}
+                            onPathFocus={setActivePathInfo}
                           />
                         ))}
                       </div>
@@ -1017,6 +1090,7 @@ export function ExternalDependencyModal({ dep, isOpen, onClose }: ExternalDepend
                       docPaths={docPaths}
                       configPaths={configPaths}
                       idPrefix={`x-${op.id}`}
+                      onPathFocus={setActivePathInfo}
                     />
 
                     {/* Request body */}
@@ -1055,6 +1129,7 @@ export function ExternalDependencyModal({ dep, isOpen, onClose }: ExternalDepend
                               configPaths={configPaths}
                               resolvedPreview={preview}
                               idPrefix={`b-${op.id}`}
+                              onPathFocus={setActivePathInfo}
                             />
                           );
                         })}
@@ -1159,6 +1234,7 @@ export function ExternalDependencyModal({ dep, isOpen, onClose }: ExternalDepend
               </div>
             );
           })}
+          </div>
         </div>
 
         {/* Footer */}
