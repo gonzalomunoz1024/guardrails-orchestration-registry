@@ -781,7 +781,7 @@ export function ExternalDependencyModal({ dep, isOpen, onClose }: ExternalDepend
 
       <div
         className={cn(
-          'relative w-full max-w-6xl max-h-[88vh] flex flex-col',
+          'relative w-full max-w-[1500px] max-h-[92vh] flex flex-col',
           'rounded-[var(--radius-xl)] overflow-hidden bg-[var(--color-surface)] shadow-2xl',
           'animate-fade-in'
         )}
@@ -969,7 +969,7 @@ export function ExternalDependencyModal({ dep, isOpen, onClose }: ExternalDepend
             flow. Focusing a path-source input highlights the matching key
             on the left and scrolls it into view. */}
         <div className="flex-1 min-h-0 flex">
-          <aside className="shrink-0 w-[38%] min-w-[280px] max-w-[480px] border-r border-[var(--color-border-light)] bg-[var(--color-surface-secondary)]/40 p-4 flex flex-col min-h-0">
+          <aside className="shrink-0 w-[46%] min-w-[360px] max-w-[680px] border-r border-[var(--color-border-light)] bg-[var(--color-surface-secondary)]/40 p-4 flex flex-col min-h-0">
             <InputStructurePreview input={combinedInput} activePath={activePath} />
           </aside>
           <div className="flex-1 min-w-0 min-h-0 overflow-y-auto px-6 py-4 space-y-2">
