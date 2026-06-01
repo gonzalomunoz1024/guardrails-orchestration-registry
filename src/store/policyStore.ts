@@ -129,22 +129,20 @@ deny[msg] if {
 `;
 
 // Seeds the orchestrator-reserved envelope (apiVersion / kind / metadata /
-// spec) so authors immediately see the shape the platform expects. Customer-
-// specific fields live underneath spec — the comment block in the rego shows
-// how to read them.
+// spec) so authors immediately see the shape the platform expects. The four
+// reserved sub-keys (correlationId / name / appId / organization) all live at
+// the top-level metadata block; spec is fully customer-owned and forwarded
+// verbatim to OPA.
 const defaultInputJson = `{
   "apiVersion": "guardrails.dev/v1alpha1",
   "kind": "Resource",
   "metadata": {
     "correlationId": "00000000-0000-0000-0000-000000000000",
-    "name": "example-resource"
+    "name": "example-resource",
+    "appId": "app-123",
+    "organization": "platform"
   },
-  "spec": {
-    "metadata": {
-      "appId": "app-123",
-      "organization": "platform"
-    }
-  }
+  "spec": {}
 }`;
 
 const defaultConfigJson = '{}';

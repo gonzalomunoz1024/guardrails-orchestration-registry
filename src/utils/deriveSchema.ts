@@ -5,9 +5,9 @@
  * platform injects `guardrail` / `configuration` / `external` at runtime.
  *
  * The derived schema always carries the orchestrator-reserved envelope
- * (apiVersion / kind / metadata / spec.metadata) at the right types so it
- * never accidentally disallows what the platform always writes — even if
- * the customer omitted those keys from their sample document. See
+ * (apiVersion / kind / metadata / spec) at the right types so it never
+ * accidentally disallows what the platform always writes — even if the
+ * customer omitted those keys from their sample document. See
  * src/utils/reservedFields.ts.
  */
 

@@ -31,13 +31,16 @@ export interface ReservedField {
    * Whether the Studio should warn when this path is missing from a sample
    * document. The orchestrator itself doesn't require any reserved field, but
    * authors should know which envelope keys real inbound traffic will carry —
-   * a guardrail that doesn't account for `spec.metadata.appId` will silently
+   * a guardrail that doesn't account for `metadata.appId` will silently
    * misbehave in production. correlationId is the one exception: the server
    * mints a UUID when absent, so an author leaving it out of a sample is fine.
    */
   required: boolean;
 }
 
+// Per the orchestrator spec: all reserved keys live at the top level or under
+// `metadata`. `spec` is forwarded verbatim into input.document.spec but is
+// fully customer-owned — no reserved sub-keys.
 export const RESERVED_FIELDS: ReservedField[] = [
   {
     path: 'apiVersion',
@@ -54,7 +57,7 @@ export const RESERVED_FIELDS: ReservedField[] = [
   {
     path: 'metadata',
     type: 'object',
-    note: 'Customer-driven envelope; forwarded verbatim into input.document.metadata.',
+    note: 'Customer-driven envelope; forwarded verbatim into input.document.metadata. Carries the four reserved sub-keys below.',
     required: true,
   },
   {
@@ -70,27 +73,21 @@ export const RESERVED_FIELDS: ReservedField[] = [
     required: true,
   },
   {
-    path: 'spec',
-    type: 'object',
-    note: 'Customer-driven envelope; forwarded verbatim into input.document.spec.',
-    required: true,
-  },
-  {
-    path: 'spec.metadata',
-    type: 'object',
-    note: 'Customer metadata block under spec; carries appId / organization.',
-    required: true,
-  },
-  {
-    path: 'spec.metadata.appId',
+    path: 'metadata.appId',
     type: 'string',
-    note: "Drives applicability matching against each guardrail's applicability rules.",
+    note: "Drives applicability matching against each guardrail's applicability rules. When absent the applicability filter treats the request as having no appId.",
     required: true,
   },
   {
-    path: 'spec.metadata.organization',
+    path: 'metadata.organization',
     type: 'string',
     note: 'Used to derive the LOB on the evaluation record and downstream events.',
+    required: true,
+  },
+  {
+    path: 'spec',
+    type: 'object',
+    note: 'Fully customer-owned — no reserved sub-keys. Forwarded verbatim into input.document.spec for OPA.',
     required: true,
   },
 ];
@@ -183,7 +180,7 @@ function getValueAtPath(value: unknown, path: string): unknown {
 /**
  * Find which `required` reserved fields are missing from a parsed inbound
  * document. Returns the dot-paths in declaration order so the UI can list
- * the most-shallow issues first (apiVersion before spec.metadata.appId).
+ * the most-shallow issues first (apiVersion before metadata.appId).
  *
  * "Missing" means either:
  *   - the path doesn't exist, or

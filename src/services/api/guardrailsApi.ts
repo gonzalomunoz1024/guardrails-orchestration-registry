@@ -297,22 +297,26 @@ export const guardrailsApi = {
 
   /**
    * Normalize a raw OpenSearch hit into a TestInput. Handles both `source`
-   * and `_source` envelopes; pulls appId/organization/environment from
-   * spec.metadata first, falling back to top-level fields.
+   * and `_source` envelopes; pulls appId/organization/environment from the
+   * orchestrator-reserved top-level `metadata` block first, falling back to
+   * legacy `spec.metadata` (pre-spec-customer-owned data) and finally
+   * top-level fields for the oldest records.
    */
   _mapSourceToTestInput: (item: TestInputSource, index: number): TestInput => {
     const source = item.source || item._source;
 
+    const topMetadata = (source?.metadata as Record<string, unknown>) || {};
     const spec = (source?.spec as Record<string, unknown>) || {};
     const specMetadata = (spec.metadata as Record<string, unknown>) || {};
-    const topMetadata = (source?.metadata as Record<string, unknown>) || {};
 
     const appId =
+      (topMetadata.appId as string) ||
       (specMetadata.appId as string) ||
       (specMetadata.applicationId as string) ||
       (source?.appId as string) ||
       undefined;
     const org =
+      (topMetadata.organization as string) ||
       (specMetadata.organization as string) ||
       (source?.organization as string) ||
       undefined;
@@ -336,6 +340,7 @@ export const guardrailsApi = {
       `test-input-${index}`;
 
     const name =
+      (topMetadata.name as string) ||
       (specMetadata.name as string) ||
       (source?.name as string) ||
       (topMetadata.eventId as string) ||
