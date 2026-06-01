@@ -447,6 +447,13 @@ export function PolicyStudio() {
       <SubmitPolicyModal
         isOpen={submitOpen}
         onClose={() => setSubmitOpen(false)}
+        onDoneAfterPR={() => {
+          // The studio is now editing a version that's been superseded by
+          // the PR; bounce the user back to the catalog so the next click
+          // starts fresh instead of re-saving stale state.
+          setSubmitOpen(false);
+          setView('policies');
+        }}
         policyId={policyId}
         regoCode={regoCode}
         configJson={configJson}

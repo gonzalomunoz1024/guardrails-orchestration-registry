@@ -12,6 +12,7 @@ import {
   ChevronRight,
   FileJson,
   ExternalLink,
+  Filter,
 } from 'lucide-react';
 import { useRegistryStore } from '@/store/registryStore';
 import { useSuite, useResolvedMembers, useMemberContract, useDeleteSuite } from '@/hooks/useSuites';
@@ -77,11 +78,52 @@ function MemberRow({ member }: { member: SuiteMember }) {
               {ENFORCEMENT_LABELS[member.enforcement]}
             </span>
           )}
+          {member.exclusions && member.exclusions.length > 0 && (
+            <span
+              title={`${member.exclusions.length} exclusion${member.exclusions.length === 1 ? '' : 's'}`}
+              className="flex items-center gap-1 px-2 py-0.5 rounded-full text-xs bg-[var(--color-info-bg)] text-[var(--color-info)]"
+            >
+              <Filter className="w-3 h-3" />
+              {member.exclusions.length}
+            </span>
+          )}
         </div>
       </button>
 
       {expanded && (
         <div className="p-4 border-t border-[var(--color-border-light)] bg-[var(--color-surface-secondary)] space-y-3">
+          {member.exclusions && member.exclusions.length > 0 && (
+            <div>
+              <div className="flex items-center gap-2 text-xs font-medium text-[var(--color-text-secondary)] uppercase mb-2">
+                <Filter className="w-3.5 h-3.5" />
+                Exclusions ({member.exclusions.length})
+              </div>
+              <div className="space-y-1.5">
+                {member.exclusions.map((ex, i) => (
+                  <div
+                    key={i}
+                    className="flex flex-wrap items-center gap-2 rounded-[var(--radius-sm)] bg-[var(--color-surface)] border border-[var(--color-border-light)] px-3 py-2 text-xs"
+                  >
+                    {ex.appId && (
+                      <span className="font-mono">
+                        <span className="text-[var(--color-text-tertiary)]">appId=</span>
+                        <span className="text-[var(--color-text-primary)]">{ex.appId}</span>
+                      </span>
+                    )}
+                    {ex.organization && (
+                      <span className="font-mono">
+                        <span className="text-[var(--color-text-tertiary)]">organization=</span>
+                        <span className="text-[var(--color-text-primary)]">{ex.organization}</span>
+                      </span>
+                    )}
+                    {ex.reason && (
+                      <span className="text-[var(--color-text-tertiary)] italic">— {ex.reason}</span>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
           <div className="flex items-center gap-2 text-xs font-medium text-[var(--color-text-secondary)] uppercase">
             <FileJson className="w-3.5 h-3.5" />
             Input contract
@@ -129,11 +171,10 @@ export function SuiteDetail() {
   const { data: suite, isLoading, error } = useSuite(selectedSuiteId);
   const deleteSuite = useDeleteSuite();
 
-  const refs = useMemo<GuardrailRef[]>(
-    () => (suite?.members ?? []).map((m) => ({ guardrailId: m.guardrailId, version: m.version })),
-    [suite]
-  );
-  const { data: resolvedMembers } = useResolvedMembers(refs);
+  // Pass full members through (not bare refs) so per-member fields the
+  // metadata projection doesn't carry — `exclusions` — survive the resolve.
+  const memberInputs = useMemo<SuiteMember[]>(() => suite?.members ?? [], [suite]);
+  const { data: resolvedMembers } = useResolvedMembers(memberInputs);
 
   // Prefer the freshly-resolved facets; fall back to whatever the suite carried.
   const members: SuiteMember[] = resolvedMembers ?? suite?.members ?? [];

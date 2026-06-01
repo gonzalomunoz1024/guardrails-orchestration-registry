@@ -84,26 +84,34 @@ export const suitesApi = {
 
   /**
    * Resolve a set of pinned members to display facets via the metadata
-   * projection endpoint. Missing versions are returned with just the ref so
-   * the UI can surface a dangling pin rather than failing the whole resolve.
+   * projection endpoint. Per-member fields the registry persists but the
+   * projection doesn't carry (e.g. `exclusions`) are passed through from the
+   * input so they survive the round-trip. Missing versions are returned with
+   * just the ref + passthrough so the UI can surface a dangling pin rather
+   * than failing the whole resolve.
    */
-  resolveSuiteMembers: async (refs: GuardrailRef[]): Promise<SuiteMember[]> => {
+  resolveSuiteMembers: async (members: SuiteMember[]): Promise<SuiteMember[]> => {
     return Promise.all(
-      refs.map(async (ref): Promise<SuiteMember> => {
+      members.map(async (input): Promise<SuiteMember> => {
         try {
-          const m = await guardrailsApi.getMetadata(ref.guardrailId, ref.version);
+          const m = await guardrailsApi.getMetadata(input.guardrailId, input.version);
           return {
-            guardrailId: ref.guardrailId,
-            version: ref.version,
+            guardrailId: input.guardrailId,
+            version: input.version,
             displayName: m.displayName ?? m.name,
             description: m.description,
             stage: m.stage,
             enforcement: m.enforcement,
             resourceKind: m.resourceKind,
             status: m.status,
+            exclusions: input.exclusions,
           };
         } catch {
-          return { guardrailId: ref.guardrailId, version: ref.version };
+          return {
+            guardrailId: input.guardrailId,
+            version: input.version,
+            exclusions: input.exclusions,
+          };
         }
       })
     );

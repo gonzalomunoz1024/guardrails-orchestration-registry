@@ -188,25 +188,30 @@ export function PolicyDetail() {
     );
   }
 
-  // Pre-load the input contract (schema + examples) for the version being
-  // edited so the studio has a real baseline. Best-effort — falls back to an
-  // empty schema if the backend doesn't have one published yet.
+  // Re-fetch the input contract AND the rego source for the version being
+  // edited so the studio's baseline is authoritative, even if the cached
+  // policy got loaded before those pieces were wired in. Best-effort: empty
+  // schema / empty rego if the backend doesn't have one published yet.
   const handleEdit = async () => {
     if (!policy) return;
     setIsLoadingEdit(true);
-    let inputSchemaJson = '{}';
-    let inputExamples: { name: string; payload: string }[] = [];
-    try {
-      const contract = await guardrailsApi.getInputSchema(policy.id, policy.currentVersion);
-      if (contract.schema) inputSchemaJson = JSON.stringify(contract.schema, null, 2);
-      inputExamples = contract.examples ?? [];
-    } catch {
-      // Fall through with defaults.
-    }
+    const [contract, regoSource] = await Promise.all([
+      guardrailsApi
+        .getInputSchema(policy.id, policy.currentVersion)
+        .catch(() => ({ schema: null as Record<string, unknown> | null, examples: [] as { name: string; payload: string }[] })),
+      guardrailsApi
+        .getRegoSource(policy.id, policy.currentVersion)
+        .catch(() => ''),
+    ]);
+    const inputSchemaJson = contract.schema ? JSON.stringify(contract.schema, null, 2) : '{}';
+    const inputExamples = contract.examples ?? [];
     const configJson = policy.configJson || '{}';
     const configEnabled = configJson.trim() !== '' && configJson.trim() !== '{}';
+    // Prefer the freshly-fetched rego; fall back to whatever the policy
+    // already carried (which our getPolicy mapper also populates).
+    const regoCode = regoSource || policy.regoCode || '';
     loadForEdit({
-      regoCode: policy.regoCode,
+      regoCode,
       configJson,
       configEnabled,
       inputSchemaJson,

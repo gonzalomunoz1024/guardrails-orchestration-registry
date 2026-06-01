@@ -10,6 +10,7 @@ import {
   FileJson,
   CheckCircle2,
   AlertCircle,
+  Filter,
 } from 'lucide-react';
 import { useRegistryStore } from '@/store/registryStore';
 import { useAuthStore } from '@/store/authStore';
@@ -24,8 +25,8 @@ import {
 import { cn } from '@/utils';
 import { slugifyName } from '@/utils/slugify';
 import { RESOURCE_KIND_LABELS, STAGE_LABELS } from '@/types';
-import type { SuiteStatus } from '@/types/suite.types';
-import type { GuardrailRef } from '@/types/guardrail.types';
+import type { SuiteStatus, SuiteMemberPin, MemberExclusion } from '@/types/suite.types';
+import { MemberExclusionsModal } from '@/components/modals';
 
 interface DraftMember {
   guardrailId: string;
@@ -33,6 +34,7 @@ interface DraftMember {
   version: string; // pinned version
   resourceKind?: keyof typeof RESOURCE_KIND_LABELS;
   stage?: keyof typeof STAGE_LABELS;
+  exclusions: MemberExclusion[];
 }
 
 const statuses: SuiteStatus[] = ['DRAFT', 'ACTIVE', 'INACTIVE'];
@@ -42,13 +44,15 @@ function MemberPin({
   member,
   onPin,
   onRemove,
+  onEditExclusions,
 }: {
   member: DraftMember;
   onPin: (version: string) => void;
   onRemove: () => void;
+  onEditExclusions: () => void;
 }) {
   const { data: versions, isLoading } = useGuardrailVersions(member.guardrailId);
-  const ref: GuardrailRef = { guardrailId: member.guardrailId, version: member.version };
+  const ref = { guardrailId: member.guardrailId, version: member.version };
   const { data: contract } = useMemberContract(ref);
 
   // Fall back to the currently-pinned version if the versions endpoint is empty.
@@ -80,6 +84,23 @@ function MemberPin({
               ))}
             </select>
           </label>
+          <button
+            onClick={onEditExclusions}
+            title={
+              member.exclusions.length === 0
+                ? 'Add exclusions to skip this check for specific app IDs / organizations'
+                : `${member.exclusions.length} exclusion${member.exclusions.length === 1 ? '' : 's'} configured`
+            }
+            className={cn(
+              'flex items-center gap-1 px-2 py-1 rounded-[var(--radius-sm)] text-xs font-medium transition-colors',
+              member.exclusions.length > 0
+                ? 'bg-[var(--color-info-bg)] text-[var(--color-info)] hover:opacity-90'
+                : 'text-[var(--color-text-tertiary)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-surface-secondary)]'
+            )}
+          >
+            <Filter className="w-3.5 h-3.5" />
+            {member.exclusions.length > 0 ? `${member.exclusions.length} excluded` : 'Exclusions'}
+          </button>
           <button
             onClick={onRemove}
             title="Remove from suite"
@@ -124,6 +145,8 @@ export function SuiteBuilder() {
   const [members, setMembers] = useState<DraftMember[]>([]);
   const [search, setSearch] = useState('');
   const [hydrated, setHydrated] = useState(false);
+  // Member whose exclusions modal is open, keyed by guardrailId. null = closed.
+  const [exclusionsForId, setExclusionsForId] = useState<string | null>(null);
 
   // Prefill from an existing suite when editing.
   useEffect(() => {
@@ -138,6 +161,7 @@ export function SuiteBuilder() {
           version: m.version,
           resourceKind: m.resourceKind,
           stage: m.stage,
+          exclusions: m.exclusions ?? [],
         }))
       );
       setHydrated(true);
@@ -158,7 +182,7 @@ export function SuiteBuilder() {
   const addMember = (guardrailId: string, displayName: string, version: string, rk?: DraftMember['resourceKind'], st?: DraftMember['stage']) => {
     setMembers((prev) => [
       ...prev,
-      { guardrailId, displayName, version, resourceKind: rk, stage: st },
+      { guardrailId, displayName, version, resourceKind: rk, stage: st, exclusions: [] },
     ]);
   };
 
@@ -170,22 +194,33 @@ export function SuiteBuilder() {
     setMembers((prev) => prev.filter((m) => m.guardrailId !== guardrailId));
   };
 
+  const setExclusions = (guardrailId: string, exclusions: MemberExclusion[]) => {
+    setMembers((prev) => prev.map((m) => (m.guardrailId === guardrailId ? { ...m, exclusions } : m)));
+    setExclusionsForId(null);
+  };
+
   const canSave = name.trim().length > 0 && members.length > 0;
   const isSaving = createSuite.isPending || updateSuite.isPending;
   const saveError = createSuite.error || updateSuite.error;
 
   const handleSave = () => {
-    const refs: GuardrailRef[] = members.map((m) => ({ guardrailId: m.guardrailId, version: m.version }));
+    // Pins carry exclusions only when set — keeps the wire payload tight for
+    // members that don't scope themselves.
+    const pins: SuiteMemberPin[] = members.map((m) => ({
+      guardrailId: m.guardrailId,
+      version: m.version,
+      ...(m.exclusions.length > 0 ? { exclusions: m.exclusions } : {}),
+    }));
     if (isEditing && selectedSuiteId) {
       updateSuite.mutate(
-        { suiteId: selectedSuiteId, request: { displayName: name, description, status, members: refs } },
+        { suiteId: selectedSuiteId, request: { displayName: name, description, status, members: pins } },
         { onSuccess: (suite) => navigateToSuite(suite) }
       );
     } else {
       // POST upserts on suiteId; derive a stable slug from the display name.
       const suiteId = slugifyName(name).replace(/_/g, '-');
       createSuite.mutate(
-        { suiteId, displayName: name, description, owner, status, members: refs },
+        { suiteId, displayName: name, description, owner, status, members: pins },
         { onSuccess: (suite) => navigateToSuite(suite) }
       );
     }
@@ -339,6 +374,7 @@ export function SuiteBuilder() {
                   member={m}
                   onPin={(v) => pinVersion(m.guardrailId, v)}
                   onRemove={() => removeMember(m.guardrailId)}
+                  onEditExclusions={() => setExclusionsForId(m.guardrailId)}
                 />
               ))}
             </div>
@@ -348,6 +384,22 @@ export function SuiteBuilder() {
           </p>
         </div>
       </div>
+
+      {(() => {
+        const editing = exclusionsForId
+          ? members.find((m) => m.guardrailId === exclusionsForId)
+          : null;
+        if (!editing) return null;
+        return (
+          <MemberExclusionsModal
+            isOpen
+            memberDisplayName={editing.displayName}
+            exclusions={editing.exclusions}
+            onSave={(next) => setExclusions(editing.guardrailId, next)}
+            onCancel={() => setExclusionsForId(null)}
+          />
+        );
+      })()}
     </div>
   );
 }

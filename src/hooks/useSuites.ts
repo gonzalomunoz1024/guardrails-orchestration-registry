@@ -8,7 +8,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { suitesApi } from '@/services/api/suitesApi';
 import { guardrailsApi } from '@/services/api/guardrailsApi';
-import type { CreateSuiteRequest, UpdateSuiteRequest } from '@/types/suite.types';
+import type { CreateSuiteRequest, UpdateSuiteRequest, SuiteMember } from '@/types/suite.types';
 import type { GuardrailRef } from '@/types/guardrail.types';
 
 export const suiteKeys = {
@@ -16,7 +16,7 @@ export const suiteKeys = {
   lists: () => [...suiteKeys.all, 'list'] as const,
   details: () => [...suiteKeys.all, 'detail'] as const,
   detail: (id: string) => [...suiteKeys.details(), id] as const,
-  members: (refs: GuardrailRef[]) => [...suiteKeys.all, 'members', refs] as const,
+  members: (members: SuiteMember[]) => [...suiteKeys.all, 'members', members] as const,
   contract: (ref: GuardrailRef) => [...suiteKeys.all, 'contract', ref] as const,
   versions: (guardrailId: string) => ['guardrail-versions', guardrailId] as const,
 };
@@ -40,12 +40,16 @@ export function useSuite(id: string | null) {
   });
 }
 
-/** Resolve a set of pinned refs to full member facets for display. */
-export function useResolvedMembers(refs: GuardrailRef[]) {
+/**
+ * Resolve a set of pinned members to full display facets. Pass the original
+ * `SuiteMember[]` (not bare refs) so per-member fields the projection
+ * endpoint doesn't carry — like `exclusions` — survive the round-trip.
+ */
+export function useResolvedMembers(members: SuiteMember[]) {
   return useQuery({
-    queryKey: suiteKeys.members(refs),
-    queryFn: () => suitesApi.resolveSuiteMembers(refs),
-    enabled: refs.length > 0,
+    queryKey: suiteKeys.members(members),
+    queryFn: () => suitesApi.resolveSuiteMembers(members),
+    enabled: members.length > 0,
     staleTime: 5 * 60 * 1000,
   });
 }

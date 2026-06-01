@@ -53,6 +53,13 @@ interface PolicyMetadata {
 interface SubmitPolicyModalProps {
   isOpen: boolean;
   onClose: () => void;
+  /**
+   * Called when the user clicks "Done" after a PR was created successfully.
+   * Parents should use this to navigate the user away from the studio (back
+   * to the guardrails catalog) so they don't land on a half-stale editor.
+   * Falls back to onClose when not provided.
+   */
+  onDoneAfterPR?: () => void;
   policyId: string;
   regoCode: string;
   configJson: string;
@@ -120,6 +127,7 @@ function languageForPath(path: string): string {
 export function SubmitPolicyModal({
   isOpen,
   onClose,
+  onDoneAfterPR,
   policyId,
   regoCode,
   configJson,
@@ -1044,14 +1052,24 @@ ${artifactFiles.map((f) => `- \`${f.path}\``).join('\n')}
               Press <kbd className="px-1.5 py-0.5 rounded bg-[var(--color-surface-secondary)] border border-[var(--color-border-light)] font-mono">Esc</kbd> to close
             </span>
             <button
-              onClick={onClose}
+              onClick={
+                // After a successful PR the studio state is stale (a new
+                // immutable version exists upstream); send the user back to
+                // the catalog so they can pick the next thing to work on
+                // instead of editing what they just published.
+                githubStatus === 'success'
+                  ? (onDoneAfterPR ?? onClose)
+                  : onClose
+              }
               className={cn(
                 'px-4 py-2 rounded-lg text-sm font-medium',
-                'text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]',
-                'hover:bg-[var(--color-surface-secondary)] transition-all'
+                githubStatus === 'success'
+                  ? 'bg-[var(--color-info)] text-white hover:opacity-90'
+                  : 'text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-surface-secondary)]',
+                'transition-all'
               )}
             >
-              Close
+              {githubStatus === 'success' ? 'Done' : 'Close'}
             </button>
           </div>
         </div>
