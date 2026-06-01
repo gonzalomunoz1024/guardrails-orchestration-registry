@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { Layers } from 'lucide-react';
+import { ChevronLeft, Layers } from 'lucide-react';
 import { cn } from '@/utils';
 
 interface InputStructurePreviewProps {
@@ -11,6 +11,12 @@ interface InputStructurePreviewProps {
    * smoothly highlights and auto-scrolls into view. Pass null to clear.
    */
   activePath: string | null;
+  /**
+   * Optional collapse handler. When provided, the header renders a left-
+   * chevron button that calls back so the parent can hide the preview.
+   * Omit for non-collapsible contexts.
+   */
+  onCollapse?: () => void;
 }
 
 /**
@@ -21,7 +27,11 @@ interface InputStructurePreviewProps {
  * blind. Apple-styled: generous gutter, no braces, soft accent on the active
  * row, smooth scroll-into-view.
  */
-export function InputStructurePreview({ input, activePath }: InputStructurePreviewProps) {
+export function InputStructurePreview({
+  input,
+  activePath,
+  onCollapse,
+}: InputStructurePreviewProps) {
   const containerRef = useRef<HTMLDivElement>(null);
 
   // Smoothly scroll the active line into view whenever the path changes.
@@ -48,6 +58,16 @@ export function InputStructurePreview({ input, activePath }: InputStructurePrevi
         <span className="ml-auto text-[10px] text-[var(--color-text-tertiary)]">
           read-only · for reference
         </span>
+        {onCollapse && (
+          <button
+            onClick={onCollapse}
+            title="Collapse"
+            aria-label="Collapse input structure"
+            className="ml-2 shrink-0 flex items-center justify-center p-1 rounded-md text-[var(--color-text-tertiary)] hover:text-[var(--color-text-secondary)] hover:bg-[var(--color-surface)] transition-colors"
+          >
+            <ChevronLeft className="w-3.5 h-3.5" />
+          </button>
+        )}
       </div>
       <div
         ref={containerRef}

@@ -6,6 +6,7 @@ import {
   ChevronRight,
   Copy,
   ExternalLink,
+  Layers,
   Loader2,
   Lock,
   Play,
@@ -412,6 +413,11 @@ export function ExternalDependencyModal({ dep, isOpen, onClose }: ExternalDepend
   const [activePathInfo, setActivePathInfo] = useState<
     { source: 'document' | 'configuration'; value: string } | null
   >(null);
+  // Collapse state for the left preview pane. Closed by default so the right
+  // pane gets full real estate the moment the modal opens; auto-opens the
+  // first time the author focuses a document/configuration path input so
+  // they don't have to hunt for the reference.
+  const [previewOpen, setPreviewOpen] = useState(false);
 
   // The full assembled input shape — same one the rest of the studio shows
   // when "Combined input" is toggled. Lets the author see exactly where each
@@ -431,6 +437,17 @@ export function ExternalDependencyModal({ dep, isOpen, onClose }: ExternalDepend
     activePathInfo && activePathInfo.value.trim()
       ? `${activePathInfo.source}.${activePathInfo.value.trim()}`
       : null;
+
+  // Wrapper for child onPathFocus calls: surfaces the active path AND opens
+  // the preview the first time the author needs it, so the highlight is
+  // never invisible behind a collapsed rail.
+  const handlePathFocus = useCallback(
+    (info: { source: 'document' | 'configuration'; value: string } | null) => {
+      setActivePathInfo(info);
+      if (info) setPreviewOpen(true);
+    },
+    []
+  );
   const [responses, setResponses] = useState<Record<string, ExecResult>>({});
   const [executing, setExecuting] = useState<string | null>(null);
   const [copiedUrl, setCopiedUrl] = useState<string | null>(null);
@@ -963,15 +980,36 @@ export function ExternalDependencyModal({ dep, isOpen, onClose }: ExternalDepend
           )}
         </div>
 
-        {/* Body — two-column. Left: live Input Structure reference, so the
-            author can see exactly what `document.*` and `configuration.*`
-            keys exist while building parameters. Right: the existing config
-            flow. Focusing a path-source input highlights the matching key
-            on the left and scrolls it into view. */}
+        {/* Body — two-column when the Input Structure pane is open, with a
+            slim collapsible rail otherwise so authors can claim the full
+            width for the config flow when they don't need the reference.
+            Focusing a path-source input auto-opens the pane so the
+            highlight is never invisible behind a collapsed rail. */}
         <div className="flex-1 min-h-0 flex">
-          <aside className="shrink-0 w-[46%] min-w-[360px] max-w-[680px] border-r border-[var(--color-border-light)] bg-[var(--color-surface-secondary)]/40 p-4 flex flex-col min-h-0">
-            <InputStructurePreview input={combinedInput} activePath={activePath} />
-          </aside>
+          {previewOpen ? (
+            <aside className="shrink-0 w-[46%] min-w-[360px] max-w-[680px] border-r border-[var(--color-border-light)] bg-[var(--color-surface-secondary)]/40 p-4 flex flex-col min-h-0">
+              <InputStructurePreview
+                input={combinedInput}
+                activePath={activePath}
+                onCollapse={() => setPreviewOpen(false)}
+              />
+            </aside>
+          ) : (
+            <button
+              onClick={() => setPreviewOpen(true)}
+              title="Show input structure"
+              aria-label="Show input structure"
+              className="shrink-0 w-10 border-r border-[var(--color-border-light)] bg-[var(--color-surface-secondary)]/40 flex flex-col items-center gap-3 pt-3 pb-3 text-[var(--color-text-tertiary)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-surface-secondary)]/70 transition-colors"
+            >
+              <Layers className="w-4 h-4" />
+              <span
+                className="text-[10px] font-semibold uppercase tracking-[0.18em]"
+                style={{ writingMode: 'vertical-rl', transform: 'rotate(180deg)' }}
+              >
+                Input structure
+              </span>
+            </button>
+          )}
           <div className="flex-1 min-w-0 min-h-0 overflow-y-auto px-6 py-4 space-y-2">
           {!dep.serviceId && (
             <div className="flex flex-col items-center justify-center gap-2 py-16 text-center">
@@ -1072,7 +1110,7 @@ export function ExternalDependencyModal({ dep, isOpen, onClose }: ExternalDepend
                             configPaths={configPaths}
                             resolvedPreview={resolved[p.name]}
                             idPrefix={`p-${op.id}`}
-                            onPathFocus={setActivePathInfo}
+                            onPathFocus={handlePathFocus}
                           />
                         ))}
                       </div>
@@ -1090,7 +1128,7 @@ export function ExternalDependencyModal({ dep, isOpen, onClose }: ExternalDepend
                       docPaths={docPaths}
                       configPaths={configPaths}
                       idPrefix={`x-${op.id}`}
-                      onPathFocus={setActivePathInfo}
+                      onPathFocus={handlePathFocus}
                     />
 
                     {/* Request body */}
@@ -1129,7 +1167,7 @@ export function ExternalDependencyModal({ dep, isOpen, onClose }: ExternalDepend
                               configPaths={configPaths}
                               resolvedPreview={preview}
                               idPrefix={`b-${op.id}`}
-                              onPathFocus={setActivePathInfo}
+                              onPathFocus={handlePathFocus}
                             />
                           );
                         })}
