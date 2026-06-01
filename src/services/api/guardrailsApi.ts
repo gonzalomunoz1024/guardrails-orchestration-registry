@@ -43,6 +43,22 @@ import type {
   TestInputSource,
 } from '@/types/registry.types';
 import { mapManifestToPolicy } from '@/utils/guardrailMapper';
+import { parseVersion } from '@/utils/version';
+
+/**
+ * Sort manifests newest-first by parsed MAJOR.MINOR. We can't trust the
+ * backend's order in transit — some endpoints sort by createdAt, others by
+ * string version (which ranks "1.10" before "1.2"). Frontend sort makes the
+ * catalog and detail views consistent regardless.
+ */
+function sortManifestsNewestFirst<T extends { metadata: { version: string } }>(manifests: T[]): T[] {
+  return [...manifests].sort((a, b) => {
+    const av = parseVersion(a.metadata.version);
+    const bv = parseVersion(b.metadata.version);
+    if (av.major !== bv.major) return bv.major - av.major;
+    return bv.minor - av.minor;
+  });
+}
 
 // Base paths — all endpoints live under /v1/utilities
 const MANIFESTS_PATH = '/v1/utilities/registry/manifests';
@@ -419,7 +435,26 @@ export const guardrailsApi = {
     const configByKey = new Map<string, GuardrailConfigurationDocument>();
     for (const c of configurations) configByKey.set(`${c.name}@${c.version}`, c);
 
-    return manifests.map((m) => {
+    // /registry/manifests returns *every* persisted version. The catalog is
+    // meant to show one row per guardrail (the latest); older versions live
+    // behind the detail view's Versions tab. Group by metadata.name, keep
+    // the highest MAJOR.MINOR per group, and map only those.
+    const latestByName = new Map<string, GuardrailManifestDocument>();
+    for (const m of manifests) {
+      const name = m.metadata.name;
+      const incumbent = latestByName.get(name);
+      if (!incumbent) {
+        latestByName.set(name, m);
+        continue;
+      }
+      const incV = parseVersion(incumbent.metadata.version);
+      const newV = parseVersion(m.metadata.version);
+      const newer =
+        newV.major > incV.major || (newV.major === incV.major && newV.minor > incV.minor);
+      if (newer) latestByName.set(name, m);
+    }
+
+    return Array.from(latestByName.values()).map((m) => {
       const key = `${m.metadata.name}@${m.metadata.version}`;
       return mapManifestToPolicy(m, { config: configByKey.get(key) ?? null });
     });
@@ -432,11 +467,14 @@ export const guardrailsApi = {
    * configuration so the detail view's Rego and Versions tabs both have data.
    */
   getPolicy: async (id: string): Promise<RegistryPolicy> => {
-    const siblings = await guardrailsApi.listManifestsByName(id);
-    if (siblings.length === 0) {
+    const raw = await guardrailsApi.listManifestsByName(id);
+    if (raw.length === 0) {
       throw new GuardrailsApiError(`No manifest found for ${id}`, 404, `${MANIFESTS_PATH}/${id}`);
     }
-    // Manifests come back newest first per the spec.
+    // The spec says newest-first, but the wire is unreliable in practice
+    // (some backend versions sort lexically, ranking "1.10" before "1.2").
+    // Sort locally on parsed MAJOR.MINOR to keep "latest" well-defined.
+    const siblings = sortManifestsNewestFirst(raw);
     const latest = siblings[0];
     const [config, regoCode] = await Promise.all([
       guardrailsApi.getConfiguration(latest.metadata.name, latest.metadata.version),
