@@ -70,6 +70,8 @@ export interface RegistryPolicy {
   configJson: string;
   /** Path/URL to the published input schema artifact, if any. */
   inputSchemaRef?: string;
+  /** Decoded external dependencies, ready to drop into the studio on Edit. */
+  externalDeps?: import('./external.types').ExternalDependency[];
   testCases: PolicyTestCase[];
   stats: PolicyStats;
   dependencies?: string[];

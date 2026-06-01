@@ -16,6 +16,7 @@ import type {
 } from '@/types/guardrail.types';
 import type { RegistryPolicy, PolicyStatus } from '@/types/registry.types';
 import { normalizeResourceKind } from './resourceKind';
+import { decodeDependenciesFromManifest } from './guardrailManifest';
 
 /** Backend GuardrailStatus → frontend PolicyStatus. */
 export function mapGuardrailStatusToPolicy(status: GuardrailStatus): PolicyStatus {
@@ -68,6 +69,7 @@ export function mapManifestToPolicy(
   const { config, regoCode = '', siblings = [] } = extras;
   const content = config?.content ?? spec.configuration?.content ?? {};
   const target = spec.target ?? ({} as { resourceKind: unknown });
+  const externalDeps = decodeDependenciesFromManifest(spec.externalDependencies);
 
   return {
     id: metadata.name ?? '',
@@ -94,6 +96,7 @@ export function mapManifestToPolicy(
     })),
     regoCode,
     configJson: JSON.stringify(content, null, 2),
+    externalDeps,
     testCases: [],
     stats: {
       totalEvaluations: 0,

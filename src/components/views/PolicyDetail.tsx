@@ -228,6 +228,7 @@ export function PolicyDetail() {
       configEnabled,
       inputSchemaJson,
       inputExamples,
+      externalDeps: policy.externalDeps,
       metadata: {
         name: policy.name,
         description: policy.description,

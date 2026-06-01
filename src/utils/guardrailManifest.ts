@@ -1,6 +1,13 @@
 import yaml from 'js-yaml';
 import { VAULT_ADDRESS, CUSTOM_SERVICE_ID } from '@/services/external/externalServices';
-import type { ExternalDependency, ExternalParam, PolicyMetadata } from '@/types';
+import type {
+  ExternalAuth,
+  ExternalDependency,
+  ExternalExtraQueryParam,
+  ExternalParam,
+  ParamSource,
+  PolicyMetadata,
+} from '@/types';
 import type { EnforcementType, Stage, ResourceKind } from '@/types/guardrail.types';
 
 export interface ManifestInputSchema {
@@ -220,4 +227,121 @@ export function toGuardrailConfigurationYaml(data: Record<string, unknown>): str
     noRefs: true,
     quotingType: '"',
   });
+}
+
+// ---------------------------------------------------------------------------
+// Decoding — inverse of encodeDependency. Used when loading an existing
+// guardrail into the studio for edit: the manifest's spec.externalDependencies
+// is the source of truth, and we have to reconstruct the studio-shaped
+// ExternalDependency records from it.
+// ---------------------------------------------------------------------------
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
+}
+
+function decodeParam(encoded: unknown): ExternalParam {
+  const obj = asRecord(encoded);
+  if (!obj) return { source: 'static', value: '' };
+  if (typeof obj.document === 'string') return { source: 'document', value: obj.document };
+  if (typeof obj.config === 'string') return { source: 'configuration', value: obj.config };
+  if (typeof obj.value === 'string') return { source: 'static', value: obj.value };
+  // Tolerate older encodings where someone embedded a different source key —
+  // pick the first string field as the value, default to static.
+  for (const [k, v] of Object.entries(obj)) {
+    if (typeof v === 'string') {
+      const source: ParamSource =
+        k === 'document' ? 'document' : k === 'config' ? 'configuration' : 'static';
+      return { source, value: v };
+    }
+  }
+  return { source: 'static', value: '' };
+}
+
+function decodeRecord(encoded: unknown): Record<string, ExternalParam> {
+  const obj = asRecord(encoded);
+  if (!obj) return {};
+  const out: Record<string, ExternalParam> = {};
+  for (const [name, raw] of Object.entries(obj)) out[name] = decodeParam(raw);
+  return out;
+}
+
+function decodeExtras(encoded: unknown): ExternalExtraQueryParam[] {
+  if (!Array.isArray(encoded)) return [];
+  const out: ExternalExtraQueryParam[] = [];
+  for (const raw of encoded) {
+    const obj = asRecord(raw);
+    if (!obj) continue;
+    const name = typeof obj.name === 'string' ? obj.name : '';
+    if (!name) continue;
+    out.push({ name, param: decodeParam(obj) });
+  }
+  return out;
+}
+
+function decodeAuth(encoded: unknown): ExternalAuth | undefined {
+  const obj = asRecord(encoded);
+  if (!obj || obj.type !== 'vault') return undefined;
+  const vault = asRecord(obj.vault);
+  if (!vault) return undefined;
+  return {
+    type: 'vault',
+    secretPath: typeof vault.secretPath === 'string' ? vault.secretPath : '',
+    usernameKey: typeof vault.usernameKey === 'string' ? vault.usernameKey : '',
+    passwordKey: typeof vault.passwordKey === 'string' ? vault.passwordKey : '',
+  };
+}
+
+function mintDepId(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+  return `dep-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+/**
+ * Decode one manifest entry under `spec.externalDependencies` back into the
+ * studio's `ExternalDependency` shape so an existing guardrail's external
+ * config survives the Edit round-trip.
+ *
+ * `operationId` isn't encoded by the manifest (it's a swagger-spec-local id)
+ * — we leave it undefined; the modal can re-pick the matching op when it
+ * loads the spec by path + method, or the author can click it again.
+ * `data` is reset since the live fetch hasn't happened yet for this session.
+ */
+export function decodeDependency(encoded: unknown): ExternalDependency | null {
+  const obj = asRecord(encoded);
+  if (!obj) return null;
+  const request = asRecord(obj.request) ?? {};
+  const body = decodeRecord(request.body);
+  const extras = decodeExtras(request.extraQueryParameters);
+  return {
+    id: mintDepId(),
+    name: typeof obj.name === 'string' ? obj.name : '',
+    serviceId: typeof obj.service === 'string' ? obj.service : CUSTOM_SERVICE_ID,
+    baseUrl: typeof obj.baseUrl === 'string' ? obj.baseUrl : '',
+    specUrl: typeof obj.spec === 'string' ? obj.spec : '',
+    method: typeof request.method === 'string' ? request.method : 'GET',
+    path: typeof request.path === 'string' ? request.path : '',
+    params: decodeRecord(request.parameters),
+    body: Object.keys(body).length > 0 ? body : undefined,
+    extraQueryParams: extras.length > 0 ? extras : undefined,
+    auth: decodeAuth(obj.auth),
+    data: null,
+    status: 'idle',
+  };
+}
+
+export function decodeDependenciesFromManifest(
+  manifestExternalDependencies: unknown
+): ExternalDependency[] {
+  if (!Array.isArray(manifestExternalDependencies)) return [];
+  const out: ExternalDependency[] = [];
+  for (const raw of manifestExternalDependencies) {
+    const decoded = decodeDependency(raw);
+    if (decoded) out.push(decoded);
+  }
+  return out;
 }
