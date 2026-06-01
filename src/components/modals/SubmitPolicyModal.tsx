@@ -260,9 +260,10 @@ export function SubmitPolicyModal({
         : undefined,
     });
 
-  // Generate the kube-like GuardrailConfiguration (configuration.yaml).
-  const generateConfigYaml = (): string =>
-    toGuardrailConfigurationYaml({ name: metadata.name, data: getConfigObject() });
+  // Configuration is published as raw YAML — just the data the policy reads
+  // at input.configuration. No apiVersion / kind / metadata / spec wrapper;
+  // the manifest already carries the contract metadata.
+  const generateConfigYaml = (): string => toGuardrailConfigurationYaml(getConfigObject());
 
   /**
    * The set of files published for this guardrail version.

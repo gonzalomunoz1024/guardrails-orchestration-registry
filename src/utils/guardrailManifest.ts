@@ -191,32 +191,15 @@ export function toGuardrailYaml(args: GuardrailManifestArgs): string {
   });
 }
 
-export interface GuardrailConfigurationArgs {
-  /** Guardrail display name; slugified for metadata.name (ties config to its guardrail). */
-  name: string;
-  /** The configuration data merged at input.configuration during evaluation. */
-  data: Record<string, unknown>;
-}
-
 /**
- * Builds the kube-like GuardrailConfiguration resource — the static configuration
- * a guardrail's policy reads at `input.configuration`. Published as the sibling
- * `configurations/<id>.yaml` and resolved from the configuration table at runtime.
+ * Serialize the static configuration to YAML, as published in the sibling
+ * `configuration.yaml` artifact and merged at `input.configuration` during
+ * evaluation. This is the raw data the policy reads — no apiVersion / kind /
+ * metadata / spec wrapping. The backend's manifest record stores the same
+ * shape under spec.configuration.content; the file on disk mirrors it.
  */
-export function buildGuardrailConfiguration(
-  args: GuardrailConfigurationArgs
-): Record<string, unknown> {
-  return {
-    apiVersion: GUARDRAIL_API_VERSION,
-    kind: 'GuardrailConfiguration',
-    metadata: { name: slugify(args.name || 'untitled-guardrail') },
-    spec: { data: args.data ?? {} },
-  };
-}
-
-/** Serialize the GuardrailConfiguration to YAML. */
-export function toGuardrailConfigurationYaml(args: GuardrailConfigurationArgs): string {
-  return yaml.dump(buildGuardrailConfiguration(args), {
+export function toGuardrailConfigurationYaml(data: Record<string, unknown>): string {
+  return yaml.dump(data ?? {}, {
     lineWidth: 100,
     noRefs: true,
     quotingType: '"',
