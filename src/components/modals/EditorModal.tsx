@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import Editor from '@monaco-editor/react';
-import { Minimize2, Wand2 } from 'lucide-react';
+import { ArrowLeft, Minimize2, Wand2 } from 'lucide-react';
 import { cn } from '@/utils';
 import { defaultEditorOptions } from '@/monaco/config';
 
@@ -77,17 +77,15 @@ export function EditorModal({
       >
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-[var(--color-border-light)] bg-[var(--color-surface)]">
-          <div className="flex items-center gap-4">
-            {/* Traffic light dots - Apple style */}
-            <div className="flex items-center gap-2">
-              <button
-                onClick={onClose}
-                className="w-3 h-3 rounded-full bg-[#FF5F57] hover:bg-[#FF5F57]/80 transition-colors"
-                title="Close"
-              />
-              <div className="w-3 h-3 rounded-full bg-[#FEBC2E]" />
-              <div className="w-3 h-3 rounded-full bg-[#28C840]" />
-            </div>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={onClose}
+              title="Back"
+              aria-label="Back"
+              className="flex items-center justify-center w-8 h-8 rounded-[var(--radius-md)] text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-surface-secondary)] transition-colors"
+            >
+              <ArrowLeft className="w-5 h-5" />
+            </button>
             <div className="h-4 w-px bg-[var(--color-border-light)]" />
             <div>
               <h2 className="text-base font-semibold text-[var(--color-text-primary)]">
