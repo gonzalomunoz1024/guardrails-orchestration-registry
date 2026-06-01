@@ -211,12 +211,20 @@ export async function fetchSpec(specUrl: string, fallbackBaseUrl: string): Promi
   return parseSpec(doc, fallbackBaseUrl);
 }
 
-/** Substitute `{param}` path placeholders and append query params. */
+/**
+ * Substitute `{param}` path placeholders and append query params. `params`
+ * carries the values for spec-declared parameters keyed by name; `extras` is
+ * an ordered list of undeclared query keys (e.g. dynamic filters like
+ * `attributes.app_id=...`) appended verbatim after the declared ones.
+ * Duplicate keys are preserved (URLSearchParams.append, not .set), which
+ * lets authors send `tag=a&tag=b`.
+ */
 export function buildRequestUrl(
   baseUrl: string,
   path: string,
   operation: SwaggerOperation | undefined,
-  params: Record<string, string>
+  params: Record<string, string>,
+  extras: { name: string; value: string }[] = []
 ): string {
   let resolvedPath = path;
   const query = new URLSearchParams();
@@ -231,6 +239,11 @@ export function buildRequestUrl(
     } else if (param.in === 'query' && value) {
       query.set(param.name, value);
     }
+  }
+
+  for (const extra of extras) {
+    if (!extra.name || !extra.value) continue;
+    query.append(extra.name, extra.value);
   }
 
   const base = baseUrl.replace(/\/$/, '');

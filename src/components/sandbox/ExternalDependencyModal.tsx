@@ -9,6 +9,8 @@ import {
   Loader2,
   Lock,
   Play,
+  Plus,
+  Trash2,
   X,
   Zap,
 } from 'lucide-react';
@@ -25,6 +27,7 @@ import {
 import { cn, parseJson } from '@/utils';
 import type {
   ExternalDependency,
+  ExternalExtraQueryParam,
   ExternalParam,
   ParamSource,
   ParsedSpec,
@@ -187,6 +190,168 @@ function BindingRow({
   );
 }
 
+interface ExtraQueryParamsSectionProps {
+  extras: ExternalExtraQueryParam[];
+  onAdd: () => void;
+  onRemove: (idx: number) => void;
+  onChangeName: (idx: number, name: string) => void;
+  onChangeParam: (idx: number, patch: Partial<ExternalParam>) => void;
+  resolveParam: (param: ExternalParam) => string;
+  docPaths: string[];
+  configPaths: string[];
+  idPrefix: string;
+}
+
+/**
+ * Editor for query keys the OpenAPI spec doesn't declare — dynamic filters
+ * like `attributes.app_id=CLAUT` that real APIs accept but don't enumerate.
+ * Each row has an editable name, the same static/document/configuration
+ * source picker as declared parameters, and a value/path field. Rows are
+ * appended to the request URL after the spec-declared query parameters.
+ */
+function ExtraQueryParamsSection({
+  extras,
+  onAdd,
+  onRemove,
+  onChangeName,
+  onChangeParam,
+  resolveParam,
+  docPaths,
+  configPaths,
+  idPrefix,
+}: ExtraQueryParamsSectionProps) {
+  return (
+    <div className="space-y-2.5">
+      <div className="flex items-center justify-between">
+        <h4 className="text-[11px] font-semibold uppercase tracking-wider text-[var(--color-text-tertiary)]">
+          Extra query parameters
+          <span className="ml-1.5 font-normal normal-case tracking-normal text-[var(--color-text-tertiary)]">
+            (not in spec — appended to the URL)
+          </span>
+        </h4>
+        <button
+          onClick={onAdd}
+          className="flex items-center gap-1 px-2 py-1 rounded-[var(--radius-sm)] text-[11px] font-medium text-[var(--color-text-secondary)] hover:text-[var(--color-info)] hover:bg-[var(--color-surface-secondary)] transition-colors"
+        >
+          <Plus className="w-3.5 h-3.5" />
+          Add
+        </button>
+      </div>
+
+      {extras.length === 0 ? (
+        <p className="text-[11px] text-[var(--color-text-tertiary)]">
+          No extras. Add a row for dynamic filters like{' '}
+          <code className="font-mono">attributes.app_id=CLAUT</code>.
+        </p>
+      ) : (
+        extras.map((entry, idx) => (
+          <ExtraQueryParamRow
+            key={idx}
+            entry={entry}
+            preview={entry.param.source === 'static' ? entry.param.value : resolveParam(entry.param)}
+            onChangeName={(name) => onChangeName(idx, name)}
+            onChangeParam={(patch) => onChangeParam(idx, patch)}
+            onRemove={() => onRemove(idx)}
+            docPaths={docPaths}
+            configPaths={configPaths}
+            idPrefix={`${idPrefix}-${idx}`}
+          />
+        ))
+      )}
+    </div>
+  );
+}
+
+interface ExtraQueryParamRowProps {
+  entry: ExternalExtraQueryParam;
+  preview: string;
+  onChangeName: (name: string) => void;
+  onChangeParam: (patch: Partial<ExternalParam>) => void;
+  onRemove: () => void;
+  docPaths: string[];
+  configPaths: string[];
+  idPrefix: string;
+}
+
+function ExtraQueryParamRow({
+  entry,
+  preview,
+  onChangeName,
+  onChangeParam,
+  onRemove,
+  docPaths,
+  configPaths,
+  idPrefix,
+}: ExtraQueryParamRowProps) {
+  const listId = `${idPrefix}-list`;
+  const suggestions = entry.param.source === 'document' ? docPaths : configPaths;
+  const valueClass =
+    'flex-1 px-2.5 py-1.5 rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-[var(--color-surface)] text-xs font-mono text-[var(--color-text-primary)] outline-none focus:border-[var(--color-info)]';
+  return (
+    <div className="space-y-1">
+      <div className="flex items-start gap-2">
+        <input
+          value={entry.name}
+          onChange={(e) => onChangeName(e.target.value)}
+          placeholder="attributes.app_id"
+          className="w-44 shrink-0 px-2.5 py-1.5 rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-[var(--color-surface)] text-xs font-mono text-[var(--color-text-primary)] outline-none focus:border-[var(--color-info)]"
+        />
+        <select
+          value={entry.param.source}
+          onChange={(e) =>
+            onChangeParam({ source: e.target.value as ParamSource, value: '' })
+          }
+          className="shrink-0 px-2 py-1.5 rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-[var(--color-surface)] text-xs text-[var(--color-text-secondary)] outline-none focus:border-[var(--color-info)]"
+        >
+          <option value="static">{sourceLabel.static}</option>
+          <option value="document">{sourceLabel.document}</option>
+          <option value="configuration">{sourceLabel.configuration}</option>
+        </select>
+        {entry.param.source === 'static' ? (
+          <input
+            value={entry.param.value}
+            onChange={(e) => onChangeParam({ value: e.target.value })}
+            placeholder="CLAUT"
+            className={valueClass}
+          />
+        ) : (
+          <>
+            <input
+              list={listId}
+              value={entry.param.value}
+              onChange={(e) => onChangeParam({ value: e.target.value })}
+              placeholder={`path in ${entry.param.source} (e.g. metadata.appId)`}
+              className={valueClass}
+            />
+            <datalist id={listId}>
+              {suggestions.map((path) => (
+                <option key={path} value={path} />
+              ))}
+            </datalist>
+          </>
+        )}
+        <button
+          onClick={onRemove}
+          aria-label="Remove extra query parameter"
+          className="shrink-0 p-1.5 rounded-[var(--radius-sm)] text-[var(--color-text-tertiary)] hover:text-[var(--color-error)] hover:bg-[var(--color-error-bg)] transition-colors"
+        >
+          <Trash2 className="w-3.5 h-3.5" />
+        </button>
+      </div>
+      {entry.param.source !== 'static' && (
+        <div className="pl-[11.75rem] text-[10px] text-[var(--color-text-tertiary)]">
+          resolves to{' '}
+          {preview ? (
+            <code className="text-[var(--color-text-secondary)]">{preview}</code>
+          ) : (
+            <span className="text-[var(--color-warning)]">(not found in {entry.param.source})</span>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function ExternalDependencyModal({ dep, isOpen, onClose }: ExternalDependencyModalProps) {
   const { updateExternalDep, externalDeps, inputJson, configJson } = usePolicyStore();
 
@@ -197,6 +362,11 @@ export function ExternalDependencyModal({ dep, isOpen, onClose }: ExternalDepend
   const [expandedOpId, setExpandedOpId] = useState<string | null>(null);
   const [params, setParams] = useState<Record<string, Record<string, ExternalParam>>>({});
   const [bodies, setBodies] = useState<Record<string, Record<string, ExternalParam>>>({});
+  // Undeclared query params keyed by operation id. Authors add these for
+  // dynamic filter keys the OpenAPI spec doesn't enumerate (e.g.
+  // `attributes.app_id=CLAUT`). Stored as an array so duplicate keys and
+  // insertion order are preservable.
+  const [extrasByOp, setExtrasByOp] = useState<Record<string, ExternalExtraQueryParam[]>>({});
   const [responses, setResponses] = useState<Record<string, ExecResult>>({});
   const [executing, setExecuting] = useState<string | null>(null);
   const [copiedUrl, setCopiedUrl] = useState<string | null>(null);
@@ -365,11 +535,26 @@ export function ExternalDependencyModal({ dep, isOpen, onClose }: ExternalDepend
     [bodyFor, resolveTyped]
   );
 
+  // Undeclared-query-param accessors, hoisted above `execute` because they're
+  // called from inside its closure to assemble the request URL and persist
+  // the trimmed extras on success.
+  const extrasFor = useCallback(
+    (op: SwaggerOperation): ExternalExtraQueryParam[] => extrasByOp[op.id] ?? [],
+    [extrasByOp]
+  );
+
+  const resolvedExtras = useCallback(
+    (op: SwaggerOperation): { name: string; value: string }[] =>
+      extrasFor(op).map((e) => ({ name: e.name.trim(), value: resolveParam(e.param) })),
+    [extrasFor, resolveParam]
+  );
+
   const execute = useCallback(
     async (op: SwaggerOperation) => {
       const opParams = paramsFor(op);
       const resolved = resolvedValues(op);
-      const url = buildRequestUrl(dep.baseUrl, op.path, op, resolved);
+      const opExtras = extrasFor(op).filter((e) => e.name.trim().length > 0);
+      const url = buildRequestUrl(dep.baseUrl, op.path, op, resolved, resolvedExtras(op));
       const hasBody = op.bodyFields.length > 0;
       const opBody = hasBody ? bodyFor(op) : {};
       setExecuting(op.id);
@@ -397,6 +582,10 @@ export function ExternalDependencyModal({ dep, isOpen, onClose }: ExternalDepend
             method: op.method,
             params: opParams,
             body: hasBody ? opBody : undefined,
+            // Persist trimmed-name extras only (drop blank rows). Stored
+            // separately from `params` so the orchestrator can append them
+            // to the query string without consulting an `in` field.
+            extraQueryParams: opExtras.length > 0 ? opExtras : undefined,
             data: body,
             status: 'success',
             fetchedAt: new Date().toISOString(),
@@ -414,7 +603,7 @@ export function ExternalDependencyModal({ dep, isOpen, onClose }: ExternalDepend
         setExecuting(null);
       }
     },
-    [dep.baseUrl, dep.id, paramsFor, resolvedValues, bodyFor, resolvedBody, updateExternalDep]
+    [dep.baseUrl, dep.id, paramsFor, resolvedValues, extrasFor, resolvedExtras, bodyFor, resolvedBody, updateExternalDep]
   );
 
   // Expand an operation: seed its params, then auto-execute if all required
@@ -456,6 +645,32 @@ export function ExternalDependencyModal({ dep, isOpen, onClose }: ExternalDepend
       return { ...prev, [opId]: { ...prev[opId], [name]: { ...current, ...patch } } };
     });
 
+  const addExtra = (opId: string) =>
+    setExtrasByOp((prev) => ({
+      ...prev,
+      [opId]: [...(prev[opId] ?? []), { name: '', param: { source: 'static', value: '' } }],
+    }));
+
+  const removeExtra = (opId: string, idx: number) =>
+    setExtrasByOp((prev) => ({
+      ...prev,
+      [opId]: (prev[opId] ?? []).filter((_, i) => i !== idx),
+    }));
+
+  const updateExtraName = (opId: string, idx: number, name: string) =>
+    setExtrasByOp((prev) => ({
+      ...prev,
+      [opId]: (prev[opId] ?? []).map((e, i) => (i === idx ? { ...e, name } : e)),
+    }));
+
+  const updateExtraParam = (opId: string, idx: number, patch: Partial<ExternalParam>) =>
+    setExtrasByOp((prev) => ({
+      ...prev,
+      [opId]: (prev[opId] ?? []).map((e, i) =>
+        i === idx ? { ...e, param: { ...e.param, ...patch } } : e
+      ),
+    }));
+
   // Load the spec when the modal opens; pre-expand the selected endpoint.
   useEffect(() => {
     if (isOpen && dep.specUrl) {
@@ -463,6 +678,18 @@ export function ExternalDependencyModal({ dep, isOpen, onClose }: ExternalDepend
       setExpandedOpId(dep.operationId ?? null);
     }
   }, [isOpen, dep.specUrl, dep.baseUrl, dep.operationId, loadSpec]);
+
+  // Hydrate extras for the active operation when the modal opens, so authors
+  // see their previously-saved query keys instead of an empty section.
+  // Declared params/body are intentionally NOT hydrated here — that's a
+  // pre-existing limitation; the extras lookup is additive so we don't
+  // regress it but at least the new feature persists across reopens.
+  useEffect(() => {
+    if (!isOpen || !dep.operationId) return;
+    const existing = dep.extraQueryParams;
+    if (!existing || existing.length === 0) return;
+    setExtrasByOp((prev) => (prev[dep.operationId!] ? prev : { ...prev, [dep.operationId!]: existing }));
+  }, [isOpen, dep.operationId, dep.extraQueryParams]);
 
   // Escape to close + lock background scroll.
   useEffect(() => {
@@ -703,7 +930,7 @@ export function ExternalDependencyModal({ dep, isOpen, onClose }: ExternalDepend
             const opParams = paramsFor(op);
             const opBody = bodyFor(op);
             const resolved = resolvedValues(op);
-            const reqUrl = buildRequestUrl(dep.baseUrl, op.path, op, resolved);
+            const reqUrl = buildRequestUrl(dep.baseUrl, op.path, op, resolved, resolvedExtras(op));
             const bodyObj = op.bodyFields.length > 0 ? resolvedBody(op) : null;
             return (
               <div
@@ -777,6 +1004,20 @@ export function ExternalDependencyModal({ dep, isOpen, onClose }: ExternalDepend
                         ))}
                       </div>
                     )}
+
+                    {/* Extra query parameters — dynamic filter keys the spec
+                        doesn't declare (e.g. `attributes.app_id=CLAUT`). */}
+                    <ExtraQueryParamsSection
+                      extras={extrasFor(op)}
+                      onAdd={() => addExtra(op.id)}
+                      onRemove={(idx) => removeExtra(op.id, idx)}
+                      onChangeName={(idx, name) => updateExtraName(op.id, idx, name)}
+                      onChangeParam={(idx, patch) => updateExtraParam(op.id, idx, patch)}
+                      resolveParam={resolveParam}
+                      docPaths={docPaths}
+                      configPaths={configPaths}
+                      idPrefix={`x-${op.id}`}
+                    />
 
                     {/* Request body */}
                     {op.bodyFields.length > 0 && (

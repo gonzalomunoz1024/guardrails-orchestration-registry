@@ -85,6 +85,18 @@ function encodeDependency(dep: ExternalDependency): Record<string, unknown> {
     request.parameters = parameters;
   }
 
+  // Undeclared query keys — emitted as an ordered array so duplicate keys
+  // are preservable and the orchestrator can append them verbatim. Keyed
+  // separately from `parameters` so the backend knows these are dynamic
+  // filters, not spec-declared params with an `in` field to consult.
+  const extras = (dep.extraQueryParams ?? []).filter((e) => e.name.trim());
+  if (extras.length > 0) {
+    request.extraQueryParameters = extras.map((e) => ({
+      name: e.name.trim(),
+      ...encodeParam(e.param),
+    }));
+  }
+
   const bodyEntries = Object.entries(dep.body ?? {});
   if (bodyEntries.length > 0) {
     const body: Record<string, unknown> = {};

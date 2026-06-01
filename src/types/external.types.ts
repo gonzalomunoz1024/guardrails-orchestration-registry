@@ -104,6 +104,19 @@ export interface ExternalParam {
 }
 
 /**
+ * An undeclared query-string parameter. APIs sometimes accept dynamic filter
+ * keys (e.g. `attributes.app_id=...`) that aren't enumerated in the OpenAPI
+ * spec — we keep these in a separate ordered list so authors can add them
+ * without us having to invent fake spec entries. Stored as an array (not a
+ * record) so repeated keys like `tag=a&tag=b` are preservable and ordering
+ * stays stable across edits.
+ */
+export interface ExternalExtraQueryParam {
+  name: string;
+  param: ExternalParam;
+}
+
+/**
  * A configured external dependency stored in the policy store. The fetched
  * `data` becomes `input.external[name]` during evaluation.
  */
@@ -125,6 +138,11 @@ export interface ExternalDependency {
   params: Record<string, ExternalParam>;
   /** Request body field bindings keyed by field name (POST/PUT). */
   body?: Record<string, ExternalParam>;
+  /**
+   * Query-string params not declared in the spec. Appended to the URL after
+   * the declared params; never used as a path or header source.
+   */
+  extraQueryParams?: ExternalExtraQueryParam[];
   /** Vault-based auth config (custom services only). */
   auth?: ExternalAuth;
   /** Last fetched response payload. */
