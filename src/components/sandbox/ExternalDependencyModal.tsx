@@ -771,17 +771,36 @@ export function ExternalDependencyModal({ dep, isOpen, onClose }: ExternalDepend
     setCustomName(dep.name);
   }, [dep.name]);
 
-  // Hydrate extras for the active operation when the modal opens, so authors
-  // see their previously-saved query keys instead of an empty section.
-  // Declared params/body are intentionally NOT hydrated here — that's a
-  // pre-existing limitation; the extras lookup is additive so we don't
-  // regress it but at least the new feature persists across reopens.
+  // Hydrate per-op state from the dep when the spec finishes loading. Both
+  // the saved parameter bindings and the saved body fields ride on `dep`
+  // itself between sessions; without this rehydrate the modal would fall
+  // back to seedParams() / seedBody() and replace the author's work with
+  // the spec's example values on every reopen. Spec defaults are still
+  // used as a base, so any param the spec gained since last save shows up
+  // with its example pre-filled rather than going blank.
   useEffect(() => {
-    if (!isOpen || !dep.operationId) return;
-    const existing = dep.extraQueryParams;
-    if (!existing || existing.length === 0) return;
-    setExtrasByOp((prev) => (prev[dep.operationId!] ? prev : { ...prev, [dep.operationId!]: existing }));
-  }, [isOpen, dep.operationId, dep.extraQueryParams]);
+    if (!isOpen || !spec || !dep.operationId) return;
+    const op = spec.operations.find((o) => o.id === dep.operationId);
+    if (!op) return;
+
+    if (dep.params && Object.keys(dep.params).length > 0) {
+      setParams((prev) => {
+        if (prev[op.id]) return prev;
+        return { ...prev, [op.id]: { ...seedParams(op), ...dep.params } };
+      });
+    }
+    if (dep.body && Object.keys(dep.body).length > 0) {
+      setBodies((prev) => {
+        if (prev[op.id]) return prev;
+        return { ...prev, [op.id]: { ...seedBody(op), ...dep.body } };
+      });
+    }
+    if (dep.extraQueryParams && dep.extraQueryParams.length > 0) {
+      setExtrasByOp((prev) =>
+        prev[op.id] ? prev : { ...prev, [op.id]: dep.extraQueryParams! }
+      );
+    }
+  }, [isOpen, spec, dep.operationId, dep.params, dep.body, dep.extraQueryParams, seedParams, seedBody]);
 
   // Escape to close + lock background scroll.
   useEffect(() => {
