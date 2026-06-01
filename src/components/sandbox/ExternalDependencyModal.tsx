@@ -756,13 +756,37 @@ export function ExternalDependencyModal({ dep, isOpen, onClose }: ExternalDepend
       ),
     }));
 
-  // Load the spec when the modal opens; pre-expand the selected endpoint.
+  // Load the spec when the modal opens.
   useEffect(() => {
     if (isOpen && dep.specUrl) {
       loadSpec(dep.specUrl, dep.baseUrl);
-      setExpandedOpId(dep.operationId ?? null);
     }
-  }, [isOpen, dep.specUrl, dep.baseUrl, dep.operationId, loadSpec]);
+  }, [isOpen, dep.specUrl, dep.baseUrl, loadSpec]);
+
+  // Resolve which spec operation this dep is pinned to.
+  //
+  // The published manifest stores method + path (not the swagger-spec-local
+  // operationId), so for any user opening an existing guardrail we have to
+  // recover the op by matching (method, path) against the loaded spec.
+  // Derived — never written back to the dep — so this works the same for
+  // every user without contaminating the local policy store with a value
+  // that only exists in their browser cache.
+  const resolvedOperationId = useMemo<string | null>(() => {
+    if (dep.operationId) return dep.operationId;
+    if (!spec || !dep.method || !dep.path) return null;
+    const matching = spec.operations.find(
+      (o) => o.method.toUpperCase() === dep.method.toUpperCase() && o.path === dep.path
+    );
+    return matching?.id ?? null;
+  }, [spec, dep.operationId, dep.method, dep.path]);
+
+  // Auto-expand the resolved operation when the modal opens with a dep
+  // pinned to one. The local expandedOpId is UI-only state — it controls
+  // which panel is showing; it doesn't write back to the dep.
+  useEffect(() => {
+    if (!isOpen) return;
+    setExpandedOpId(resolvedOperationId);
+  }, [isOpen, resolvedOperationId]);
 
   // Mirror the dep name into our local input state when it changes externally
   // (service swap, modal reopen with a different dep). Otherwise the local
@@ -779,8 +803,8 @@ export function ExternalDependencyModal({ dep, isOpen, onClose }: ExternalDepend
   // used as a base, so any param the spec gained since last save shows up
   // with its example pre-filled rather than going blank.
   useEffect(() => {
-    if (!isOpen || !spec || !dep.operationId) return;
-    const op = spec.operations.find((o) => o.id === dep.operationId);
+    if (!isOpen || !spec || !resolvedOperationId) return;
+    const op = spec.operations.find((o) => o.id === resolvedOperationId);
     if (!op) return;
 
     if (dep.params && Object.keys(dep.params).length > 0) {
@@ -800,7 +824,7 @@ export function ExternalDependencyModal({ dep, isOpen, onClose }: ExternalDepend
         prev[op.id] ? prev : { ...prev, [op.id]: dep.extraQueryParams! }
       );
     }
-  }, [isOpen, spec, dep.operationId, dep.params, dep.body, dep.extraQueryParams, seedParams, seedBody]);
+  }, [isOpen, spec, resolvedOperationId, dep.params, dep.body, dep.extraQueryParams, seedParams, seedBody]);
 
   // Escape to close + lock background scroll.
   useEffect(() => {
@@ -1095,7 +1119,7 @@ export function ExternalDependencyModal({ dep, isOpen, onClose }: ExternalDepend
           {spec?.operations.map((op) => {
             const expanded = expandedOpId === op.id;
             const result = responses[op.id];
-            const isActive = dep.operationId === op.id;
+            const isActive = resolvedOperationId === op.id;
             const opParams = paramsFor(op);
             const opBody = bodyFor(op);
             const resolved = resolvedValues(op);
