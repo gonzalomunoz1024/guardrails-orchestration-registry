@@ -188,11 +188,28 @@ export function PolicyStudio() {
       ? `Saved ${new Date(lastSavedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
       : null;
 
-  // All Guardrail Details fields except tags are required before submitting.
-  // (resource kind, stage, status and enforcement always carry an enum value.)
+  // Gating Submit. Resource kind, stage, status and enforcement always carry
+  // an enum value, so we only validate the free-text inputs and rego here.
+  // Description has to clear a min length so YAML-style placeholders like
+  // ">-" or "|" can't sneak through and corrupt the published manifest.
+  const description = metadata.description.trim();
+  const rego = regoCode.trim();
   const missingDetails: string[] = [];
   if (!metadata.name.trim()) missingDetails.push('name');
-  if (!metadata.description.trim()) missingDetails.push('description');
+  if (!description) {
+    missingDetails.push('description');
+  } else if (description.length < 3 || /^[>|&*!@`,%]+$/.test(description)) {
+    // A descriptions of "ok", ">-", or "|" is almost always a typo or a
+    // YAML control character — flag it so the author writes a real one.
+    missingDetails.push('a meaningful description');
+  }
+  if (!rego) {
+    missingDetails.push('rego code');
+  } else if (!/\b(default|allow|deny)\b/.test(rego)) {
+    // The boilerplate has at least one of these; if none survive the edit,
+    // the policy has no decision rule and publishing it is meaningless.
+    missingDetails.push('a rego rule (default / allow / deny)');
+  }
   const canSubmit = missingDetails.length === 0;
 
   const handleSaveDraft = () => {
@@ -339,7 +356,7 @@ export function PolicyStudio() {
           <button
             onClick={() => setSubmitOpen(true)}
             disabled={!canSubmit}
-            title={canSubmit ? undefined : `Complete in Details: ${missingDetails.join(', ')}`}
+            title={canSubmit ? undefined : `Cannot submit — missing: ${missingDetails.join(', ')}`}
             className={cn(
               'flex items-center gap-1.5 px-4 py-1.5 rounded-[var(--radius-md)]',
               'bg-[var(--color-text-primary)] text-[var(--color-surface)] text-sm font-medium transition-all hover:opacity-90',
