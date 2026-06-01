@@ -421,32 +421,44 @@ export const guardrailsApi = {
 
     return manifests.map((m) => {
       const key = `${m.metadata.name}@${m.metadata.version}`;
-      return mapManifestToPolicy(m, configByKey.get(key) ?? null);
+      return mapManifestToPolicy(m, { config: configByKey.get(key) ?? null });
     });
   },
 
   /**
    * Get one policy by id. `id` is the manifest's metadata.name; we resolve to
    * the latest version unless a specific version is requested via getPolicyAt.
+   * Fetches the rego source and every sibling manifest in parallel with the
+   * configuration so the detail view's Rego and Versions tabs both have data.
    */
   getPolicy: async (id: string): Promise<RegistryPolicy> => {
-    const versions = await guardrailsApi.listManifestsByName(id);
-    if (versions.length === 0) {
+    const siblings = await guardrailsApi.listManifestsByName(id);
+    if (siblings.length === 0) {
       throw new GuardrailsApiError(`No manifest found for ${id}`, 404, `${MANIFESTS_PATH}/${id}`);
     }
     // Manifests come back newest first per the spec.
-    const latest = versions[0];
-    const config = await guardrailsApi.getConfiguration(latest.metadata.name, latest.metadata.version);
-    return mapManifestToPolicy(latest, config);
+    const latest = siblings[0];
+    const [config, regoCode] = await Promise.all([
+      guardrailsApi.getConfiguration(latest.metadata.name, latest.metadata.version),
+      guardrailsApi.getRegoSource(latest.metadata.name, latest.metadata.version),
+    ]);
+    return mapManifestToPolicy(latest, { config, regoCode, siblings });
   },
 
-  /** Get a policy pinned to a specific version. Mirrors suite member resolution. */
+  /**
+   * Get a policy pinned to a specific version. Mirrors suite member resolution.
+   * Pulls the rego source alongside the manifest + configuration so callers
+   * that hand the result to the studio (e.g. PolicyDetail's Edit button) get a
+   * complete snapshot without an extra round-trip. The Versions tab on a
+   * pinned read is left empty — it doesn't try to enumerate siblings.
+   */
   getPolicyAt: async (ref: GuardrailRef): Promise<RegistryPolicy> => {
-    const [manifest, config] = await Promise.all([
+    const [manifest, config, regoCode] = await Promise.all([
       guardrailsApi.getManifest(ref.guardrailId, ref.version),
       guardrailsApi.getConfiguration(ref.guardrailId, ref.version),
+      guardrailsApi.getRegoSource(ref.guardrailId, ref.version),
     ]);
-    return mapManifestToPolicy(manifest, config);
+    return mapManifestToPolicy(manifest, { config, regoCode });
   },
 
   /** List every (name, version) ref for a guardrail name — used by version pickers. */

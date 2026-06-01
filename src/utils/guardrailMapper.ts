@@ -31,17 +31,35 @@ export function mapGuardrailStatusToPolicy(status: GuardrailStatus): PolicyStatu
   }
 }
 
+export interface MapManifestExtras {
+  /** Optional configuration document for the current version. */
+  config?: GuardrailConfigurationDocument | null;
+  /**
+   * Rego source for the current version, fetched separately because the
+   * manifest only stores a file reference (the actual rego text lives at the
+   * /registry/rego endpoint). Empty string is fine when the source is missing.
+   */
+  regoCode?: string;
+  /**
+   * Sibling manifests (all versions of this guardrail, newest first) used to
+   * populate the Versions tab. Pass an empty array — or omit — when only the
+   * single pinned manifest matters (e.g. suite member resolution).
+   */
+  siblings?: GuardrailManifestDocument[];
+}
+
 /**
- * Map a full manifest document (+ optional configuration content) into a
- * RegistryPolicy. The frontend `id` is the manifest's metadata.name (which is
- * the slug used as the registry primary key). regoCode stays empty here —
- * the UI fetches the raw rego source separately via guardrailsApi.getRegoSource.
+ * Map a full manifest document into a RegistryPolicy. The frontend `id` is the
+ * manifest's metadata.name (which is the slug used as the registry primary
+ * key). The Versions tab pulls from `siblings`; the Rego tab pulls from
+ * `regoCode`. Both default to empty when the caller doesn't supply them.
  */
 export function mapManifestToPolicy(
   manifest: GuardrailManifestDocument,
-  config?: GuardrailConfigurationDocument | null
+  extras: MapManifestExtras = {}
 ): RegistryPolicy {
   const { metadata, spec } = manifest;
+  const { config, regoCode = '', siblings = [] } = extras;
   const content = config?.content ?? spec.configuration?.content ?? {};
 
   return {
@@ -56,8 +74,18 @@ export function mapManifestToPolicy(
     author: metadata.owner ?? '',
     createdAt: manifest.createdAt ?? '',
     currentVersion: metadata.version,
-    versions: [],
-    regoCode: '',
+    // The Versions tab is informational — listing every published version
+    // with its owner/timestamp. The full rego per historical version is not
+    // fetched eagerly; expanding a row could lazy-load it, but today the row
+    // just renders what the manifest carries.
+    versions: siblings.map((m) => ({
+      version: m.metadata.version,
+      createdAt: m.createdAt ?? '',
+      createdBy: m.metadata.owner ?? '',
+      changelog: m.metadata.description ?? '',
+      regoCode: m.metadata.version === metadata.version ? regoCode : '',
+    })),
+    regoCode,
     configJson: JSON.stringify(content, null, 2),
     testCases: [],
     stats: {
