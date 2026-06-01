@@ -28,6 +28,7 @@ import { defaultEditorOptions } from '@/monaco/config';
 import { cn } from '@/utils';
 import type { PolicyTestCase, PolicyVersion } from '@/types';
 import { RESOURCE_KIND_LABELS } from '@/types';
+import { PolicyInputDiagram } from './PolicyInputDiagram';
 
 type Tab = 'overview' | 'code' | 'tests' | 'versions' | 'config';
 
@@ -159,6 +160,72 @@ function toGuardrailStatus(s: string): 'ACTIVE' | 'INACTIVE' | 'DRAFT' {
   if (s === 'active') return 'ACTIVE';
   if (s === 'draft') return 'DRAFT';
   return 'INACTIVE';
+}
+
+interface ReadOnlyEditorCardProps {
+  language: 'rego' | 'json';
+  value: string;
+  theme: string;
+  height: string;
+  /** Short label rendered next to the copy button — "policy.rego", "configuration". */
+  label: string;
+}
+
+/**
+ * A bordered card wrapping a read-only Monaco editor with a small header
+ * that carries a one-click Copy button. Used by the Rego and Configuration
+ * tabs on the policy detail view so the author can grab the raw text
+ * without selecting it by hand.
+ */
+function ReadOnlyEditorCard({ language, value, theme, height, label }: ReadOnlyEditorCardProps) {
+  const [copied, setCopied] = useState(false);
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(value ?? '');
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      // Clipboard can fail in non-secure contexts — silently no-op rather
+      // than throwing; the button just won't tick.
+    }
+  };
+
+  return (
+    <div
+      className="rounded-[var(--radius-lg)] border border-[var(--color-border-light)] overflow-hidden bg-[var(--color-surface)] flex flex-col"
+      style={{ height }}
+    >
+      <div className="shrink-0 flex items-center justify-between gap-3 px-4 py-2 border-b border-[var(--color-border-light)] bg-[var(--color-surface-secondary)]/60">
+        <span className="text-[11px] font-mono text-[var(--color-text-secondary)]">{label}</span>
+        <button
+          onClick={handleCopy}
+          title={copied ? 'Copied' : 'Copy to clipboard'}
+          aria-label={copied ? 'Copied' : 'Copy to clipboard'}
+          className={cn(
+            'flex items-center gap-1.5 px-2 py-1 rounded-[var(--radius-sm)] text-xs font-medium transition-colors',
+            copied
+              ? 'text-[var(--color-success)] bg-[var(--color-success-bg)]'
+              : 'text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-surface)]'
+          )}
+        >
+          {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+          {copied ? 'Copied' : 'Copy'}
+        </button>
+      </div>
+      <div className="flex-1 min-h-0">
+        <Editor
+          height="100%"
+          language={language}
+          theme={theme}
+          value={value}
+          options={{
+            ...defaultEditorOptions,
+            readOnly: true,
+          }}
+        />
+      </div>
+    </div>
+  );
 }
 
 export function PolicyDetail() {
@@ -426,24 +493,14 @@ export function PolicyDetail() {
                 </div>
               </div>
 
-              {/* Quick Code Preview */}
-              <div className="rounded-[var(--radius-lg)] border border-[var(--color-border-light)] overflow-hidden">
-                <div className="px-4 py-3 border-b border-[var(--color-border-light)] bg-[var(--color-surface-secondary)] flex items-center justify-between">
-                  <span className="text-sm font-medium text-[var(--color-text-primary)]">
-                    Policy Code Preview
-                  </span>
-                  <button
-                    onClick={() => setActiveTab('code')}
-                    className="text-sm text-[var(--color-info)] hover:underline"
-                  >
-                    View full code
-                  </button>
-                </div>
-                <pre className="p-4 text-sm font-mono bg-[var(--color-surface)] overflow-auto max-h-48">
-                  {policy.regoCode.split('\n').slice(0, 10).join('\n')}
-                  {policy.regoCode.split('\n').length > 10 && '\n...'}
-                </pre>
-              </div>
+              {/* Input flow diagram — visual story of how the guardrail
+                  assembles its OPA input from document + (optional) config
+                  + external dependencies, and hands it to the Rego policy. */}
+              <PolicyInputDiagram
+                configJson={policy.configJson}
+                externalDeps={policy.externalDeps ?? []}
+                onJumpToRego={() => setActiveTab('code')}
+              />
             </div>
 
             {/* Sidebar Info */}
@@ -480,18 +537,13 @@ export function PolicyDetail() {
         )}
 
         {activeTab === 'code' && (
-          <div className="h-[600px] rounded-[var(--radius-lg)] border border-[var(--color-border-light)] overflow-hidden">
-            <Editor
-              height="100%"
-              language="rego"
-              theme={resolvedTheme === 'dark' ? 'vs-dark' : 'vs'}
-              value={policy.regoCode}
-              options={{
-                ...defaultEditorOptions,
-                readOnly: true,
-              }}
-            />
-          </div>
+          <ReadOnlyEditorCard
+            language="rego"
+            value={policy.regoCode}
+            theme={resolvedTheme === 'dark' ? 'vs-dark' : 'vs'}
+            height="600px"
+            label="policy.rego"
+          />
         )}
 
         {activeTab === 'tests' && (
@@ -520,18 +572,13 @@ export function PolicyDetail() {
         )}
 
         {activeTab === 'config' && (
-          <div className="h-[400px] rounded-[var(--radius-lg)] border border-[var(--color-border-light)] overflow-hidden">
-            <Editor
-              height="100%"
-              language="json"
-              theme={resolvedTheme === 'dark' ? 'vs-dark' : 'vs'}
-              value={policy.configJson}
-              options={{
-                ...defaultEditorOptions,
-                readOnly: true,
-              }}
-            />
-          </div>
+          <ReadOnlyEditorCard
+            language="json"
+            value={policy.configJson}
+            theme={resolvedTheme === 'dark' ? 'vs-dark' : 'vs'}
+            height="400px"
+            label="configuration"
+          />
         )}
       </div>
     </div>
