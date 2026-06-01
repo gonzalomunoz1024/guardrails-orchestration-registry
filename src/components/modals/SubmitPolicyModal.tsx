@@ -1086,7 +1086,11 @@ ${artifactFiles.map((f) => `- \`${f.path}\``).join('\n')}
         />
         <div
           className={cn(
-            'relative w-full max-w-3xl max-h-[88vh] flex flex-col',
+            // Explicit height (not max-height) — the body is a Monaco editor
+            // that starts at 0px before it measures itself, so `flex-1` has
+            // no extra space to distribute and the whole popup would
+            // otherwise collapse to just the header strip.
+            'relative w-full max-w-3xl h-[88vh] flex flex-col',
             'rounded-2xl overflow-hidden',
             'bg-[var(--color-surface)] shadow-2xl border border-[var(--color-border-light)]',
             'animate-in fade-in zoom-in-95 duration-200'
