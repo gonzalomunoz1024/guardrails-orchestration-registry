@@ -194,10 +194,14 @@ export function buildGuardrailManifest(args: GuardrailManifestArgs): Record<stri
   };
 }
 
-/** Serialize the manifest to YAML (deterministic key order as constructed). */
+/** Serialize the manifest to YAML (deterministic key order as constructed).
+ *  Line folding is disabled — js-yaml's default emits `>-` block scalars for
+ *  strings longer than `lineWidth`, which mangles fields like `description`
+ *  on the YAML → JSON round-trip the backend performs. Keeping every value
+ *  on a single line is uglier but lossless. */
 export function toGuardrailYaml(args: GuardrailManifestArgs): string {
   return yaml.dump(buildGuardrailManifest(args), {
-    lineWidth: 100,
+    lineWidth: -1,
     noRefs: true,
     quotingType: '"',
   });
@@ -212,7 +216,7 @@ export function toGuardrailYaml(args: GuardrailManifestArgs): string {
  */
 export function toGuardrailConfigurationYaml(data: Record<string, unknown>): string {
   return yaml.dump(data ?? {}, {
-    lineWidth: 100,
+    lineWidth: -1,
     noRefs: true,
     quotingType: '"',
   });

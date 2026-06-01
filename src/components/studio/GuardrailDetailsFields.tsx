@@ -161,12 +161,17 @@ export function GuardrailDetailsFields({
 
       <div>
         <Label>Description</Label>
-        <textarea
+        <input
+          // Single-line on purpose: multi-line descriptions force js-yaml to
+          // emit a folded block scalar (`description: >-`) in the published
+          // manifest, which corrupts the YAML → JSON round-trip downstream.
+          // Strip any newlines a user might paste in so the same guard
+          // applies on copy/paste.
           value={metadata.description}
-          onChange={(e) => updateMetadata({ description: e.target.value })}
-          placeholder="Describe what this guardrail does and when it applies…"
-          rows={3}
-          className={cn(fieldClass, 'resize-none')}
+          onChange={(e) => updateMetadata({ description: e.target.value.replace(/[\r\n]+/g, ' ') })}
+          placeholder="What this guardrail does and when it applies (single line)"
+          className={fieldClass}
+          maxLength={240}
         />
       </div>
 
