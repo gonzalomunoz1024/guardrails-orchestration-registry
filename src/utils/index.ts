@@ -13,3 +13,4 @@ export * from './slugify';
 export * from './resourceKind';
 export * from './reservedFields';
 export * from './regoPackage';
+export * from './fetchDepsForDocument';

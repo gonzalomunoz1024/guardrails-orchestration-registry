@@ -36,7 +36,8 @@ const fieldClass =
   'w-full px-3 py-2 rounded-[var(--radius-md)] bg-[var(--color-surface-secondary)] text-[var(--color-text-primary)] border border-[var(--color-border-light)] focus:border-[var(--color-info)] focus:outline-none transition-colors text-sm';
 
 export function StudioBlastRadiusDrawer({ isOpen, onClose, guardrailInfo }: StudioBlastRadiusDrawerProps) {
-  const { regoCode, configJson, resourceKind, setInputJson } = usePolicyStore();
+  const { regoCode, configJson, configEnabled, externalDeps, resourceKind, setInputJson } =
+    usePolicyStore();
   const startRun = useBlastRunStore((s) => s.start);
   const { supportsBlastRadius, testInputsDisabledMessage } = useGuardrailConfig();
 
@@ -274,7 +275,14 @@ export function StudioBlastRadiusDrawer({ isOpen, onClose, guardrailInfo }: Stud
             </span>
             <button
               onClick={() => {
-                startRun({ testInputs, regoCode, configJson, guardrailInfo });
+                startRun({
+                  testInputs,
+                  regoCode,
+                  configJson,
+                  configEnabled,
+                  externalDeps,
+                  guardrailInfo,
+                });
                 setExecutionOpen(true);
               }}
               disabled={testInputs.length === 0 || !regoCode.trim()}
@@ -297,6 +305,8 @@ export function StudioBlastRadiusDrawer({ isOpen, onClose, guardrailInfo }: Stud
         testInputs={testInputs}
         regoCode={regoCode}
         configJson={configJson}
+        configEnabled={configEnabled}
+        externalDeps={externalDeps}
         guardrailInfo={guardrailInfo}
       />
     </div>

@@ -251,6 +251,43 @@ export function buildRequestUrl(
   return `${base}${resolvedPath}${qs ? `?${qs}` : ''}`;
 }
 
+/**
+ * Spec-free variant of buildRequestUrl for callers that have only a path
+ * template and a flat param map (no swagger SwaggerOperation in hand). Used
+ * by blast radius, which fetches external deps per test input without
+ * re-fetching the spec every time. Path params are identified by the
+ * `{name}` placeholders already in `path`; anything else goes to the query
+ * string. `extras` is appended verbatim after declared query params and
+ * preserves duplicate keys.
+ */
+export function buildRequestUrlFromBindings(
+  baseUrl: string,
+  path: string,
+  params: Record<string, string>,
+  extras: { name: string; value: string }[] = []
+): string {
+  const pathParamNames = new Set<string>();
+  const resolvedPath = path.replace(/\{([^}]+)\}/g, (_, name) => {
+    pathParamNames.add(name);
+    return encodeURIComponent(params[name] ?? '');
+  });
+
+  const query = new URLSearchParams();
+  for (const [name, value] of Object.entries(params)) {
+    if (pathParamNames.has(name)) continue;
+    if (!value) continue;
+    query.set(name, value);
+  }
+  for (const extra of extras) {
+    if (!extra.name || !extra.value) continue;
+    query.append(extra.name, extra.value);
+  }
+
+  const base = baseUrl.replace(/\/$/, '');
+  const qs = query.toString();
+  return `${base}${resolvedPath}${qs ? `?${qs}` : ''}`;
+}
+
 /** Read a dotted path (supports numeric array indices) out of a value. */
 export function getByPath(obj: unknown, path: string): unknown {
   if (!path) return undefined;

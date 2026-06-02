@@ -14,7 +14,7 @@ import {
 } from 'lucide-react';
 import { cn, downloadBlastRadiusReport } from '@/utils';
 import { useBlastRunStore } from '@/store';
-import type { TestInput } from '@/types/registry.types';
+import type { ExternalDependency, TestInput } from '@/types';
 import type { EnforcementType } from '@/types/guardrail.types';
 
 interface GuardrailInfo {
@@ -30,6 +30,10 @@ interface BlastRadiusExecutionModalProps {
   testInputs: TestInput[];
   regoCode: string;
   configJson: string;
+  /** Whether the static configuration is part of the input bundle. */
+  configEnabled: boolean;
+  /** Configured external dependencies — refetched per test input. */
+  externalDeps: ExternalDependency[];
   guardrailInfo: GuardrailInfo;
 }
 
@@ -39,6 +43,8 @@ export function BlastRadiusExecutionModal({
   testInputs: propTestInputs,
   regoCode,
   configJson,
+  configEnabled,
+  externalDeps,
   guardrailInfo,
 }: BlastRadiusExecutionModalProps) {
   const run = useBlastRunStore();
@@ -54,7 +60,14 @@ export function BlastRadiusExecutionModal({
   const results = useMemo(() => new Map(Object.entries(run.results)), [run.results]);
 
   const startRun = () =>
-    run.start({ testInputs: propTestInputs, regoCode, configJson, guardrailInfo });
+    run.start({
+      testInputs: propTestInputs,
+      regoCode,
+      configJson,
+      configEnabled,
+      externalDeps,
+      guardrailInfo,
+    });
 
   // Calculate summary stats
   const passedCount = Array.from(results.values()).filter(r => r.status === 'passed').length;
@@ -312,17 +325,59 @@ export function BlastRadiusExecutionModal({
                   {/* Expanded Result */}
                   {isExpanded && result && (
                     <div className="px-4 pb-4 space-y-3">
-                      {/* Input Section - For triage */}
-                      <div>
-                        <label className="block text-xs font-medium text-[var(--color-text-tertiary)] mb-1.5 uppercase tracking-wide">
-                          Input
-                        </label>
-                        <div className="p-3 rounded-lg bg-[var(--color-surface)] border border-[var(--color-border-light)] font-mono text-xs overflow-auto max-h-32">
-                          <pre className="text-[var(--color-text-secondary)]">
-                            {JSON.stringify(testInput.input, null, 2)}
-                          </pre>
+                      {/* Document — the test input payload that drove this evaluation. */}
+                      <InputSection
+                        label="Document"
+                        sublabel="input.document.*"
+                        body={JSON.stringify(testInput.input ?? {}, null, 2)}
+                      />
+
+                      {/* External dependencies — one block per dep, with the
+                          resolved URL and the response body so authors can
+                          tell why a verdict went the way it did. */}
+                      {result.fetchedDeps && result.fetchedDeps.length > 0 && (
+                        <div className="space-y-2">
+                          <label className="block text-xs font-medium text-[var(--color-text-tertiary)] uppercase tracking-wide">
+                            External dependencies
+                          </label>
+                          {result.fetchedDeps.map((f) => (
+                            <div
+                              key={f.name}
+                              className={cn(
+                                'rounded-lg border overflow-hidden',
+                                f.status === 'error'
+                                  ? 'border-[var(--color-error)]/30 bg-[var(--color-error-bg)]/40'
+                                  : 'border-[var(--color-border-light)] bg-[var(--color-surface)]'
+                              )}
+                            >
+                              <div className="px-3 py-2 border-b border-[var(--color-border-light)] flex items-center justify-between gap-2 text-[11px]">
+                                <code className="font-mono text-[var(--color-info)] truncate">
+                                  input.external.{f.name}
+                                </code>
+                                <span className="font-mono text-[var(--color-text-tertiary)] truncate">
+                                  {(f.dep.method || 'GET').toUpperCase()} {f.url}
+                                </span>
+                              </div>
+                              <pre className="px-3 py-2 font-mono text-xs overflow-auto max-h-40 text-[var(--color-text-secondary)]">
+                                {f.error
+                                  ? f.error
+                                  : JSON.stringify(f.data, null, 2)}
+                              </pre>
+                            </div>
+                          ))}
                         </div>
-                      </div>
+                      )}
+
+                      {/* Configuration — the static block, present only when
+                          the guardrail opted in. */}
+                      {configEnabled && (
+                        <InputSection
+                          label="Configuration"
+                          sublabel="input.configuration"
+                          body={JSON.stringify(run.configuration ?? {}, null, 2)}
+                        />
+                      )}
+
                       {/* Output Section */}
                       <div>
                         <label className="block text-xs font-medium text-[var(--color-text-tertiary)] mb-1.5 uppercase tracking-wide">
@@ -433,6 +488,37 @@ export function BlastRadiusExecutionModal({
             )}
           </div>
         </div>
+      </div>
+    </div>
+  );
+}
+
+/** Labeled JSON block used by the expanded result. Two lines of header
+ *  (the section name and the `input.*` path it lands on) plus a scrollable
+ *  monospace body. */
+function InputSection({
+  label,
+  sublabel,
+  body,
+}: {
+  label: string;
+  sublabel?: string;
+  body: string;
+}) {
+  return (
+    <div>
+      <div className="mb-1.5 flex items-baseline gap-2">
+        <label className="text-xs font-medium text-[var(--color-text-tertiary)] uppercase tracking-wide">
+          {label}
+        </label>
+        {sublabel && (
+          <code className="text-[10px] font-mono text-[var(--color-text-tertiary)]">
+            {sublabel}
+          </code>
+        )}
+      </div>
+      <div className="p-3 rounded-lg bg-[var(--color-surface)] border border-[var(--color-border-light)] font-mono text-xs overflow-auto max-h-40">
+        <pre className="text-[var(--color-text-secondary)]">{body}</pre>
       </div>
     </div>
   );
