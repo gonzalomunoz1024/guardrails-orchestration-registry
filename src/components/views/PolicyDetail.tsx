@@ -5,7 +5,6 @@ import {
   CheckCircle,
   XCircle,
   Clock,
-  Play,
   Radius,
   GitBranch,
   User,
@@ -229,11 +228,12 @@ function ReadOnlyEditorCard({ language, value, theme, height, label }: ReadOnlyE
 }
 
 export function PolicyDetail() {
-  const { selectedPolicyId, setView, navigateToBlastRadius } = useRegistryStore();
+  const { selectedPolicyId, setView, setAutoOpenBlastRadius } = useRegistryStore();
   const { resolvedTheme } = useUIStore();
   const loadForEdit = usePolicyStore((s) => s.loadForEdit);
   const [activeTab, setActiveTab] = useState<Tab>('overview');
   const [isLoadingEdit, setIsLoadingEdit] = useState(false);
+  const [isLoadingBlast, setIsLoadingBlast] = useState(false);
 
   // Fetch policy from backend
   const { data: backendPolicy, isLoading } = usePolicy(selectedPolicyId);
@@ -265,15 +265,12 @@ export function PolicyDetail() {
   const isLatest = !latestVersion || policy.currentVersion === latestVersion;
 
   // Re-fetch the input contract AND the rego source for the version being
-  // edited so the studio's baseline is authoritative, even if the cached
+  // loaded so the studio's baseline is authoritative, even if the cached
   // policy got loaded before those pieces were wired in. Best-effort: empty
   // schema / empty rego if the backend doesn't have one published yet.
-  const handleEdit = async () => {
+  // Shared by both Edit and Run-Blast-Radius.
+  const loadPolicyIntoStudio = async () => {
     if (!policy) return;
-    // Belt-and-braces: the button is disabled when not on the latest, but
-    // any caller-spawned path would also fall through here as a no-op.
-    if (!isLatest) return;
-    setIsLoadingEdit(true);
     const [contract, regoSource] = await Promise.all([
       guardrailsApi
         .getInputSchema(policy.id, policy.currentVersion)
@@ -286,8 +283,6 @@ export function PolicyDetail() {
     const inputExamples = contract.examples ?? [];
     const configJson = policy.configJson || '{}';
     const configEnabled = configJson.trim() !== '' && configJson.trim() !== '{}';
-    // Prefer the freshly-fetched rego; fall back to whatever the policy
-    // already carried (which our getPolicy mapper also populates).
     const regoCode = regoSource || policy.regoCode || '';
     loadForEdit({
       regoCode,
@@ -310,7 +305,31 @@ export function PolicyDetail() {
       tags: policy.tags,
       baseVersion: policy.currentVersion,
     });
+  };
+
+  const handleEdit = async () => {
+    if (!policy) return;
+    // Belt-and-braces: the button is disabled when not on the latest, but
+    // any caller-spawned path would also fall through here as a no-op.
+    if (!isLatest) return;
+    setIsLoadingEdit(true);
+    await loadPolicyIntoStudio();
     setIsLoadingEdit(false);
+    setView('create-policy');
+  };
+
+  // The "Blast Radius" button on this detail view loads the policy into
+  // the studio AND raises a one-shot flag so the studio pops its blast-
+  // radius drawer on mount. Reuses every working piece of the studio's
+  // existing blast-radius flow — test-input fetching, dep refetch per
+  // test, the execution modal — instead of routing to the broken
+  // standalone /blast-radius view.
+  const handleRunBlastRadius = async () => {
+    if (!policy) return;
+    setIsLoadingBlast(true);
+    await loadPolicyIntoStudio();
+    setAutoOpenBlastRadius(true);
+    setIsLoadingBlast(false);
     setView('create-policy');
   };
 
@@ -381,25 +400,22 @@ export function PolicyDetail() {
               Edit
             </button>
             <button
-              onClick={() => navigateToBlastRadius(policy.id)}
-              className={cn(
-                'flex items-center gap-2 px-4 py-2 rounded-[var(--radius-md)]',
-                'bg-[var(--color-surface-secondary)] text-[var(--color-text-primary)]',
-                'font-medium transition-all hover:bg-[var(--color-border-light)]'
-              )}
-            >
-              <Radius className="w-4 h-4" />
-              Blast Radius
-            </button>
-            <button
+              onClick={handleRunBlastRadius}
+              disabled={isLoadingBlast}
+              title="Load this guardrail into the studio and open the blast-radius runner"
               className={cn(
                 'flex items-center gap-2 px-4 py-2 rounded-[var(--radius-md)]',
                 'bg-[var(--color-info)] text-white',
-                'font-medium transition-all hover:opacity-90'
+                'font-medium transition-all hover:opacity-90',
+                'disabled:opacity-50 disabled:cursor-not-allowed'
               )}
             >
-              <Play className="w-4 h-4" />
-              Run Tests
+              {isLoadingBlast ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <Radius className="w-4 h-4" />
+              )}
+              Run Blast Radius
             </button>
           </div>
         </div>
@@ -551,9 +567,33 @@ export function PolicyDetail() {
             {policy.testCases.length > 0 ? (
               policy.testCases.map((test) => <TestCaseRow key={test.id} test={test} />)
             ) : (
-              <div className="flex flex-col items-center justify-center h-48 text-[var(--color-text-tertiary)]">
-                <p className="text-lg font-medium">No tests defined</p>
-                <p className="text-sm">Add test cases to validate this guardrail</p>
+              <div className="flex flex-col items-center justify-center h-64 text-center text-[var(--color-text-tertiary)] px-6">
+                <Radius className="w-10 h-10 mb-3 text-[var(--color-text-tertiary)] opacity-60" />
+                <p className="text-lg font-medium text-[var(--color-text-primary)]">
+                  Inline test cases aren't authored here yet
+                </p>
+                <p className="mt-1 text-sm max-w-md">
+                  This guardrail is validated against real evaluation history via Blast Radius —
+                  the runner fetches recent inputs, refetches external dependencies per test, and
+                  surfaces a verdict for each.
+                </p>
+                <button
+                  onClick={handleRunBlastRadius}
+                  disabled={isLoadingBlast}
+                  className={cn(
+                    'mt-4 flex items-center gap-2 px-4 py-2 rounded-[var(--radius-md)]',
+                    'bg-[var(--color-info)] text-white text-sm font-medium',
+                    'transition-all hover:opacity-90',
+                    'disabled:opacity-50 disabled:cursor-not-allowed'
+                  )}
+                >
+                  {isLoadingBlast ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Radius className="w-4 h-4" />
+                  )}
+                  Open Blast Radius
+                </button>
               </div>
             )}
           </div>

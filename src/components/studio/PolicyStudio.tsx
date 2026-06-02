@@ -108,7 +108,19 @@ export function PolicyStudio() {
     () => !metadata.name.trim() && baseVersion === null
   );
   const setView = useRegistryStore((s) => s.setView);
+  const autoOpenBlastRadius = useRegistryStore((s) => s.autoOpenBlastRadius);
+  const setAutoOpenBlastRadius = useRegistryStore((s) => s.setAutoOpenBlastRadius);
   const resetPolicy = usePolicyStore((s) => s.resetPolicy);
+
+  // Honor the one-shot flag from PolicyDetail's "Blast Radius" button so
+  // landing in the studio after that click pops the drawer immediately
+  // instead of forcing the user to find and click it again.
+  useEffect(() => {
+    if (autoOpenBlastRadius) {
+      setBlastOpen(true);
+      setAutoOpenBlastRadius(false);
+    }
+  }, [autoOpenBlastRadius, setAutoOpenBlastRadius]);
 
   const policyId = slugifyName(metadata.name);
 

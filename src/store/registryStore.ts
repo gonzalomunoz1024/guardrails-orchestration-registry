@@ -22,6 +22,13 @@ interface RegistryState {
   selectedResourceKind: string | null;
   selectedStatus: string | null;
   sidebarCollapsed: boolean;
+  /**
+   * One-shot hint from PolicyDetail's "Blast Radius" button: tells the
+   * studio to pop its blast-radius drawer the moment it mounts so users
+   * don't have to click "Blast radius" again after the load-into-studio
+   * navigation. Cleared by the studio when consumed.
+   */
+  autoOpenBlastRadius: boolean;
 
   setView: (view: ViewType) => void;
   selectPolicy: (policyId: string | null) => void;
@@ -31,6 +38,7 @@ interface RegistryState {
   setSelectedResourceKind: (resourceKind: string | null) => void;
   setSelectedStatus: (status: string | null) => void;
   toggleSidebar: () => void;
+  setAutoOpenBlastRadius: (open: boolean) => void;
   navigateToPolicy: (policy: RegistryPolicy) => void;
   navigateToBlastRadius: (policyId?: string) => void;
   navigateToSuite: (suite: GuardrailSuite) => void;
@@ -55,6 +63,7 @@ export const useRegistryStore = create<RegistryState>()(
       selectedResourceKind: null,
       selectedStatus: null,
       sidebarCollapsed: false,
+      autoOpenBlastRadius: false,
 
       setView: (view) => set({ currentView: view, selectedPolicyId: null, selectedSuiteId: null }),
       selectPolicy: (policyId) => set({ selectedPolicyId: policyId }),
@@ -64,6 +73,7 @@ export const useRegistryStore = create<RegistryState>()(
       setSelectedResourceKind: (resourceKind) => set({ selectedResourceKind: resourceKind }),
       setSelectedStatus: (status) => set({ selectedStatus: status }),
       toggleSidebar: () => set((state) => ({ sidebarCollapsed: !state.sidebarCollapsed })),
+      setAutoOpenBlastRadius: (open) => set({ autoOpenBlastRadius: open }),
       navigateToPolicy: (policy) => set({ currentView: 'policy-detail', selectedPolicyId: policy.id }),
       navigateToBlastRadius: (policyId) => set({
         currentView: 'blast-radius',
