@@ -6,6 +6,20 @@
  * real test inputs. Styled to match the studio's Apple design language.
  */
 
+/**
+ * One external dependency fetch as seen from a blast-radius test. Mirrors
+ * what the modal renders so the downloaded report has the same triage
+ * surface — name + URL + response (or error).
+ */
+export interface BlastReportFetchedDep {
+  name: string;
+  method: string;
+  url: string;
+  status: 'success' | 'error';
+  data: unknown;
+  error?: string | null;
+}
+
 export interface BlastReportTest {
   name: string;
   correlationId?: string | null;
@@ -15,6 +29,8 @@ export interface BlastReportTest {
   input: unknown;
   output: unknown;
   error?: string | null;
+  /** Per-test snapshot of external deps fetched before the OPA call. */
+  fetchedDeps?: BlastReportFetchedDep[];
 }
 
 export interface BlastReportData {
@@ -115,6 +131,13 @@ section.block{background:#fff;border-radius:18px;padding:8px 0;margin-bottom:20p
 .dot.ok{background:var(--ok)}.dot.bad{background:var(--bad)}.dot.warn{background:var(--warn)}
 .dur{font-size:12px;color:var(--sub);font-variant-numeric:tabular-nums}
 .io h4{font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--sub);margin:14px 0 6px}
+.io h4 .muted{font-family:"SF Mono",ui-monospace,Menlo,monospace;font-weight:500;text-transform:none;letter-spacing:0;color:#a1a1a6;margin-left:8px}
+.dep{border:1px solid var(--line);border-radius:10px;overflow:hidden;margin-bottom:8px;background:#fafafa}
+.dep-err{border-color:rgba(255,59,48,.3);background:rgba(255,59,48,.04)}
+.dep-head{padding:8px 12px;border-bottom:1px solid var(--line);display:flex;flex-wrap:wrap;gap:8px;justify-content:space-between;align-items:baseline}
+.dep-name{font-size:11px;color:var(--info);font-family:"SF Mono",ui-monospace,Menlo,monospace}
+.dep-url{font-size:11px;color:var(--sub);font-family:"SF Mono",ui-monospace,Menlo,monospace;word-break:break-all}
+.dep pre{margin:0;border-radius:0;max-height:260px}
 pre{background:#1d1d1f;color:#e6e6eb;border-radius:10px;padding:12px 14px;margin:0;
  font:12px/1.5 "SF Mono",ui-monospace,Menlo,monospace;white-space:pre-wrap;word-break:break-word;max-height:340px;overflow:auto}
 table.kv{width:100%;border-collapse:collapse;font-size:13px}
@@ -157,8 +180,28 @@ function testHTML(t: BlastReportTest, index: number): string {
     parts.push(`<div class="tags" style="margin-top:8px">${tags.map((g) => `<span class="tag">${esc(g)}</span>`).join('')}</div>`);
   }
   parts.push('<div class="io">');
-  parts.push('<h4>Input</h4>');
+
+  // Document — the test input payload that drove this evaluation.
+  parts.push('<h4>Document <span class="muted">input.document.*</span></h4>');
   parts.push(`<pre>${esc(asJson(t.input))}</pre>`);
+
+  // External dependencies — one block per dep, with the resolved URL and
+  // the response body so a reader of the report can see why a verdict
+  // went the way it did without having to replay the run.
+  if (t.fetchedDeps && t.fetchedDeps.length > 0) {
+    parts.push('<h4>External dependencies</h4>');
+    for (const dep of t.fetchedDeps) {
+      const isErr = dep.status === 'error';
+      parts.push(`<div class="dep ${isErr ? 'dep-err' : ''}">
+        <div class="dep-head">
+          <code class="dep-name">input.external.${esc(dep.name)}</code>
+          <code class="dep-url">${esc(dep.method || 'GET')} ${esc(dep.url)}</code>
+        </div>
+        <pre>${esc(isErr ? dep.error ?? 'Fetch failed' : asJson(dep.data))}</pre>
+      </div>`);
+    }
+  }
+
   if (t.error) {
     parts.push('<h4>Error</h4>');
     parts.push(`<pre>${esc(t.error)}</pre>`);
@@ -211,7 +254,7 @@ export function buildBlastRadiusReportHTML(data: BlastReportData): string {
   ${configBlock}
 
   <section class="block">
-    <div class="section-title">Test cases — Inputs &amp; Decisions</div>
+    <div class="section-title">Test cases — Document, external dependencies &amp; decisions</div>
     ${data.tests.map((t, i) => testHTML(t, i + 1)).join('')}
   </section>`;
 

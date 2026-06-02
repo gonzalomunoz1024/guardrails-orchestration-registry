@@ -104,6 +104,17 @@ export function BlastRadiusExecutionModal({
           input: testInput.input,
           output: result?.result || null,
           error: result?.error || null,
+          // Per-test external-dep fetches (URL + response or error) so the
+          // JSON dump matches the modal's expanded sections.
+          externalDependencies:
+            result?.fetchedDeps?.map((f) => ({
+              name: f.name,
+              method: (f.dep.method || 'GET').toUpperCase(),
+              url: f.url,
+              status: f.status,
+              data: f.data,
+              error: f.error ?? null,
+            })) ?? [],
         };
       }),
     };
@@ -148,6 +159,16 @@ export function BlastRadiusExecutionModal({
           input: testInput.input,
           output: r?.result ?? null,
           error: r?.error ?? null,
+          // Same per-test external-dep snapshot the modal renders. Lets the
+          // printed report stand alone as triage evidence.
+          fetchedDeps: r?.fetchedDeps?.map((f) => ({
+            name: f.name,
+            method: (f.dep.method || 'GET').toUpperCase(),
+            url: f.url,
+            status: f.status,
+            data: f.data,
+            error: f.error ?? null,
+          })),
         };
       }),
     });
