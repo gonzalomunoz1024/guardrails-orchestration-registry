@@ -81,8 +81,8 @@ export const RESERVED_FIELDS: ReservedField[] = [
   {
     path: 'metadata.organization',
     type: 'string',
-    note: 'Used to derive the LOB on the evaluation record and downstream events.',
-    required: true,
+    note: 'Used to derive the LOB on the evaluation record and downstream events. Optional — the orchestrator tolerates absence and downstream events just omit the LOB.',
+    required: false,
   },
   {
     path: 'spec',
