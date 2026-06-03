@@ -38,6 +38,7 @@ import {
 } from '@/utils';
 import { useAuthStore } from '@/store/authStore';
 import { usePolicyStore, useUIStore, useDraftStore, useBlastRunStore } from '@/store';
+import { useShallow } from 'zustand/react/shallow';
 import { snapshotCurrentDraft } from '@/store/draftActions';
 import { defaultEditorOptions } from '@/monaco/config';
 import { useGuardrailConfig } from '@/hooks/useGuardrailConfig';
@@ -227,14 +228,20 @@ export function SubmitPolicyModal({
   // Pull the last completed blast-radius run so we can embed its summary in
   // the PR description. Reviewers seeing "ran against N inputs, X passed,
   // Y denied" land in the diff with much more context than a bare patch.
-  const blastRun = useBlastRunStore((s) => ({
-    status: s.status,
-    guardrail: s.guardrail,
-    results: s.results,
-    total: s.total,
-    startedAt: s.startedAt,
-    finishedAt: s.finishedAt,
-  }));
+  // `useShallow` is required — the bare object selector returns a fresh
+  // reference every call, which trips Zustand 5's getSnapshot identity check
+  // and triggers React's "Maximum update depth exceeded" (#185) in prod
+  // builds the moment the studio is the persisted landing view.
+  const blastRun = useBlastRunStore(
+    useShallow((s) => ({
+      status: s.status,
+      guardrail: s.guardrail,
+      results: s.results,
+      total: s.total,
+      startedAt: s.startedAt,
+      finishedAt: s.finishedAt,
+    }))
+  );
   // Metadata-only publishes (no contract change) target the existing version
   // dir and only rewrite guardrail.yaml + configuration.yaml. The pre-flight
   // immutability check is inverted: it expects the dir to already exist.
