@@ -58,6 +58,11 @@ code,.mono{font-family:var(--font-mono);font-size:.92em}
 .wrap-wide{max-width:1200px;margin:0 auto;padding:0 clamp(20px,5vw,48px)}
 
 section{padding:clamp(64px,8vw,120px) 0;scroll-margin-top:24px}
+/* When an anchor link jumps to a section, the section's own top padding
+   pushes the heading ~1 inch below the viewport top. Negative scroll-margin
+   on linked sections pulls the section above the viewport so the content
+   (eyebrow + h2) lands at the top with a small breathing gap. */
+section[id]{scroll-margin-top:calc(-1 * clamp(64px,8vw,120px) + 24px)}
 section + section{border-top:1px solid var(--line)}
 .eyebrow{font-size:var(--fs-eyebrow);text-transform:uppercase;letter-spacing:var(--tr-eyebrow);font-weight:600;color:var(--sub);margin:0 0 18px}
 .eyebrow .step-num{color:var(--accent)}
@@ -123,6 +128,7 @@ pre{
   font-family:var(--font-mono);font-size:13px;line-height:1.5;
 }
 .code-line{display:block}
+.code-line.code-added{background:rgba(52,199,89,.12);box-shadow:inset 3px 0 0 0 var(--ok);padding-left:6px;margin-left:-9px}
 .tok-key{color:#82aaff}.tok-str{color:#c3e88d}.tok-num{color:#ffcb6b}.tok-kw{color:#c792ea}.tok-com{color:#7b8395}
 .tok-hov{border-bottom:1px dotted #82aaff;cursor:help;position:relative}
 
@@ -346,7 +352,7 @@ footer a:hover{color:var(--accent)}
   <div class="wrap">
     <p class="eyebrow">In 90 seconds</p>
     <h2>What this is</h2>
-    <p class="lede">Guardrail Studio is where you author the rules your platform applies before it does something risky like provisioning a VM, deploying a service, or pushing a config change. You write a small policy in <a href="#step-write" class="gloss">Rego<span class="gloss-pop"><strong>Rego</strong>OPA's declarative policy language. You describe the conditions under which something is true; the engine figures out the rest.</span></a>, describe the shape of the document it judges, optionally pull in static config or a live API call, and ship it as a versioned artifact the <a href="#step-evaluate" class="gloss">orchestrator<span class="gloss-pop"><strong>Orchestrator</strong>A separate service that actually evaluates guardrails against real production traffic. The Studio authors; the orchestrator enforces.</span></a> picks up automatically.</p>
+    <p class="lede">Guardrail Studio is where you author the rules your platform applies before it does something risky like provisioning a VM, deploying a service, or pushing a config change. You write a small policy in <a href="#step-write" class="gloss">Rego<span class="gloss-pop"><strong>Rego</strong>OPA's declarative policy language. You describe the conditions under which something is true; the engine figures out the rest.</span></a>, describe the shape of the document it judges, optionally pull in static config or a live API call, and ship it as a versioned artifact the <a href="#step-evaluate" class="gloss">orchestrator<span class="gloss-pop"><strong>Orchestrator</strong>A TAP (Technology Automation Platform) managed service that evaluates guardrails against real production traffic. The Studio authors; the orchestrator enforces.</span></a> picks up automatically.</p>
   </div>
 </section>
 
@@ -393,7 +399,7 @@ footer a:hover{color:var(--accent)}
         <g>
           <rect x="700" y="55" width="160" height="70" rx="18" fill="var(--ok-bg)" stroke="var(--ok)" stroke-width="2"/>
           <text x="780" y="85" font-size="16" font-weight="700" text-anchor="middle" fill="var(--ink)">decision</text>
-          <text x="780" y="105" font-size="11" text-anchor="middle" fill="var(--sub)">allow / deny / data</text>
+          <text x="780" y="105" font-size="11" text-anchor="middle" fill="var(--sub)">allow / deny</text>
         </g>
 
         <!-- arrows -->
@@ -413,17 +419,15 @@ footer a:hover{color:var(--accent)}
 <span class="code-line"></span>
 <span class="code-line"><span class="tok-kw">default</span> allow := <span class="tok-num">false</span></span>
 <span class="code-line"></span>
-<span class="code-line"><span class="tok-com"># Allow only if the requested image is on the approved list for the env.</span></span>
+<span class="code-line"><span class="tok-com"># Allow only when the requested image comes from our corporate registry.</span></span>
 <span class="code-line">allow <span class="tok-kw">if</span> {</span>
 <span class="code-line">    image := <span class="tok-hov" title="The inbound request body, nested under input.document. Source: the caller (Lightspeed, VMForge, etc.).">input.document</span>.spec.image.name</span>
-<span class="code-line">    env := <span class="tok-hov" title="The env field on the inbound document. Also a Document path.">input.document</span>.metadata.env</span>
-<span class="code-line">    approved := <span class="tok-hov" title="Static data published alongside this guardrail. Resolved from the registry's configurations collection.">input.configuration</span>.approvedImages[env]</span>
-<span class="code-line">    image <span class="tok-kw">in</span> approved</span>
+<span class="code-line">    startswith(image, <span class="tok-str">"registry.corp.io/"</span>)</span>
 <span class="code-line">}</span>
 <span class="code-line"></span>
 <span class="code-line">deny[msg] <span class="tok-kw">if</span> {</span>
 <span class="code-line">    <span class="tok-kw">not</span> allow</span>
-<span class="code-line">    msg := <span class="tok-str">"Image not on the approved list for this environment"</span></span>
+<span class="code-line">    msg := <span class="tok-str">"Image must come from the corporate registry"</span></span>
 <span class="code-line">}</span></pre>
 
     <div class="spacer-lg"></div>
@@ -457,7 +461,7 @@ footer a:hover{color:var(--accent)}
 <section>
   <div class="wrap">
     <p class="eyebrow">A closer look</p>
-    <h2>The four primitives</h2>
+    <h2>The three primitives</h2>
     <p class="lede">Each piece of <code>input</code> comes from a different place. Click any card to see what it is, where it comes from, and where it lands.</p>
     <div class="spacer-md"></div>
     <div class="inputs" role="tablist">
@@ -475,11 +479,6 @@ footer a:hover{color:var(--accent)}
         <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"/></svg></div>
         <h4>External</h4>
         <div class="where">input.external.&lt;name&gt;</div>
-      </button>
-      <button class="input-card" data-input="guardrail" aria-pressed="false">
-        <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L4 5v6c0 5.5 3.8 10.3 8 11 4.2-.7 8-5.5 8-11V5l-8-3z"/></svg></div>
-        <h4>Guardrail</h4>
-        <div class="where">input.guardrail</div>
       </button>
     </div>
     <div id="input-detail" class="input-detail" style="display:none">
@@ -613,85 +612,37 @@ footer a:hover{color:var(--accent)}
     </nav>
     <p class="eyebrow"><span class="step-num">Step 2</span> · Test</p>
     <h2>Verify before you ship</h2>
-    <p class="lede">Three layers of confidence. A live mini-evaluator that flips the verdict on every keystroke. A regression test that replays your draft against real historical traffic. A bird's-eye heatmap that surfaces how the policy behaves at scale.</p>
+    <p class="lede">Before you submit, the studio replays your edit against real historical traffic. You see the new rule and exactly which decisions it flips. No what-ifs.</p>
 
     <div class="spacer-lg"></div>
 
-    <!-- Live playground -->
-    <h3>Live mini-evaluator</h3>
-    <p class="lede" style="margin-top:8px;margin-bottom:24px">Edit the input below. The decision pill updates as you type. Policy: <code>allow</code> if <code>appId</code> is in the approved list, otherwise <code>deny</code>.</p>
-    <div class="card hov">
-      <div class="play">
-        <div class="col">
-          <h5>Input (you can edit)</h5>
-          <textarea id="play-input">{
-  "document": {
-    "metadata": {
-      "appId": "lightspeed",
-      "env": "prod"
-    }
-  },
-  "configuration": {
-    "approved": ["lightspeed", "vmforge"]
-  }
-}</textarea>
-        </div>
-        <div class="col">
-          <h5>Rule (read-only)</h5>
-          <textarea readonly>package demo
-
-default allow := false
-
-allow if {
-  input.document.metadata.appId in
-    input.configuration.approved
-}</textarea>
-        </div>
-      </div>
-      <div class="result">
-        <span id="play-verdict" class="verdict allow">allow</span>
-        <span id="play-trace" style="margin-left:14px;color:var(--sub)">appId="lightspeed" is in approved list → allow</span>
-      </div>
-    </div>
+    <h3>The rule</h3>
+    <p class="lede" style="margin-top:8px;margin-bottom:24px">One extra line tightens the policy. The image must come from our corporate registry <em>and</em> carry an explicit version tag.</p>
+    <pre><span class="code-line"><span class="tok-kw">package</span> approved_images.v1_0</span>
+<span class="code-line"></span>
+<span class="code-line"><span class="tok-kw">default</span> allow := <span class="tok-num">false</span></span>
+<span class="code-line"></span>
+<span class="code-line">allow <span class="tok-kw">if</span> {</span>
+<span class="code-line">    image := input.document.spec.image.name</span>
+<span class="code-line">    startswith(image, <span class="tok-str">"registry.corp.io/"</span>)</span>
+<span class="code-line code-added">    contains(image, <span class="tok-str">":"</span>)<span class="tok-com">  # require an explicit version tag</span></span>
+<span class="code-line">}</span></pre>
 
     <div class="spacer-lg"></div>
 
-    <!-- Regression test -->
-    <h3>Regression test</h3>
-    <p class="lede" style="margin-top:8px;margin-bottom:24px">Replay your draft against historical traffic. Each row is one real request the orchestrator has seen. The studio runs that request through the old version and the new version, then shows you both verdicts. Rows highlighted in amber are the ones your edit flipped.</p>
+    <h3>What it flips</h3>
+    <p class="lede" style="margin-top:8px;margin-bottom:24px">Five real requests, replayed through both versions. Amber rows are the ones the new rule denies.</p>
     <div class="scrub-wrap">
       <div class="scrub-head">
-        <span class="counter" id="scrub-count">3 of 8 outcomes changed</span>
-        <div style="margin-left:auto;display:flex;gap:6px">
-          <button class="chip active" data-filter="all">All requests</button>
-          <button class="chip" data-filter="changed">Changed only</button>
-        </div>
+        <span class="counter">2 of 5 outcomes change</span>
       </div>
-      <div class="blast-list" id="blast-list">
-        <div class="blast-row"><span class="id">req-9f3a · lightspeed · prod</span><span class="diff"><span class="chip-ok chip">allow</span><span class="diff-arrow">→</span><span class="chip-ok chip">allow</span></span></div>
-        <div class="blast-row"><span class="id">req-2c14 · vmforge · dev</span><span class="diff"><span class="chip-ok chip">allow</span><span class="diff-arrow">→</span><span class="chip-ok chip">allow</span></span></div>
-        <div class="blast-row"><span class="id">req-77a1 · ds-platform · prod</span><span class="diff"><span class="chip-bad chip">deny</span><span class="diff-arrow">→</span><span class="chip-bad chip">deny</span></span></div>
-        <div class="blast-row flipped"><span class="id">req-3b88 · lightspeed · staging</span><span class="diff"><span class="chip-ok chip">allow</span><span class="diff-arrow">→</span><span class="chip-bad chip">deny</span><span class="tag">changed</span></span></div>
-        <div class="blast-row"><span class="id">req-5e07 · billing · prod</span><span class="diff"><span class="chip-ok chip">allow</span><span class="diff-arrow">→</span><span class="chip-ok chip">allow</span></span></div>
-        <div class="blast-row"><span class="id">req-1aac · vmforge · prod</span><span class="diff"><span class="chip-bad chip">deny</span><span class="diff-arrow">→</span><span class="chip-bad chip">deny</span></span></div>
-        <div class="blast-row flipped"><span class="id">req-d010 · ds-platform · dev</span><span class="diff"><span class="chip-ok chip">allow</span><span class="diff-arrow">→</span><span class="chip-bad chip">deny</span><span class="tag">changed</span></span></div>
-        <div class="blast-row flipped"><span class="id">req-12fc · lightspeed · prod</span><span class="diff"><span class="chip-ok chip">allow</span><span class="diff-arrow">→</span><span class="chip-bad chip">deny</span><span class="tag">changed</span></span></div>
+      <div class="blast-list">
+        <div class="blast-row"><span class="id">registry.corp.io/web:1.4</span><span class="diff"><span class="chip-ok chip">allow</span><span class="diff-arrow">→</span><span class="chip-ok chip">allow</span></span></div>
+        <div class="blast-row"><span class="id">registry.corp.io/api:2.0</span><span class="diff"><span class="chip-ok chip">allow</span><span class="diff-arrow">→</span><span class="chip-ok chip">allow</span></span></div>
+        <div class="blast-row flipped"><span class="id">registry.corp.io/worker</span><span class="diff"><span class="chip-ok chip">allow</span><span class="diff-arrow">→</span><span class="chip-bad chip">deny</span><span class="tag">changed</span></span></div>
+        <div class="blast-row flipped"><span class="id">registry.corp.io/db</span><span class="diff"><span class="chip-ok chip">allow</span><span class="diff-arrow">→</span><span class="chip-bad chip">deny</span><span class="tag">changed</span></span></div>
+        <div class="blast-row"><span class="id">docker.io/library/postgres:14</span><span class="diff"><span class="chip-bad chip">deny</span><span class="diff-arrow">→</span><span class="chip-bad chip">deny</span></span></div>
       </div>
-    </div>
-
-    <div class="spacer-lg"></div>
-
-    <!-- Heatmap -->
-    <h3>Behavior at scale</h3>
-    <p class="lede" style="margin-top:8px;margin-bottom:24px">A guardrail is a function. Run it across a population of inputs and you get a distribution, not a single answer. Hover any cell to see the synthetic input that produced it.</p>
-    <div class="card hov" style="display:flex;flex-direction:column;align-items:flex-start">
-      <div class="heat-filters">
-        <button class="chip active" data-heat="all">All</button>
-        <button class="chip" data-heat="a">Allows</button>
-        <button class="chip" data-heat="d">Denies</button>
-      </div>
-      <div class="heat" id="heat"></div>
-      <div class="heat-tip" id="heat-tip">Hover a cell to see the input that drove it.</div>
     </div>
   </div>
 </section>
@@ -797,8 +748,8 @@ allow if {
       </div>
       <div class="ver-row" data-v="2">
         <span class="lock">🔒</span>
-        <span class="tag">approved_images@1.2</span>
-        <span class="summary">Owner moved to platform team</span>
+        <span class="tag">approved_images@1.1</span>
+        <span class="summary">Owner moved to platform team · republished in place at v1.1</span>
         <span class="chip-warn chip">metadata only</span>
       </div>
     </div>
@@ -809,7 +760,7 @@ allow if {
     </div>
 
     <div class="spacer-md"></div>
-    <p class="lede" style="font-size:15px"><strong>The rule of thumb:</strong> if a consumer's input would have to change, you get a new version. Cosmetic edits (description, tags, owner, enforcement level) don't bump; they overwrite the manifest's metadata in place at the existing version.</p>
+    <p class="lede" style="font-size:15px"><strong>The rule of thumb:</strong> if a consumer's input would have to change, you get a new version. Edits to description, tags, owner, or configuration data content don't bump — they overwrite the manifest in place at the existing version. (Enforcement lives on the suite, not on the guardrail itself.)</p>
   </div>
 </section>
 
@@ -980,18 +931,6 @@ const INPUT_DATA = {
     "region": "us-west-2"
   }
 }`
-  },
-  guardrail: {
-    name: "Guardrail metadata",
-    what: "The platform's view of the guardrail itself. Carries id, name, version, enforcement. Lets the policy reference its own identity.",
-    from: "The orchestrator injects this on every call.",
-    path: "input.guardrail",
-    code: `{
-  "id": "approved_images",
-  "name": "Approved Images",
-  "version": "1.3",
-  "enforcementType": "MANDATORY"
-}`
   }
 };
 const inputDetail = document.getElementById('input-detail');
@@ -1025,7 +964,7 @@ document.querySelectorAll('.tab').forEach(tab=>{
 const VERS = [
   {title:"approved_images@1.0",desc:"Initial publish. Allows the image when it appears in the approved list for prod or dev.",diff:`+ default allow := false\n+ allow if {\n+   image in input.configuration.approvedImages[env]\n+ }`},
   {title:"approved_images@1.1",desc:"Contract change. Added support for the staging environment. New schema includes `staging` as an allowed env value.",diff:`- approvedImages[env]\n+ approvedImages[env]   // env now: prod | staging | dev`},
-  {title:"approved_images@1.2",desc:"Metadata-only update. Owner moved to the platform team. No version bump on the rego/schema; only guardrail.yaml is rewritten in place.",diff:`  metadata:\n-   owner: alice@example.com\n+   owner: platform-team@example.com`},
+  {title:"approved_images@1.1 · metadata refresh",desc:"Owner moved to the platform team. Republished in place at v1.1 — the rego and schema are untouched, only guardrail.yaml was rewritten. No version bump.",diff:`  metadata:\n-   owner: alice@example.com\n+   owner: platform-team@example.com`},
 ];
 const verDetail = document.getElementById('ver-detail');
 document.querySelectorAll('.ver-row').forEach((row,i)=>{
@@ -1036,75 +975,6 @@ document.querySelectorAll('.ver-row').forEach((row,i)=>{
     document.getElementById('ver-diff').textContent = v.diff;
     verDetail.style.display = 'block';
     verDetail.scrollIntoView({behavior:'smooth',block:'nearest'});
-  });
-});
-
-// -------------------- regression test filter --------------------
-document.querySelectorAll('[data-filter]').forEach(btn => {
-  btn.addEventListener('click', () => {
-    document.querySelectorAll('[data-filter]').forEach(b => b.classList.remove('active'));
-    btn.classList.add('active');
-    const mode = btn.dataset.filter;
-    document.querySelectorAll('#blast-list .blast-row').forEach(row => {
-      const isFlipped = row.classList.contains('flipped');
-      row.style.display = (mode === 'changed' && !isFlipped) ? 'none' : '';
-    });
-  });
-});
-
-// -------------------- playground --------------------
-function evalPlay(){
-  let parsed;
-  try { parsed = JSON.parse(document.getElementById('play-input').value); }
-  catch(e){
-    const v=document.getElementById('play-verdict');v.className='verdict deny';v.textContent='invalid';
-    document.getElementById('play-trace').textContent = 'JSON parse error';
-    return;
-  }
-  const appId = parsed?.document?.metadata?.appId;
-  const approved = parsed?.configuration?.approved || [];
-  const allow = Array.isArray(approved) && approved.includes(appId);
-  const v = document.getElementById('play-verdict');
-  v.className = 'verdict ' + (allow?'allow':'deny');
-  v.textContent = allow ? 'allow' : 'deny';
-  document.getElementById('play-trace').textContent = allow
-    ? `appId="${appId}" is in approved list → allow`
-    : `appId="${appId ?? '(missing)'}" not in approved list → deny`;
-}
-let playDeb;
-document.getElementById('play-input').addEventListener('input',()=>{
-  clearTimeout(playDeb);
-  playDeb = setTimeout(evalPlay, 220);
-});
-evalPlay();
-
-// -------------------- heatmap --------------------
-const heat = document.getElementById('heat');
-const heatTip = document.getElementById('heat-tip');
-const APPS = ['lightspeed','vmforge','ds-platform','billing','data','infra','alice','bob','core','telemetry'];
-const ENVS = ['dev','staging','prod'];
-const APPROVED = new Set(['lightspeed','vmforge','billing','core','infra','telemetry']);
-const cells = [];
-for(let i=0;i<100;i++){
-  const app = APPS[i%APPS.length];
-  const env = ENVS[(i*7)%ENVS.length];
-  const allow = APPROVED.has(app) && env !== 'prod' ? true : (APPROVED.has(app) && Math.random()>.35);
-  const cell = document.createElement('div');
-  cell.className = 'cell ' + (allow?'a':'d');
-  cell.dataset.kind = allow ? 'a':'d';
-  cell.dataset.label = `app=${app}, env=${env} → ${allow?'allow':'deny'}`;
-  cell.addEventListener('mouseenter', ()=>{ heatTip.textContent = cell.dataset.label; });
-  cell.addEventListener('mouseleave', ()=>{ heatTip.textContent = 'Hover a cell to see the input that drove it.'; });
-  heat.appendChild(cell);
-  cells.push(cell);
-}
-document.querySelectorAll('[data-heat]').forEach(btn=>{
-  btn.addEventListener('click', ()=>{
-    document.querySelectorAll('[data-heat]').forEach(b=>b.classList.toggle('active', b===btn));
-    const k = btn.dataset.heat;
-    cells.forEach(c=>{
-      c.style.opacity = (k==='all' || c.dataset.kind===k) ? '0.85' : '0.15';
-    });
   });
 });
 
