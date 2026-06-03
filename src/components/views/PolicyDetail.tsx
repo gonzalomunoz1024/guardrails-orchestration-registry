@@ -283,6 +283,14 @@ export function PolicyDetail() {
     ]);
     const inputSchemaJson = contract.schema ? JSON.stringify(contract.schema, null, 2) : '{}';
     const inputExamples = contract.examples ?? [];
+    // Restore the document the schema was derived from. The studio's Edit
+    // path defaulted inputJson to "{}" — which on a guardrail with a real
+    // schema means the document and schema mismatch on the very first
+    // render. Loading the first published example as the live document
+    // makes them consistent again. When there are no published examples
+    // the document stays blank and the studio's reserved-fields banner
+    // surfaces what's missing.
+    const inputJson = inputExamples[0]?.payload;
     const configJson = policy.configJson || '{}';
     const configEnabled = configJson.trim() !== '' && configJson.trim() !== '{}';
     // Strip the .vMAJOR_MINOR suffix the publish flow appended so the studio
@@ -297,6 +305,7 @@ export function PolicyDetail() {
       regoCode,
       configJson,
       configEnabled,
+      inputJson,
       inputSchemaJson,
       inputExamples,
       externalDeps: policy.externalDeps,
