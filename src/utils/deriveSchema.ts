@@ -11,7 +11,7 @@
  * src/utils/reservedFields.ts.
  */
 
-import { applyReservedFields } from './reservedFields';
+import { applyReservedFields, stripOptionalReservedFields } from './reservedFields';
 
 function schemaForValue(value: unknown): Record<string, unknown> {
   if (value === null) return { type: 'null' };
@@ -54,4 +54,80 @@ export function deriveSchemaFromJson(json: string): string {
     return '{}';
   }
   return JSON.stringify(deriveSchema(parsed), null, 2);
+}
+
+/**
+ * Structural equality for JSON-shaped values, used to compare a published
+ * schema (round-tripped through YAML/Mongo/the registry) against a
+ * locally-derived schema. Byte-equality on the JSON.stringify of either
+ * side is too brittle for this purpose:
+ *
+ *   - The backend YAML serializer reorders object keys.
+ *   - It drops empty arrays — a `required: []` on the local side comes
+ *     back as a missing `required` key on the wire.
+ *   - Numeric / whitespace formatting can drift across the round-trip.
+ *
+ * This helper treats `required: []` as equivalent to a missing `required`
+ * key, treats arrays as multisets when the key name is "required" or
+ * "enum" (where order is semantically irrelevant) and otherwise positional,
+ * and compares objects key-by-key without insertion-order sensitivity.
+ *
+ * Used to decide "is this published schema the auto-derive of the
+ * published example?" without false negatives from cosmetic drift.
+ */
+export function schemasAreStructurallyEqual(a: unknown, b: unknown): boolean {
+  // Normalize away legacy `required: false` reserved-field declarations.
+  // Schemas published BEFORE applyReservedFields stopped force-injecting
+  // optional reserved fields still carry e.g. `metadata.organization` even
+  // when the source document didn't. After the change, the local derive
+  // doesn't carry them. Stripping both sides means an Edit on a v1.4
+  // guardrail still detects "this is the auto-derive form" and lands the
+  // user in Auto mode.
+  return compare(stripOptionalReservedFields(a), stripOptionalReservedFields(b), '');
+}
+
+function compare(a: unknown, b: unknown, key: string): boolean {
+  // Both arrays of strings under `required` (or `enum`) are sets, not lists.
+  if (Array.isArray(a) && Array.isArray(b)) {
+    const orderInsensitive = key === 'required' || key === 'enum';
+    if (a.length !== b.length) return false;
+    if (orderInsensitive) {
+      const counts = new Map<string, number>();
+      for (const x of a) counts.set(String(x), (counts.get(String(x)) ?? 0) + 1);
+      for (const y of b) {
+        const k = String(y);
+        const n = counts.get(k);
+        if (!n) return false;
+        if (n === 1) counts.delete(k);
+        else counts.set(k, n - 1);
+      }
+      return counts.size === 0;
+    }
+    return a.every((item, i) => compare(item, b[i], ''));
+  }
+  // One side array, the other not — except: `required: []` == `required` missing.
+  if (Array.isArray(a) || Array.isArray(b)) {
+    if (key === 'required') {
+      const arr = (Array.isArray(a) ? a : b) as unknown[];
+      const other = Array.isArray(a) ? b : a;
+      return arr.length === 0 && other === undefined;
+    }
+    return false;
+  }
+  if (a == null || b == null) return a === b;
+  if (typeof a !== 'object' || typeof b !== 'object') return a === b;
+  const ao = a as Record<string, unknown>;
+  const bo = b as Record<string, unknown>;
+  const keys = new Set([...Object.keys(ao), ...Object.keys(bo)]);
+  for (const k of keys) {
+    const av = ao[k];
+    const bv = bo[k];
+    // Tolerate `required: []` on either side against a missing key on the other.
+    if (k === 'required') {
+      if (av === undefined && Array.isArray(bv) && bv.length === 0) continue;
+      if (bv === undefined && Array.isArray(av) && av.length === 0) continue;
+    }
+    if (!compare(av, bv, k)) return false;
+  }
+  return true;
 }

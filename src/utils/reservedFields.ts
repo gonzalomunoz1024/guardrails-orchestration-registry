@@ -148,6 +148,16 @@ function setPropertyAtPath(root: SchemaObject, path: string, leaf: SchemaObject)
  * allows the orchestrator's envelope at the named locations with the right
  * types. Idempotent: re-running on an already-merged schema is a no-op.
  *
+ * Only `required: true` fields get force-injected. The orchestrator either
+ * mandates those (apiVersion, kind, etc.) or treats them as universally
+ * present, so the schema must declare them regardless of what the author's
+ * sample document carries. `required: false` reserved fields — currently
+ * `metadata.correlationId` and `metadata.organization` — are NOT force-
+ * injected; the orchestrator tolerates their absence, so the schema only
+ * declares them when the author's document actually contains them. That
+ * lets a user remove an optional reserved key from the document and see
+ * it disappear from the published schema.
+ *
  * Leaves intermediate `required` arrays untouched — customers decide what's
  * required for their own observability; the orchestrator never requires
  * these itself.
@@ -156,10 +166,51 @@ export function applyReservedFields(schema: SchemaObject): SchemaObject {
   const root: SchemaObject = { ...schema };
   if (root.type !== 'object') root.type = 'object';
   for (const field of RESERVED_FIELDS) {
+    if (!field.required) continue;
     const leaf: SchemaObject = field.type === 'object' ? { type: 'object' } : { type: field.type };
     setPropertyAtPath(root, field.path, leaf);
   }
   return root;
+}
+
+/**
+ * Remove the `required: false` reserved fields from a schema tree so legacy
+ * schemas (published before applyReservedFields stopped force-injecting
+ * those fields) can be compared structurally against freshly-derived
+ * schemas. Both sides go through this before equality is checked — that
+ * way "loaded has organization, local-derive doesn't" doesn't false-fail.
+ */
+export function stripOptionalReservedFields(schema: unknown): unknown {
+  if (!schema || typeof schema !== 'object' || Array.isArray(schema)) return schema;
+  // Deep clone so we don't mutate the caller's value.
+  const clone = JSON.parse(JSON.stringify(schema)) as SchemaObject;
+  for (const field of RESERVED_FIELDS) {
+    if (field.required) continue;
+    deletePropertyAtPath(clone, field.path);
+  }
+  return clone;
+}
+
+/** Walk to the parent of `path` and delete its leaf segment from
+ *  `properties`, plus prune it from any sibling `required` array. */
+function deletePropertyAtPath(root: SchemaObject, path: string): void {
+  const segments = path.split('.');
+  let cursor: SchemaObject = root;
+  for (let i = 0; i < segments.length - 1; i++) {
+    const props = cursor.properties as SchemaObject | undefined;
+    if (!props || typeof props !== 'object') return;
+    const next = props[segments[i]] as SchemaObject | undefined;
+    if (!next || typeof next !== 'object') return;
+    cursor = next;
+  }
+  const props = cursor.properties as SchemaObject | undefined;
+  if (!props || typeof props !== 'object') return;
+  const leaf = segments[segments.length - 1];
+  delete props[leaf];
+  if (Array.isArray(cursor.required)) {
+    cursor.required = (cursor.required as string[]).filter((k) => k !== leaf);
+    if ((cursor.required as string[]).length === 0) delete cursor.required;
+  }
 }
 
 /** Walk a plain JSON value down a dot-path; returns the value at the leaf or

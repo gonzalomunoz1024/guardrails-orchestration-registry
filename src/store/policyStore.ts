@@ -96,6 +96,15 @@ export interface LoadForEditPayload {
   tags: string[];
   /** The current immutable version of the guardrail being edited. */
   baseVersion: string;
+  /**
+   * Optional override. When the caller can prove the published schema was
+   * auto-derived from the example document (e.g. by checking byte equality
+   * with deriveSchemaFromJson(example.payload)), passing `true` keeps the
+   * studio in auto mode so doc edits flow into the schema. Defaults to
+   * false — the safe assumption when we can't be sure the schema is
+   * derivable, so we don't clobber a hand-crafted contract.
+   */
+  inputSchemaAuto?: boolean;
 }
 
 const initialMetadata: PolicyMetadata = {
@@ -228,9 +237,13 @@ export const usePolicyStore = create<PolicyState>()(
           tags: p.tags,
           inputSchemaJson: p.inputSchemaJson,
           inputExamples: p.inputExamples,
-          // Manual schema mode — we have a published contract; auto-derive
-          // would clobber it on every Document keystroke.
-          inputSchemaAuto: false,
+          // Default to Manual so we don't clobber a possibly hand-crafted
+          // schema on the very first render. The caller can pass `true`
+          // when it's verified that the published schema is the auto-derived
+          // form — in which case the schema follows document edits naturally
+          // and the byte-identical first-render derive is a no-op (no
+          // spurious version bump on mount).
+          inputSchemaAuto: p.inputSchemaAuto ?? false,
           baseVersion: p.baseVersion,
           baseRego: p.regoCode,
           baseInputSchemaJson: p.inputSchemaJson,

@@ -28,7 +28,12 @@ import { defaultEditorOptions } from '@/monaco/config';
 import { cn } from '@/utils';
 import type { PolicyTestCase, PolicyVersion } from '@/types';
 import { RESOURCE_KIND_LABELS } from '@/types';
-import { stripVersionFromRegoPackage } from '@/utils';
+import {
+  stripVersionFromRegoPackage,
+  deriveSchema,
+  deriveSchemaFromJson,
+  schemasAreStructurallyEqual,
+} from '@/utils';
 import { PolicyInputDiagram } from './PolicyInputDiagram';
 
 type Tab = 'overview' | 'code' | 'schema' | 'tests' | 'versions' | 'config';
@@ -291,6 +296,39 @@ export function PolicyDetail() {
     // the document stays blank and the studio's reserved-fields banner
     // surfaces what's missing.
     const inputJson = inputExamples[0]?.payload;
+    // Decide whether the studio should run in Auto schema mode (doc edits
+    // flow into the schema) on this Edit.
+    //
+    // The signal we trust: does the published schema match what we'd
+    // locally derive from the example? Byte-equality on JSON.stringify
+    // was the previous attempt and is too brittle — the backend round-
+    // trips manifests through YAML/Mongo which reorders keys and drops
+    // empty `required` arrays, so a schema that WAS auto-derived at
+    // publish time rarely comes back byte-identical. We use a structural
+    // compare (`schemasAreStructurallyEqual`) instead so the auto signal
+    // survives the round-trip. If the structural compare fails the schema
+    // really is hand-crafted; we stay in Manual and the Submit-time
+    // divergence banner covers any drift.
+    const inputSchemaAuto = (() => {
+      if (!inputJson) return false;
+      try {
+        const localDerived = deriveSchema(JSON.parse(inputJson));
+        const loaded = contract.schema;
+        return !!loaded && schemasAreStructurallyEqual(localDerived, loaded);
+      } catch {
+        return false;
+      }
+    })();
+    // When we've decided it's safe to run in Auto mode, normalize the
+    // loaded schema string to the locally-derived form. They're
+    // structurally equal but not byte-equal (because of the YAML round-
+    // trip on the backend), and the studio's bump effect compares
+    // strings — without this normalization the auto-derive effect would
+    // run on mount, rewrite inputSchemaJson to the local form, drift
+    // from baseInputSchemaJson, and bump the version spuriously before
+    // the user touches anything.
+    const normalizedInputSchemaJson =
+      inputSchemaAuto && inputJson ? deriveSchemaFromJson(inputJson) : inputSchemaJson;
     const configJson = policy.configJson || '{}';
     const configEnabled = configJson.trim() !== '' && configJson.trim() !== '{}';
     // Strip the .vMAJOR_MINOR suffix the publish flow appended so the studio
@@ -306,7 +344,8 @@ export function PolicyDetail() {
       configJson,
       configEnabled,
       inputJson,
-      inputSchemaJson,
+      inputSchemaJson: normalizedInputSchemaJson,
+      inputSchemaAuto,
       inputExamples,
       externalDeps: policy.externalDeps,
       metadata: {
