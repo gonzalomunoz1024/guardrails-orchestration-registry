@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { policyKeys } from '@/hooks/usePolicies';
 import {
@@ -9,6 +9,7 @@ import {
   ExternalLink,
   CheckCircle,
   AlertCircle,
+  AlertTriangle,
   Loader2,
   FileText,
   FolderTree,
@@ -32,6 +33,7 @@ import {
   toGuardrailYaml,
   toGuardrailConfigurationYaml,
   appendVersionToRegoPackage,
+  deriveSchemaFromJson,
 } from '@/utils';
 import { useAuthStore } from '@/store/authStore';
 import { usePolicyStore, useUIStore, useDraftStore } from '@/store';
@@ -145,12 +147,14 @@ export function SubmitPolicyModal({
   const {
     externalDeps,
     configEnabled,
+    inputJson,
     inputSchemaJson,
     inputExamples,
     baseVersion,
   } = usePolicyStore();
   const queryClient = useQueryClient();
   const setDraftId = usePolicyStore((s) => s.setDraftId);
+  const setInputSchemaJson = usePolicyStore((s) => s.setInputSchemaJson);
   const { resolvedTheme } = useUIStore();
   // Metadata-only publishes (no contract change) target the existing version
   // dir and only rewrite guardrail.yaml + configuration.yaml. The pre-flight
@@ -236,6 +240,27 @@ export function SubmitPolicyModal({
   const exampleArtifacts = inputExamples
     .filter((e) => e.payload.trim())
     .map((e, i) => ({ file: `examples/${slugExample(e.name, i)}.json`, payload: e.payload }));
+
+  // Detect divergence between the current document and the schema we're
+  // about to publish. On Edit we deliberately don't auto-derive (the loaded
+  // schema might have been hand-crafted) — but that means a user who edits
+  // only the document is on a path to publish a stale schema. Surface the
+  // mismatch here so they can choose to re-derive in one click.
+  const trimmedDoc = inputJson?.trim?.() ?? '';
+  const hasMeaningfulDoc = trimmedDoc !== '' && trimmedDoc !== '{}';
+  const derivedSchemaFromDoc = useMemo(
+    () => deriveSchemaFromJson(inputJson || '{}'),
+    [inputJson]
+  );
+  // Guard against invalid-JSON documents: deriveSchemaFromJson returns "{}"
+  // when the input can't be parsed, and we don't want the banner to lure
+  // the user into replacing a real schema with an empty one.
+  const derivedIsMeaningful = derivedSchemaFromDoc !== '{}';
+  const schemaDivergesFromDoc =
+    hasMeaningfulDoc &&
+    derivedIsMeaningful &&
+    (inputSchemaJson || '{}') !== derivedSchemaFromDoc;
+  const handleResyncSchema = () => setInputSchemaJson(derivedSchemaFromDoc);
 
   // Parse the authored JSON Schema once; embedded into spec.inputSchema.content
   // so the manifest is self-contained per REGISTRY_API.md.
@@ -789,6 +814,39 @@ ${artifactFiles.map((f) => `- \`${f.path}\``).join('\n')}
                 </p>
               </div>
             </section>
+
+            {/* Schema-out-of-sync warning. We only auto-derive the schema
+                from the document in the studio when inputSchemaAuto is on
+                (the default for new guardrails, OFF on Edit so we don't
+                clobber hand-crafted contracts). That means a user who only
+                edits the document on an existing guardrail is otherwise
+                about to publish a stale schema. Detect the divergence here
+                and let them resync in one click — the studio's bump effect
+                then picks up the schema change as a real contract change. */}
+            {schemaDivergesFromDoc && (
+              <div className="rounded-2xl border border-[var(--color-warning)]/40 bg-[var(--color-warning-bg)]/60 px-5 py-4 flex items-start gap-3">
+                <AlertTriangle className="w-5 h-5 mt-0.5 text-[var(--color-warning)] shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold text-[var(--color-text-primary)]">
+                    Input schema is out of sync with the document
+                  </p>
+                  <p className="mt-1 text-xs text-[var(--color-text-secondary)]">
+                    The document below doesn't match the schema you're about to publish in{' '}
+                    <code className="font-mono">input-schema.json</code>. Re-derive it so adopters
+                    pin against the right contract.
+                  </p>
+                </div>
+                <button
+                  onClick={handleResyncSchema}
+                  className={cn(
+                    'shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium',
+                    'bg-[var(--color-warning)] text-white transition-all hover:opacity-90'
+                  )}
+                >
+                  Update schema
+                </button>
+              </div>
+            )}
 
             {/* Files to be created */}
             <section className="rounded-2xl border border-[var(--color-border-light)] bg-[var(--color-surface)] overflow-hidden">
