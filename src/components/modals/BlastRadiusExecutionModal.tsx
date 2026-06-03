@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, useEffect } from 'react';
 import {
   X,
   Play,
@@ -49,6 +49,25 @@ export function BlastRadiusExecutionModal({
 }: BlastRadiusExecutionModalProps) {
   const run = useBlastRunStore();
   const [expandedResult, setExpandedResult] = useState<string | null>(null);
+
+  // The blast run store is a singleton — minimizing the modal keeps the
+  // current run going. The price is that an old run for guardrail A
+  // sticks around in the store even after the user has navigated to
+  // guardrail B; opening the modal on B would otherwise render A's
+  // testInputs and results. Reset the store when the modal opens for a
+  // guardrail different from whatever last ran (or didn't), so the user
+  // gets a clean "Start Analysis" surface instead of stale details from
+  // some other guardrail.
+  useEffect(() => {
+    if (!isOpen) return;
+    const lastGuardrailId = run.guardrail?.id;
+    if (lastGuardrailId && lastGuardrailId !== guardrailInfo.id) {
+      run.reset();
+    }
+    // run is a snapshot; we want this to fire when isOpen flips on or the
+    // guardrail identity changes, not on every internal store update.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, guardrailInfo.id]);
 
   // Run lifecycle lives in the store so it keeps going when the modal is minimized.
   const isExecuting = run.status === 'running';
