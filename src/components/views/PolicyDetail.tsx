@@ -16,6 +16,7 @@ import {
   ChevronRight,
   Copy,
   Check,
+  FileJson,
   Loader2,
   Pencil,
 } from 'lucide-react';
@@ -30,7 +31,7 @@ import { RESOURCE_KIND_LABELS } from '@/types';
 import { stripVersionFromRegoPackage } from '@/utils';
 import { PolicyInputDiagram } from './PolicyInputDiagram';
 
-type Tab = 'overview' | 'code' | 'tests' | 'versions' | 'config';
+type Tab = 'overview' | 'code' | 'schema' | 'tests' | 'versions' | 'config';
 
 function formatDate(dateString: string): string {
   return new Date(dateString).toLocaleDateString('en-US', {
@@ -344,6 +345,7 @@ export function PolicyDetail() {
   const tabs: { id: Tab; label: string }[] = [
     { id: 'overview', label: 'Overview' },
     { id: 'code', label: 'Rego' },
+    { id: 'schema', label: 'Schema' },
     { id: 'tests', label: `Tests (${policy.testCases.length})` },
     { id: 'versions', label: `Versions (${policy.versions.length})` },
     { id: 'config', label: 'Configuration' },
@@ -568,6 +570,30 @@ export function PolicyDetail() {
             height="600px"
             label="policy.rego"
           />
+        )}
+
+        {activeTab === 'schema' && (
+          policy.inputSchemaJson ? (
+            <ReadOnlyEditorCard
+              language="json"
+              value={policy.inputSchemaJson}
+              theme={resolvedTheme === 'dark' ? 'vs-dark' : 'vs'}
+              height="600px"
+              label="input-schema.json"
+            />
+          ) : (
+            <div className="flex flex-col items-center justify-center h-64 text-center text-[var(--color-text-tertiary)] px-6">
+              <FileJson className="w-10 h-10 mb-3 text-[var(--color-text-tertiary)] opacity-60" />
+              <p className="text-lg font-medium text-[var(--color-text-primary)]">
+                No input schema published for this version
+              </p>
+              <p className="mt-1 text-sm max-w-md">
+                Authors publish a JSON Schema alongside the rego so adopters know
+                what shape the inbound document must have. This version was
+                published without one — re-publish from the studio to attach one.
+              </p>
+            </div>
+          )
         )}
 
         {activeTab === 'tests' && (

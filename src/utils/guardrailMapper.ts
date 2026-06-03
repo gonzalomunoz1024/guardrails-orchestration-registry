@@ -70,6 +70,11 @@ export function mapManifestToPolicy(
   const content = config?.content ?? spec.configuration?.content ?? {};
   const target = spec.target ?? ({} as { resourceKind: unknown });
   const externalDeps = decodeDependenciesFromManifest(spec.externalDependencies);
+  // The manifest embeds the published input schema body under
+  // spec.inputSchema.content; the detail view's Schema tab renders this
+  // verbatim so adopters can see exactly what shape the guardrail expects.
+  const schemaContent = spec.inputSchema?.content;
+  const inputSchemaJson = schemaContent ? JSON.stringify(schemaContent, null, 2) : undefined;
 
   return {
     id: metadata.name ?? '',
@@ -96,6 +101,7 @@ export function mapManifestToPolicy(
     })),
     regoCode,
     configJson: JSON.stringify(content, null, 2),
+    inputSchemaJson,
     externalDeps,
     testCases: [],
     stats: {
