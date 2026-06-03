@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { Search, Bell, Moon, Sun, LogOut, ChevronDown } from 'lucide-react';
+import { Search, Bell, Moon, Sun, LogOut, ChevronDown, Compass } from 'lucide-react';
 import { useTheme } from '@/hooks';
 import { useRegistryStore } from '@/store/registryStore';
 import { useAuthStore } from '@/store/authStore';
@@ -216,6 +216,25 @@ export function TopBar() {
             />
           </div>
         )}
+
+        {/* Onboarding / tour — opens a static explainer page that we ship in
+            public/ so a newcomer can read how the guardrail studio works
+            without needing a guide. New tab so it doesn't yank them out of
+            whatever they were doing. */}
+        <a
+          href="/onboarding.html"
+          target="_blank"
+          rel="noopener noreferrer"
+          title="How Guardrail Studio works"
+          aria-label="How Guardrail Studio works"
+          className={cn(
+            'p-2 rounded-[var(--radius-md)] transition-all',
+            'text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]',
+            'hover:bg-[var(--color-surface-secondary)]'
+          )}
+        >
+          <Compass className="w-5 h-5" />
+        </a>
 
         {/* Notifications */}
         <NotificationsMenu />

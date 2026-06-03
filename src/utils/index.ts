@@ -14,3 +14,4 @@ export * from './resourceKind';
 export * from './reservedFields';
 export * from './regoPackage';
 export * from './fetchDepsForDocument';
+export * from './buildGuardrailArtifacts';

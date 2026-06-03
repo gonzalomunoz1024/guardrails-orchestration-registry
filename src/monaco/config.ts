@@ -39,4 +39,14 @@ export const defaultEditorOptions: Monaco.editor.IStandaloneEditorConstructionOp
     cursorSmoothCaretAnimation: 'on',
     smoothScrolling: true,
     bracketPairColorization: { enabled: true },
+    // Render overflow widgets (the hover popup, parameter hints, etc.) into
+    // document.body instead of the editor's own DOM. Our editor lives inside
+    // a `rounded` wrapper with `overflow-hidden`, which otherwise clips the
+    // hover popup when the error is on one of the first few lines — the
+    // popup tries to position above the line and gets cropped at the top.
+    fixedOverflowWidgets: true,
+    // Prefer hover below the line. Monaco still flips to above when there's
+    // no room below; this just avoids the line-3-gets-cropped case where
+    // it'd default to above with no fallback room.
+    hover: { above: false },
   };

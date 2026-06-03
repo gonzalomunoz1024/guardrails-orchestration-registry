@@ -23,11 +23,12 @@ import {
   FileJson,
   Boxes,
   Eye,
+  Columns2,
 } from 'lucide-react';
 import JSZip from 'jszip';
 import { saveAs } from 'file-saver';
 import { Octokit } from 'octokit';
-import Editor from '@monaco-editor/react';
+import Editor, { DiffEditor } from '@monaco-editor/react';
 import {
   cn,
   toGuardrailYaml,
@@ -36,7 +37,7 @@ import {
   deriveSchemaFromJson,
 } from '@/utils';
 import { useAuthStore } from '@/store/authStore';
-import { usePolicyStore, useUIStore, useDraftStore } from '@/store';
+import { usePolicyStore, useUIStore, useDraftStore, useBlastRunStore } from '@/store';
 import { snapshotCurrentDraft } from '@/store/draftActions';
 import { defaultEditorOptions } from '@/monaco/config';
 import { useGuardrailConfig } from '@/hooks/useGuardrailConfig';
@@ -134,6 +135,72 @@ function languageForPath(path: string): string {
   return 'plaintext';
 }
 
+interface BlastRunSnapshot {
+  status: 'idle' | 'running' | 'done';
+  guardrail: { id: string; name: string; version: string } | null;
+  results: Record<string, { status: 'pending' | 'running' | 'passed' | 'failed' | 'error' }>;
+  total: number;
+  startedAt: string | null;
+  finishedAt: string | null;
+}
+
+/**
+ * Render the most recent blast-radius run as a markdown section for the PR
+ * body. Returns an empty string when there's nothing useful to share — no
+ * run, run still in flight, or the run targeted a different guardrail. The
+ * caller dedents the wrapping newlines.
+ */
+function buildBlastRadiusPrSection(
+  run: BlastRunSnapshot,
+  policyId: string,
+  submittedVersion: string
+): string {
+  if (run.status !== 'done') return '';
+  if (!run.guardrail || run.guardrail.id !== policyId) return '';
+  if (run.total === 0) return '';
+
+  let passed = 0;
+  let failed = 0;
+  let errored = 0;
+  for (const r of Object.values(run.results)) {
+    if (r.status === 'passed') passed++;
+    else if (r.status === 'failed') failed++;
+    else if (r.status === 'error') errored++;
+  }
+
+  // Run pinned to a different version (e.g. user edited after running). Note
+  // it so the reviewer knows the numbers are from a near-but-not-exact build,
+  // but still surface them — the impact picture is usually still relevant.
+  const versionNote =
+    run.guardrail.version && run.guardrail.version !== submittedVersion
+      ? ` (run targeted v${run.guardrail.version}, this PR publishes v${submittedVersion})`
+      : '';
+
+  const durationMs =
+    run.startedAt && run.finishedAt
+      ? new Date(run.finishedAt).getTime() - new Date(run.startedAt).getTime()
+      : null;
+  const durationLabel =
+    durationMs == null
+      ? ''
+      : durationMs < 1000
+        ? `${durationMs}ms`
+        : `${(durationMs / 1000).toFixed(1)}s`;
+
+  const pct = (n: number) => (run.total === 0 ? '0%' : `${Math.round((n / run.total) * 100)}%`);
+
+  return `### Blast Radius Results${versionNote}
+Replayed against **${run.total}** historical input${run.total === 1 ? '' : 's'}${durationLabel ? ` in ${durationLabel}` : ''}.
+
+| Outcome | Count | Share |
+|---------|-------|-------|
+| ✅ Allowed | ${passed} | ${pct(passed)} |
+| ⛔ Denied | ${failed} | ${pct(failed)} |
+| ⚠️ Errored | ${errored} | ${pct(errored)} |
+
+_Run finished ${run.finishedAt ? new Date(run.finishedAt).toISOString() : 'recently'}._`;
+}
+
 export function SubmitPolicyModal({
   isOpen,
   onClose,
@@ -151,11 +218,23 @@ export function SubmitPolicyModal({
     inputSchemaJson,
     inputExamples,
     baseVersion,
+    baseFileContents,
   } = usePolicyStore();
   const queryClient = useQueryClient();
   const setDraftId = usePolicyStore((s) => s.setDraftId);
   const setInputSchemaJson = usePolicyStore((s) => s.setInputSchemaJson);
   const { resolvedTheme } = useUIStore();
+  // Pull the last completed blast-radius run so we can embed its summary in
+  // the PR description. Reviewers seeing "ran against N inputs, X passed,
+  // Y denied" land in the diff with much more context than a bare patch.
+  const blastRun = useBlastRunStore((s) => ({
+    status: s.status,
+    guardrail: s.guardrail,
+    results: s.results,
+    total: s.total,
+    startedAt: s.startedAt,
+    finishedAt: s.finishedAt,
+  }));
   // Metadata-only publishes (no contract change) target the existing version
   // dir and only rewrite guardrail.yaml + configuration.yaml. The pre-flight
   // immutability check is inverted: it expects the dir to already exist.
@@ -174,6 +253,10 @@ export function SubmitPolicyModal({
   // Path of the artifact file currently being previewed in the side sub-modal.
   const [previewPath, setPreviewPath] = useState<string | null>(null);
   const [copiedPreview, setCopiedPreview] = useState(false);
+  // Default the preview to diff view so the reviewer (or self-reviewer)
+  // immediately sees what changed. Falls back to raw when there's no
+  // baseline to compare against (brand-new guardrail).
+  const [previewMode, setPreviewMode] = useState<'diff' | 'raw'>('diff');
 
   // Helper to update step log
   const updateStep = (step: string, status: StepLog['status'], message?: string) => {
@@ -215,6 +298,7 @@ export function SubmitPolicyModal({
       setPrUrl(null);
       setCopiedPrUrl(false);
       setPreviewPath(null);
+      setPreviewMode('diff');
     }
   }, [isOpen]);
 
@@ -589,6 +673,13 @@ export function SubmitPolicyModal({
       const prScopeLine = metadataOnly
         ? `Metadata-only update — the contract (policy.rego, input-schema.json, examples/) is unchanged at v${metadata.version}.`
         : '';
+
+      // If the author finished a blast-radius run for this guardrail before
+      // hitting Submit, embed its tally so reviewers can see the real-world
+      // impact alongside the diff: how many historical inputs would have
+      // been allowed, denied, or errored under the proposed change.
+      const blastSection = buildBlastRadiusPrSection(blastRun, policyId, metadata.version);
+
       const prBody = `${prHeading}
 
 ${metadata.description}
@@ -610,7 +701,7 @@ ${artifactFiles.map((f) => `- \`${f.path}\``).join('\n')}
 | **Stage** | ${metadata.stage} |
 | **Resource Kind** | ${metadata.resourceKind} |
 | **Tags** | ${metadata.tags.length > 0 ? metadata.tags.join(', ') : 'None'} |
-
+${blastSection ? '\n' + blastSection + '\n' : ''}
 ---
 *Submitted by @${user.login} via OPA Guardrail Registry*`;
 
@@ -677,6 +768,21 @@ ${artifactFiles.map((f) => `- \`${f.path}\``).join('\n')}
   const previewFile = previewPath
     ? buildArtifactFiles().find((f) => f.path === previewPath) ?? null
     : null;
+
+  // Resolve the baseline (currently-published) content for this file, if any.
+  // Keys in baseFileContents are paths *within the version dir*, so we
+  // strip the leading `guardrails/<id>/<version>/` prefix to match.
+  const previewBaseContent: string | null = (() => {
+    if (!previewFile || !baseFileContents) return null;
+    const rel = previewFile.path.slice(versionDir.length + 1);
+    return baseFileContents[rel] ?? null;
+  })();
+  // No point offering diff when there's nothing to compare against
+  // (brand-new guardrails, or a brand-new file like configuration.yaml that
+  // wasn't enabled in the prior version). The button stays hidden and the
+  // preview falls back to raw.
+  const canDiff = previewBaseContent !== null;
+  const effectivePreviewMode: 'diff' | 'raw' = canDiff ? previewMode : 'raw';
 
   const handleCopyPreview = async () => {
     if (!previewFile) return;
@@ -1200,6 +1306,40 @@ ${artifactFiles.map((f) => `- \`${f.path}\``).join('\n')}
               <span className="text-[11px] text-[var(--color-text-tertiary)] mr-1">
                 {formatBytes(new Blob([previewFile.content]).size)}
               </span>
+              {canDiff && (
+                <div
+                  role="group"
+                  aria-label="Preview mode"
+                  className="flex items-center rounded-[var(--radius-md)] border border-[var(--color-border-light)] overflow-hidden"
+                >
+                  <button
+                    onClick={() => setPreviewMode('diff')}
+                    title="Show diff against currently published version"
+                    className={cn(
+                      'flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium transition-colors',
+                      previewMode === 'diff'
+                        ? 'bg-[var(--color-info-bg)] text-[var(--color-info)]'
+                        : 'text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-secondary)]'
+                    )}
+                  >
+                    <Columns2 className="w-3.5 h-3.5" />
+                    Diff
+                  </button>
+                  <button
+                    onClick={() => setPreviewMode('raw')}
+                    title="Show new file content only"
+                    className={cn(
+                      'flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium transition-colors',
+                      previewMode === 'raw'
+                        ? 'bg-[var(--color-info-bg)] text-[var(--color-info)]'
+                        : 'text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-secondary)]'
+                    )}
+                  >
+                    <FileText className="w-3.5 h-3.5" />
+                    Raw
+                  </button>
+                </div>
+              )}
               <button
                 onClick={handleCopyPreview}
                 title="Copy contents"
@@ -1222,23 +1362,54 @@ ${artifactFiles.map((f) => `- \`${f.path}\``).join('\n')}
             </div>
           </div>
 
+          {/* Diff column captions — only meaningful when both sides are shown */}
+          {effectivePreviewMode === 'diff' && (
+            <div className="shrink-0 grid grid-cols-2 gap-px bg-[var(--color-border-light)] border-b border-[var(--color-border-light)]">
+              <div className="bg-[var(--color-surface)] px-5 py-2 text-[11px] uppercase tracking-wider text-[var(--color-text-tertiary)] font-semibold">
+                Current · v{baseVersion}
+              </div>
+              <div className="bg-[var(--color-surface)] px-5 py-2 text-[11px] uppercase tracking-wider text-[var(--color-text-tertiary)] font-semibold">
+                New · v{metadata.version}
+              </div>
+            </div>
+          )}
+
           {/* Preview body */}
           <div className="flex-1 min-h-0 p-4">
             <div className="h-full rounded-[var(--radius-md)] overflow-hidden border border-[var(--color-border-light)]">
-              <Editor
-                height="100%"
-                language={languageForPath(previewFile.path)}
-                theme={resolvedTheme === 'dark' ? 'vs-dark' : 'vs'}
-                value={previewFile.content}
-                options={{
-                  ...defaultEditorOptions,
-                  readOnly: true,
-                  minimap: { enabled: false },
-                  scrollBeyondLastLine: false,
-                  lineNumbers: 'on',
-                  fontSize: 13,
-                }}
-              />
+              {effectivePreviewMode === 'diff' ? (
+                <DiffEditor
+                  height="100%"
+                  language={languageForPath(previewFile.path)}
+                  theme={resolvedTheme === 'dark' ? 'vs-dark' : 'vs'}
+                  original={previewBaseContent ?? ''}
+                  modified={previewFile.content}
+                  options={{
+                    ...defaultEditorOptions,
+                    readOnly: true,
+                    renderSideBySide: true,
+                    minimap: { enabled: false },
+                    scrollBeyondLastLine: false,
+                    lineNumbers: 'on',
+                    fontSize: 13,
+                  }}
+                />
+              ) : (
+                <Editor
+                  height="100%"
+                  language={languageForPath(previewFile.path)}
+                  theme={resolvedTheme === 'dark' ? 'vs-dark' : 'vs'}
+                  value={previewFile.content}
+                  options={{
+                    ...defaultEditorOptions,
+                    readOnly: true,
+                    minimap: { enabled: false },
+                    scrollBeyondLastLine: false,
+                    lineNumbers: 'on',
+                    fontSize: 13,
+                  }}
+                />
+              )}
             </div>
           </div>
         </div>

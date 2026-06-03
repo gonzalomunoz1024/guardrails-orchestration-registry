@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Editor from '@monaco-editor/react';
 import {
   ArrowLeft,
@@ -33,6 +33,8 @@ import {
   deriveSchema,
   deriveSchemaFromJson,
   schemasAreStructurallyEqual,
+  buildGuardrailArtifactFiles,
+  decodeDependenciesFromManifest,
 } from '@/utils';
 import { PolicyInputDiagram } from './PolicyInputDiagram';
 
@@ -112,8 +114,50 @@ function TestCaseRow({ test }: { test: PolicyTestCase }) {
   );
 }
 
-function VersionRow({ version, isCurrent }: { version: PolicyVersion; isCurrent: boolean }) {
+function VersionRow({
+  version,
+  isCurrent,
+  policyId,
+}: {
+  version: PolicyVersion;
+  isCurrent: boolean;
+  policyId: string;
+}) {
   const [expanded, setExpanded] = useState(false);
+  // Only the current version arrives with regoCode populated by the registry
+  // mapper. Lazy-fetch source for every other version the first time the row
+  // is opened so the expand actually surfaces something.
+  const [lazyRego, setLazyRego] = useState<string | null>(null);
+  const [isFetchingRego, setIsFetchingRego] = useState(false);
+  const [fetchError, setFetchError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!expanded) return;
+    if (version.regoCode) return;
+    if (lazyRego !== null || isFetchingRego) return;
+    let cancelled = false;
+    setIsFetchingRego(true);
+    setFetchError(null);
+    guardrailsApi
+      .getRegoSource(policyId, version.version)
+      .then((source) => {
+        if (cancelled) return;
+        setLazyRego(source ?? '');
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        setFetchError(err instanceof Error ? err.message : 'Failed to load source');
+        setLazyRego('');
+      })
+      .finally(() => {
+        if (!cancelled) setIsFetchingRego(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [expanded, policyId, version.version, version.regoCode, lazyRego, isFetchingRego]);
+
+  const displayedRego = version.regoCode || lazyRego || '';
 
   return (
     <div className="border border-[var(--color-border-light)] rounded-[var(--radius-md)] overflow-hidden">
@@ -149,9 +193,24 @@ function VersionRow({ version, isCurrent }: { version: PolicyVersion; isCurrent:
       </button>
       {expanded && (
         <div className="border-t border-[var(--color-border-light)]">
-          <pre className="p-4 text-sm font-mono bg-[var(--color-surface-tertiary)] overflow-auto max-h-64">
-            {version.regoCode}
-          </pre>
+          {isFetchingRego ? (
+            <div className="flex items-center gap-2 p-4 text-sm text-[var(--color-text-secondary)]">
+              <Loader2 className="w-4 h-4 animate-spin" />
+              Loading source for v{version.version}…
+            </div>
+          ) : fetchError ? (
+            <div className="p-4 text-sm text-[var(--color-error)]">
+              Couldn't load source for v{version.version}: {fetchError}
+            </div>
+          ) : displayedRego ? (
+            <pre className="p-4 text-sm font-mono bg-[var(--color-surface-tertiary)] overflow-auto max-h-64">
+              {displayedRego}
+            </pre>
+          ) : (
+            <p className="p-4 text-sm text-[var(--color-text-tertiary)]">
+              No source on file for v{version.version}.
+            </p>
+          )}
         </div>
       )}
     </div>
@@ -241,6 +300,11 @@ export function PolicyDetail() {
   const [activeTab, setActiveTab] = useState<Tab>('overview');
   const [isLoadingEdit, setIsLoadingEdit] = useState(false);
   const [isLoadingBlast, setIsLoadingBlast] = useState(false);
+  // Which version the Edit / Run-Blast buttons will load. Defaults to the
+  // currentVersion shown on this page, but the user can pick an older
+  // version from the dropdown — useful for configuration-only edits that
+  // shouldn't roll the whole guardrail forward.
+  const [editTargetVersion, setEditTargetVersion] = useState<string | null>(null);
 
   // Fetch policy from backend
   const { data: backendPolicy, isLoading } = usePolicy(selectedPolicyId);
@@ -263,28 +327,39 @@ export function PolicyDetail() {
   }
 
   // Versions are newest-first per the registry contract; the head is the
-  // latest published version. A stale Edit (editing 1.0 when 1.1 exists)
-  // would either collide with the existing 1.1 on a contract bump or
-  // mutate an immutable historical record on a metadata-only PUT — both
-  // break the immutable-version contract. The button is disabled below
-  // when this is true so the only editable target is the latest.
+  // latest published version.
   const latestVersion = policy.versions[0]?.version;
   const isLatest = !latestVersion || policy.currentVersion === latestVersion;
+  // Which version Edit / Run-Blast will operate on. Falls back to whatever
+  // the page is showing if the user hasn't picked anything yet.
+  const targetVersion = editTargetVersion ?? policy.currentVersion;
+  const targetIsLatest = !latestVersion || targetVersion === latestVersion;
 
   // Re-fetch the input contract AND the rego source for the version being
   // loaded so the studio's baseline is authoritative, even if the cached
   // policy got loaded before those pieces were wired in. Best-effort: empty
   // schema / empty rego if the backend doesn't have one published yet.
+  // When the target version differs from the currentVersion we also fetch
+  // the manifest + configuration for the target — those live on the
+  // policy summary but only for currentVersion.
   // Shared by both Edit and Run-Blast-Radius.
-  const loadPolicyIntoStudio = async () => {
+  const loadPolicyIntoStudio = async (versionArg?: string) => {
     if (!policy) return;
-    const [contract, regoSource] = await Promise.all([
+    const version = versionArg ?? targetVersion;
+    const needsManifest = version !== policy.currentVersion;
+    const [contract, regoSource, versionManifest, versionConfig] = await Promise.all([
       guardrailsApi
-        .getInputSchema(policy.id, policy.currentVersion)
+        .getInputSchema(policy.id, version)
         .catch(() => ({ schema: null as Record<string, unknown> | null, examples: [] as { name: string; payload: string }[] })),
       guardrailsApi
-        .getRegoSource(policy.id, policy.currentVersion)
+        .getRegoSource(policy.id, version)
         .catch(() => ''),
+      needsManifest
+        ? guardrailsApi.getManifest(policy.id, version).catch(() => null)
+        : Promise.resolve(null),
+      needsManifest
+        ? guardrailsApi.getConfiguration(policy.id, version).catch(() => null)
+        : Promise.resolve(null),
     ]);
     const inputSchemaJson = contract.schema ? JSON.stringify(contract.schema, null, 2) : '{}';
     const inputExamples = contract.examples ?? [];
@@ -329,16 +404,70 @@ export function PolicyDetail() {
     // the user touches anything.
     const normalizedInputSchemaJson =
       inputSchemaAuto && inputJson ? deriveSchemaFromJson(inputJson) : inputSchemaJson;
-    const configJson = policy.configJson || '{}';
+
+    // When editing an older version, the policy summary (which is pinned to
+    // currentVersion) is the wrong source for configuration / externalDeps /
+    // metadata. Override with the target version's manifest + configuration
+    // document. Fall back to the summary when we couldn't fetch the
+    // manifest, which keeps the existing behavior for the latest version.
+    const manifestSpec = versionManifest?.spec;
+    const manifestMeta = versionManifest?.metadata;
+
+    const configContent: Record<string, unknown> | undefined =
+      versionConfig?.content ?? manifestSpec?.configuration?.content;
+    const configJson = needsManifest
+      ? configContent
+        ? JSON.stringify(configContent, null, 2)
+        : '{}'
+      : policy.configJson || '{}';
     const configEnabled = configJson.trim() !== '' && configJson.trim() !== '{}';
+
+    const versionExternalDeps = needsManifest
+      ? decodeDependenciesFromManifest(manifestSpec?.externalDependencies)
+      : policy.externalDeps ?? [];
+
     // Strip the .vMAJOR_MINOR suffix the publish flow appended so the studio
     // shows the bare package name. Without this the author sees
     // `package foo.v1_0` in the editor, OPA linters flag it, and any fix-up
     // gets detected as a regoCode change by the bump effect — silently
     // bumping the version without the user intending a contract change.
     // The suffix is re-applied at publish time by appendVersionToRegoPackage.
-    const rawRego = regoSource || policy.regoCode || '';
+    const rawRego = regoSource || (needsManifest ? '' : policy.regoCode) || '';
     const regoCode = stripVersionFromRegoPackage(rawRego);
+
+    const baselineMetadata = {
+      name: manifestMeta?.displayName ?? policy.name,
+      description: manifestMeta?.description ?? policy.description,
+      tags: manifestMeta?.labels ?? policy.tags,
+      version,
+      author: manifestMeta?.owner ?? policy.author,
+    };
+    const resolvedResourceKind = manifestSpec?.target?.resourceKind ?? policy.resourceKind;
+    const resolvedStage = manifestSpec?.stage ?? policy.stage;
+    const resolvedStatus = manifestSpec?.status ?? toGuardrailStatus(policy.status);
+    const resolvedEnforcement = manifestSpec?.enforcement ?? policy.enforcementType;
+    const resolvedTags = manifestMeta?.labels ?? policy.tags;
+
+    // Snapshot exactly what's currently published at the target version so
+    // the Submit modal can diff every file (manifest YAML and configuration
+    // YAML included) against pending edits. We feed the unmodified loaded
+    // state through the same artifact builder Submit uses — same input,
+    // same output, same lossy formatting — so a no-edit diff comes back
+    // empty rather than "everything changed because of formatting".
+    const baseFileContents = buildGuardrailArtifactFiles({
+      regoCode,
+      configJson,
+      configEnabled,
+      inputSchemaJson: normalizedInputSchemaJson,
+      inputExamples,
+      externalDeps: versionExternalDeps,
+      metadata: baselineMetadata,
+      resourceKind: resolvedResourceKind,
+      enforcementType: resolvedEnforcement,
+      stage: resolvedStage,
+      status: resolvedStatus,
+      tags: resolvedTags,
+    });
     loadForEdit({
       regoCode,
       configJson,
@@ -347,28 +476,20 @@ export function PolicyDetail() {
       inputSchemaJson: normalizedInputSchemaJson,
       inputSchemaAuto,
       inputExamples,
-      externalDeps: policy.externalDeps,
-      metadata: {
-        name: policy.name,
-        description: policy.description,
-        tags: policy.tags,
-        version: policy.currentVersion,
-        author: policy.author,
-      },
-      resourceKind: policy.resourceKind,
-      stage: policy.stage,
-      status: toGuardrailStatus(policy.status),
-      enforcementType: policy.enforcementType,
-      tags: policy.tags,
-      baseVersion: policy.currentVersion,
+      externalDeps: versionExternalDeps,
+      metadata: baselineMetadata,
+      resourceKind: resolvedResourceKind,
+      stage: resolvedStage,
+      status: resolvedStatus,
+      enforcementType: resolvedEnforcement,
+      tags: resolvedTags,
+      baseVersion: version,
+      baseFileContents,
     });
   };
 
   const handleEdit = async () => {
     if (!policy) return;
-    // Belt-and-braces: the button is disabled when not on the latest, but
-    // any caller-spawned path would also fall through here as a no-op.
-    if (!isLatest) return;
     setIsLoadingEdit(true);
     await loadPolicyIntoStudio();
     setIsLoadingEdit(false);
@@ -437,11 +558,11 @@ export function PolicyDetail() {
           <div className="flex items-center gap-2">
             <button
               onClick={handleEdit}
-              disabled={isLoadingEdit || !isLatest}
+              disabled={isLoadingEdit}
               title={
-                isLatest
-                  ? 'Open this guardrail in the studio for editing'
-                  : `Editing is locked — v${policy.currentVersion} is no longer the latest version (v${latestVersion} exists). Open the latest to publish further changes.`
+                targetIsLatest
+                  ? `Open v${targetVersion} of this guardrail in the studio for editing`
+                  : `Open v${targetVersion} in the studio. Contract changes here would collide with later versions, but configuration / metadata edits republish in place.`
               }
               className={cn(
                 'flex items-center gap-2 px-4 py-2 rounded-[var(--radius-md)]',
@@ -455,7 +576,7 @@ export function PolicyDetail() {
               ) : (
                 <Pencil className="w-4 h-4" />
               )}
-              Edit
+              Edit v{targetVersion}
             </button>
             <button
               onClick={handleRunBlastRadius}
@@ -495,6 +616,32 @@ export function PolicyDetail() {
               <span className="ml-1 px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-[var(--color-warning-bg)] text-[var(--color-warning)]">
                 superseded by v{latestVersion}
               </span>
+            )}
+            {policy.versions.length > 1 && (
+              <>
+                <span className="mx-1 text-[var(--color-text-tertiary)]">·</span>
+                <label className="flex items-center gap-1.5 text-xs text-[var(--color-text-tertiary)]">
+                  Edit target
+                  <select
+                    value={targetVersion}
+                    onChange={(e) => setEditTargetVersion(e.target.value)}
+                    title="Pick which version Edit and Run Blast Radius load into the studio. Older versions are useful for configuration-only edits, which don't bump the version."
+                    className={cn(
+                      'px-2 py-1 rounded-[var(--radius-sm)] text-xs font-medium',
+                      'bg-[var(--color-surface-secondary)] text-[var(--color-text-primary)]',
+                      'border border-[var(--color-border-light)]',
+                      'hover:bg-[var(--color-border-light)] focus:outline-none focus:ring-2 focus:ring-[var(--color-info)]/40 transition-colors'
+                    )}
+                  >
+                    {policy.versions.map((v) => (
+                      <option key={v.version} value={v.version}>
+                        v{v.version}
+                        {v.version === latestVersion ? ' (latest)' : ''}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </>
             )}
           </div>
         </div>
@@ -688,6 +835,7 @@ export function PolicyDetail() {
                 key={version.version}
                 version={version}
                 isCurrent={version.version === policy.currentVersion}
+                policyId={policy.id}
               />
             ))}
           </div>

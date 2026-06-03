@@ -2,6 +2,7 @@ export { useTheme } from './useTheme';
 export { useDebounce } from './useDebounce';
 export { useEvaluate } from './useEvaluate';
 export { useInputShape } from './useInputShape';
+export { useAutoRefetchDeps } from './useAutoRefetchDeps';
 export { useGitHubAuth } from './useGitHubAuth';
 export { useDatasources, useDatasource, useDatasourceValue } from './useDatasources';
 export { usePolicies, usePolicy, policyKeys } from './usePolicies';

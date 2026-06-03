@@ -524,9 +524,7 @@ export function ExternalDependencyModal({ dep, isOpen, onClose }: ExternalDepend
     } catch (e) {
       setSpec(null);
       setSpecStatus('error');
-      setSpecError(
-        e instanceof Error ? `${e.message}. Is the mock service running?` : 'Failed to load spec'
-      );
+      setSpecError(e instanceof Error ? e.message : 'Failed to load spec');
     }
   }, []);
 

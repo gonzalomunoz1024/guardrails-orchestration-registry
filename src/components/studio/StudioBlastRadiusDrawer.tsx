@@ -5,6 +5,7 @@ import {
   ChevronDown,
   ChevronUp,
   Database,
+  History,
   Loader2,
   Play,
   Server,
@@ -39,6 +40,7 @@ export function StudioBlastRadiusDrawer({ isOpen, onClose, guardrailInfo }: Stud
   const { regoCode, configJson, configEnabled, externalDeps, resourceKind, setInputJson } =
     usePolicyStore();
   const startRun = useBlastRunStore((s) => s.start);
+  const blastRunStatus = useBlastRunStore((s) => s.status);
   const { supportsBlastRadius, testInputsDisabledMessage } = useGuardrailConfig();
 
   const [applicationId, setApplicationId] = useState('');
@@ -75,9 +77,13 @@ export function StudioBlastRadiusDrawer({ isOpen, onClose, guardrailInfo }: Stud
     return () => document.removeEventListener('keydown', onKey);
   }, [isOpen, onClose]);
 
-  // When the drawer opens and a run is in progress or finished, surface it.
+  // Auto-surface the execution modal only while a run is actually in flight —
+  // hiding the drawer behind a finished-run modal forced the user to dismiss
+  // it before they could change filters or query a different guardrail.
+  // Once 'done', the drawer stays primary and the "View last run" button
+  // below re-opens the result on demand.
   useEffect(() => {
-    if (isOpen && useBlastRunStore.getState().status !== 'idle') {
+    if (isOpen && useBlastRunStore.getState().status === 'running') {
       setExecutionOpen(true);
     }
   }, [isOpen]);
@@ -110,12 +116,28 @@ export function StudioBlastRadiusDrawer({ isOpen, onClose, guardrailInfo }: Stud
               Evaluate this guardrail against real test cases to gauge its impact
             </p>
           </div>
-          <button
-            onClick={onClose}
-            className="p-2 rounded-[var(--radius-md)] text-[var(--color-text-tertiary)] hover:bg-[var(--color-surface-secondary)] transition-colors"
-          >
-            <X className="w-5 h-5" />
-          </button>
+          <div className="flex items-center gap-1.5">
+            {blastRunStatus === 'done' && (
+              <button
+                onClick={() => setExecutionOpen(true)}
+                title="Reopen the most recent run's results"
+                className={cn(
+                  'flex items-center gap-1.5 px-2.5 py-1.5 rounded-[var(--radius-md)]',
+                  'text-xs font-medium text-[var(--color-text-secondary)]',
+                  'hover:bg-[var(--color-surface-secondary)] hover:text-[var(--color-text-primary)] transition-colors'
+                )}
+              >
+                <History className="w-3.5 h-3.5" />
+                View last run
+              </button>
+            )}
+            <button
+              onClick={onClose}
+              className="p-2 rounded-[var(--radius-md)] text-[var(--color-text-tertiary)] hover:bg-[var(--color-surface-secondary)] transition-colors"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
         </div>
 
         <div className="flex-1 min-h-0 overflow-y-auto px-6 py-5 space-y-5">

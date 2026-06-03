@@ -7,7 +7,7 @@ import { EditorModal, NewGuardrailDetailsModal, SubmitPolicyModal } from '@/comp
 import { usePolicyStore, useEvaluationStore, useUIStore, useBlastRunStore } from '@/store';
 import { useRegistryStore } from '@/store/registryStore';
 import { snapshotCurrentDraft } from '@/store/draftActions';
-import { useEvaluate, useDebounce } from '@/hooks';
+import { useEvaluate, useDebounce, useAutoRefetchDeps } from '@/hooks';
 import { cn, isValidJson, toGuardrailYaml, deriveSchemaFromJson, incrementMinor } from '@/utils';
 import { StudioDetailsDrawer } from './StudioDetailsDrawer';
 import { StudioBlastRadiusDrawer } from './StudioBlastRadiusDrawer';
@@ -161,6 +161,11 @@ export function PolicyStudio() {
     if (inputSchemaAuto) setInputSchemaJson(deriveSchemaFromJson(inputJson));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [inputJson, inputSchemaAuto]);
+
+  // Auto-refetch external deps whenever the document or configuration changes
+  // so `input.external.*` stays consistent with the request body the author
+  // is editing — no need to reopen each dep modal and click Execute.
+  useAutoRefetchDeps();
 
   // Auto-version: when editing an existing guardrail (baseVersion is set),
   // bump MINOR only if the **contract** (rego, schema, examples) changed.

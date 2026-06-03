@@ -77,7 +77,7 @@ function assembleBody(
   return Object.keys(out).length > 0 ? out : null;
 }
 
-async function fetchOneDep(
+export async function fetchOneDep(
   dep: ExternalDependency,
   document: Record<string, unknown>,
   configuration: Record<string, unknown>

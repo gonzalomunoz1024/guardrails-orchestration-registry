@@ -33,6 +33,15 @@ interface PolicyState {
   baseRego: string | null;
   baseInputSchemaJson: string | null;
   baseInputExamplesJson: string | null;
+  /**
+   * Rendered baseline file contents at the moment Edit was opened, keyed by
+   * the file's path within the version dir (e.g. "policy.rego",
+   * "examples/foo.json"). Snapshotted so the Submit modal can show a
+   * side-by-side diff of "what's in the repo now" vs "what's about to be
+   * pushed" for every file. Null when the guardrail is brand new (no
+   * baseline to diff against — everything is new).
+   */
+  baseFileContents: Record<string, string> | null;
   // Input schema contract (the document the policy evaluates).
   inputSchemaJson: string;
   inputSchemaAuto: boolean;
@@ -54,6 +63,13 @@ interface PolicyState {
   setConfigEnabled: (enabled: boolean) => void;
   addExternalDep: (dep: ExternalDependency) => void;
   updateExternalDep: (id: string, patch: Partial<ExternalDependency>) => void;
+  /**
+   * Apply a runtime-result patch (data/status/error/fetchedAt) without marking
+   * the draft dirty. Used by the auto-refetch loop that re-runs deps when the
+   * document changes — those writes aren't author edits, so they shouldn't
+   * light up "Unsaved changes" or force a draft save.
+   */
+  updateExternalDepRuntime: (id: string, patch: Partial<Pick<ExternalDependency, 'data' | 'status' | 'error' | 'fetchedAt'>>) => void;
   removeExternalDep: (id: string) => void;
   updateMetadata: (metadata: Partial<PolicyMetadata>) => void;
   setResourceKind: (rk: ResourceKind) => void;
@@ -96,6 +112,13 @@ export interface LoadForEditPayload {
   tags: string[];
   /** The current immutable version of the guardrail being edited. */
   baseVersion: string;
+  /**
+   * Rendered file contents as they exist in the repo at `baseVersion`, keyed
+   * by path within the version dir. Lets the Submit modal show a per-file
+   * diff of pending changes vs the live version. Caller computes via
+   * `buildGuardrailArtifactFiles`.
+   */
+  baseFileContents?: Record<string, string>;
   /**
    * Optional override. When the caller can prove the published schema was
    * auto-derived from the example document (e.g. by checking byte equality
@@ -164,6 +187,7 @@ const initialState = {
   baseRego: null as string | null,
   baseInputSchemaJson: null as string | null,
   baseInputExamplesJson: null as string | null,
+  baseFileContents: null as Record<string, string> | null,
   inputSchemaJson: '{}',
   inputSchemaAuto: true,
   inputExamples: [] as InputExample[],
@@ -189,6 +213,12 @@ export const usePolicyStore = create<PolicyState>()(
             d.id === id ? { ...d, ...patch } : d
           ),
           isDirty: true,
+        })),
+      updateExternalDepRuntime: (id, patch) =>
+        set((state) => ({
+          externalDeps: state.externalDeps.map((d) =>
+            d.id === id ? { ...d, ...patch } : d
+          ),
         })),
       removeExternalDep: (id) =>
         set((state) => ({
@@ -248,6 +278,7 @@ export const usePolicyStore = create<PolicyState>()(
           baseRego: p.regoCode,
           baseInputSchemaJson: p.inputSchemaJson,
           baseInputExamplesJson: JSON.stringify(p.inputExamples),
+          baseFileContents: p.baseFileContents ?? null,
           isDirty: false,
           lastSavedAt: null,
         }),
@@ -292,6 +323,7 @@ export const usePolicyStore = create<PolicyState>()(
         baseRego: state.baseRego,
         baseInputSchemaJson: state.baseInputSchemaJson,
         baseInputExamplesJson: state.baseInputExamplesJson,
+        baseFileContents: state.baseFileContents,
         inputSchemaJson: state.inputSchemaJson,
         inputSchemaAuto: state.inputSchemaAuto,
         inputExamples: state.inputExamples,

@@ -8,27 +8,11 @@ import type {
 } from '@/types';
 
 /**
- * Catalog of demo external services. These ship with the repo under
- * `mock-services/` and expose Swagger pages + OpenAPI specs.
+ * Built-in services the dropdown advertises. Empty for now — every external
+ * dependency is configured via the "Custom URL…" path. Add entries here once
+ * real services are wired up.
  */
-export const EXTERNAL_SERVICES: ExternalService[] = [
-  {
-    id: 'repo-registry',
-    name: 'Repository Registry',
-    description: 'Is a repository registered, and what is its registration metadata?',
-    baseUrl: 'http://localhost:4001',
-    specUrl: 'http://localhost:4001/openapi.json',
-    docsUrl: 'http://localhost:4001/docs',
-  },
-  {
-    id: 'vm-order',
-    name: 'VM Order Service',
-    description: 'Status of a virtual machine provisioning order.',
-    baseUrl: 'http://localhost:4002',
-    specUrl: 'http://localhost:4002/openapi.json',
-    docsUrl: 'http://localhost:4002/docs',
-  },
-];
+export const EXTERNAL_SERVICES: ExternalService[] = [];
 
 export const CUSTOM_SERVICE_ID = 'custom';
 
