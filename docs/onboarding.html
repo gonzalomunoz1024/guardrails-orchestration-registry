@@ -419,15 +419,15 @@ footer a:hover{color:var(--accent)}
 <span class="code-line"></span>
 <span class="code-line"><span class="tok-kw">default</span> allow := <span class="tok-num">false</span></span>
 <span class="code-line"></span>
-<span class="code-line"><span class="tok-com"># Allow only when the requested image comes from our corporate registry.</span></span>
+<span class="code-line"><span class="tok-com"># Allow only when the requested image comes from our Artifactory registry.</span></span>
 <span class="code-line">allow <span class="tok-kw">if</span> {</span>
 <span class="code-line">    image := <span class="tok-hov" title="The inbound request body, nested under input.document. Source: the caller (Lightspeed, VMForge, etc.).">input.document</span>.spec.image.name</span>
-<span class="code-line">    startswith(image, <span class="tok-str">"registry.corp.io/"</span>)</span>
+<span class="code-line">    startswith(image, <span class="tok-str">"artifactory.corp.io/"</span>)</span>
 <span class="code-line">}</span>
 <span class="code-line"></span>
 <span class="code-line">deny[msg] <span class="tok-kw">if</span> {</span>
 <span class="code-line">    <span class="tok-kw">not</span> allow</span>
-<span class="code-line">    msg := <span class="tok-str">"Image must come from the corporate registry"</span></span>
+<span class="code-line">    msg := <span class="tok-str">"Image must come from Artifactory"</span></span>
 <span class="code-line">}</span></pre>
 
     <div class="spacer-lg"></div>
@@ -617,15 +617,14 @@ footer a:hover{color:var(--accent)}
     <div class="spacer-lg"></div>
 
     <h3>The rule</h3>
-    <p class="lede" style="margin-top:8px;margin-bottom:24px">One extra line tightens the policy. The image must come from our corporate registry <em>and</em> carry an explicit version tag.</p>
+    <p class="lede" style="margin-top:8px;margin-bottom:24px">Previously the policy allowed any image served from Artifactory. The edit narrows the prefix to <code>artifactory-prod</code> only — dev and staging repos no longer qualify.</p>
     <pre><span class="code-line"><span class="tok-kw">package</span> approved_images.v1_0</span>
 <span class="code-line"></span>
 <span class="code-line"><span class="tok-kw">default</span> allow := <span class="tok-num">false</span></span>
 <span class="code-line"></span>
 <span class="code-line">allow <span class="tok-kw">if</span> {</span>
 <span class="code-line">    image := input.document.spec.image.name</span>
-<span class="code-line">    startswith(image, <span class="tok-str">"registry.corp.io/"</span>)</span>
-<span class="code-line code-added">    contains(image, <span class="tok-str">":"</span>)<span class="tok-com">  # require an explicit version tag</span></span>
+<span class="code-line code-added">    startswith(image, <span class="tok-str">"artifactory.corp.io/artifactory-prod/"</span>)<span class="tok-com">  # was: artifactory.corp.io/</span></span>
 <span class="code-line">}</span></pre>
 
     <div class="spacer-lg"></div>
@@ -637,10 +636,10 @@ footer a:hover{color:var(--accent)}
         <span class="counter">2 of 5 outcomes change</span>
       </div>
       <div class="blast-list">
-        <div class="blast-row"><span class="id">registry.corp.io/web:1.4</span><span class="diff"><span class="chip-ok chip">allow</span><span class="diff-arrow">→</span><span class="chip-ok chip">allow</span></span></div>
-        <div class="blast-row"><span class="id">registry.corp.io/api:2.0</span><span class="diff"><span class="chip-ok chip">allow</span><span class="diff-arrow">→</span><span class="chip-ok chip">allow</span></span></div>
-        <div class="blast-row flipped"><span class="id">registry.corp.io/worker</span><span class="diff"><span class="chip-ok chip">allow</span><span class="diff-arrow">→</span><span class="chip-bad chip">deny</span><span class="tag">changed</span></span></div>
-        <div class="blast-row flipped"><span class="id">registry.corp.io/db</span><span class="diff"><span class="chip-ok chip">allow</span><span class="diff-arrow">→</span><span class="chip-bad chip">deny</span><span class="tag">changed</span></span></div>
+        <div class="blast-row"><span class="id">artifactory.corp.io/artifactory-prod/web:1.4</span><span class="diff"><span class="chip-ok chip">allow</span><span class="diff-arrow">→</span><span class="chip-ok chip">allow</span></span></div>
+        <div class="blast-row"><span class="id">artifactory.corp.io/artifactory-prod/api:2.0</span><span class="diff"><span class="chip-ok chip">allow</span><span class="diff-arrow">→</span><span class="chip-ok chip">allow</span></span></div>
+        <div class="blast-row flipped"><span class="id">artifactory.corp.io/artifactory-dev/worker:1.0</span><span class="diff"><span class="chip-ok chip">allow</span><span class="diff-arrow">→</span><span class="chip-bad chip">deny</span><span class="tag">changed</span></span></div>
+        <div class="blast-row flipped"><span class="id">artifactory.corp.io/artifactory-staging/db:2.1</span><span class="diff"><span class="chip-ok chip">allow</span><span class="diff-arrow">→</span><span class="chip-bad chip">deny</span><span class="tag">changed</span></span></div>
         <div class="blast-row"><span class="id">docker.io/library/postgres:14</span><span class="diff"><span class="chip-bad chip">deny</span><span class="diff-arrow">→</span><span class="chip-bad chip">deny</span></span></div>
       </div>
     </div>
@@ -677,15 +676,15 @@ footer a:hover{color:var(--accent)}
           </marker>
         </defs>
         <!-- caption row above arrows -->
-        <text x="155"  y="40" text-anchor="middle" font-size="11" fill="var(--sub)" font-weight="600" letter-spacing="0.06em">OPENS</text>
-        <text x="465"  y="40" text-anchor="middle" font-size="11" fill="var(--sub)" font-weight="600" letter-spacing="0.06em">COMMITS</text>
-        <text x="745"  y="40" text-anchor="middle" font-size="11" fill="var(--sub)" font-weight="600" letter-spacing="0.06em">ON MERGE</text>
-        <text x="1025" y="40" text-anchor="middle" font-size="11" fill="var(--sub)" font-weight="600" letter-spacing="0.06em">UPLOADS</text>
+        <text x="270"  y="40" text-anchor="middle" font-size="11" fill="var(--sub)" font-weight="600" letter-spacing="0.06em">OPENS</text>
+        <text x="590"  y="40" text-anchor="middle" font-size="11" fill="var(--sub)" font-weight="600" letter-spacing="0.06em">COMMITS</text>
+        <text x="830"  y="40" text-anchor="middle" font-size="11" fill="var(--sub)" font-weight="600" letter-spacing="0.06em">ON MERGE</text>
+        <text x="1070" y="40" text-anchor="middle" font-size="11" fill="var(--sub)" font-weight="600" letter-spacing="0.06em">UPLOADS</text>
 
         <!-- node 1: Author -->
         <g class="fnode" data-id="user"><rect x="30" y="80" width="170" height="100" rx="16" fill="var(--surface)" stroke="var(--line)"/><text x="115" y="120" text-anchor="middle" font-size="15" font-weight="600" fill="var(--ink)">You</text><text x="115" y="146" text-anchor="middle" font-size="11" fill="var(--sub)">Author</text></g>
         <!-- node 2: Studio -->
-        <g class="fnode" data-id="studio"><rect x="340" y="70" width="220" height="120" rx="16" fill="var(--accent-bg)" stroke="var(--accent)" stroke-width="1.5"/><text x="450" y="110" text-anchor="middle" font-size="15" font-weight="600" fill="var(--ink)">Guardrail Studio</text><text x="450" y="134" text-anchor="middle" font-size="11" fill="var(--sub)">Write · Test · Regress</text><text x="450" y="156" text-anchor="middle" font-size="11" fill="var(--sub)">Browser</text></g>
+        <g class="fnode" data-id="studio"><rect x="340" y="70" width="220" height="120" rx="16" fill="var(--accent-bg)" stroke="var(--accent)" stroke-width="1.5"/><text x="450" y="110" text-anchor="middle" font-size="15" font-weight="600" fill="var(--ink)">Guardrail Studio</text><text x="450" y="134" text-anchor="middle" font-size="11" fill="var(--sub)">Write · Test</text><text x="450" y="156" text-anchor="middle" font-size="11" fill="var(--sub)">Browser</text></g>
         <!-- node 3: PR -->
         <g class="fnode" data-id="pr"><rect x="620" y="80" width="180" height="100" rx="16" fill="var(--surface)" stroke="var(--line)"/><text x="710" y="120" text-anchor="middle" font-size="15" font-weight="600" fill="var(--ink)">Pull request</text><text x="710" y="146" text-anchor="middle" font-size="11" fill="var(--sub)">GitHub</text></g>
         <!-- node 4: Actions -->
@@ -760,7 +759,7 @@ footer a:hover{color:var(--accent)}
     </div>
 
     <div class="spacer-md"></div>
-    <p class="lede" style="font-size:15px"><strong>The rule of thumb:</strong> if a consumer's input would have to change, you get a new version. Edits to description, tags, owner, or configuration data content don't bump — they overwrite the manifest in place at the existing version. (Enforcement lives on the suite, not on the guardrail itself.)</p>
+    <p class="lede" style="font-size:15px"><strong>The rule of thumb:</strong> if a consumer's input would have to change, you get a new version. Edits to description, tags, owner, or configuration data content don't bump — they overwrite the manifest in place at the existing version.</p>
   </div>
 </section>
 
@@ -804,7 +803,7 @@ footer a:hover{color:var(--accent)}
           <g><rect x="636" y="104" width="208" height="30" rx="8" fill="var(--surface)" stroke="var(--ok)"/><text x="650" y="124" font-size="11" font-family="var(--font-mono)" fill="var(--ink)">vm_size_limit@1.3</text></g>
           <g><rect x="636" y="138" width="208" height="30" rx="8" fill="var(--surface)" stroke="var(--ok)"/><text x="650" y="158" font-size="11" font-family="var(--font-mono)" fill="var(--ink)">approved_images@2.0</text></g>
           <g><rect x="636" y="172" width="208" height="30" rx="8" fill="var(--surface)" stroke="var(--ok)"/><text x="650" y="192" font-size="11" font-family="var(--font-mono)" fill="var(--ink)">no_prod_off_hours@1.0</text></g>
-          <g><rect x="636" y="216" width="208" height="50" rx="8" fill="var(--warn-bg)"/><text x="650" y="236" font-size="11" fill="var(--ink)" font-weight="600">Exclusions (optional)</text><text x="650" y="252" font-size="10" fill="var(--sub)">appId=ds-platform → skip approved_images</text></g>
+          <g><rect x="636" y="216" width="208" height="58" rx="8" fill="var(--warn-bg)"/><text x="650" y="232" font-size="11" fill="var(--ink)" font-weight="600">Exclusions (optional)</text><text x="650" y="250" font-size="10" fill="var(--sub)">appId=ds-platform</text><text x="650" y="266" font-size="10" fill="var(--sub)">→ skips approved_images</text></g>
         </g>
         <path d="M260 160 C 290 160, 290 160, 320 160" stroke="var(--sub)" stroke-width="1.5" fill="none" marker-end="url(#arr)"/>
         <path d="M560 160 C 590 160, 590 160, 620 160" stroke="var(--sub)" stroke-width="1.5" fill="none" marker-end="url(#arr)"/>
