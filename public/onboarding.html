@@ -419,10 +419,11 @@ footer a:hover{color:var(--accent)}
 <span class="code-line"></span>
 <span class="code-line"><span class="tok-kw">default</span> allow := <span class="tok-num">false</span></span>
 <span class="code-line"></span>
-<span class="code-line"><span class="tok-com"># Allow only when the requested image comes from our Artifactory registry.</span></span>
+<span class="code-line"><span class="tok-com"># Allow only when the requested image comes from one of our Artifactory hosts.</span></span>
 <span class="code-line">allow <span class="tok-kw">if</span> {</span>
 <span class="code-line">    image := <span class="tok-hov" title="The inbound request body, nested under input.document. Source: the caller (Lightspeed, VMForge, etc.).">input.document</span>.spec.image.name</span>
-<span class="code-line">    startswith(image, <span class="tok-str">"artifactory.corp.io/"</span>)</span>
+<span class="code-line">    <span class="tok-kw">some</span> host <span class="tok-kw">in</span> {<span class="tok-str">"artifactory.com/"</span>, <span class="tok-str">"artifactory-uat.com/"</span>, <span class="tok-str">"artifactory-dev.com/"</span>}</span>
+<span class="code-line">    startswith(image, host)</span>
 <span class="code-line">}</span>
 <span class="code-line"></span>
 <span class="code-line">deny[msg] <span class="tok-kw">if</span> {</span>
@@ -617,14 +618,14 @@ footer a:hover{color:var(--accent)}
     <div class="spacer-lg"></div>
 
     <h3>The rule</h3>
-    <p class="lede" style="margin-top:8px;margin-bottom:24px">Previously the policy allowed any image served from Artifactory. The edit narrows the prefix to <code>artifactory-prod</code> only — dev and staging repos no longer qualify.</p>
+    <p class="lede" style="margin-top:8px;margin-bottom:24px">Previously the policy accepted images from any of our Artifactory hosts (prod, UAT, or dev). The edit narrows it to the prod host only — UAT and dev images no longer qualify.</p>
     <pre><span class="code-line"><span class="tok-kw">package</span> approved_images.v1_0</span>
 <span class="code-line"></span>
 <span class="code-line"><span class="tok-kw">default</span> allow := <span class="tok-num">false</span></span>
 <span class="code-line"></span>
 <span class="code-line">allow <span class="tok-kw">if</span> {</span>
 <span class="code-line">    image := input.document.spec.image.name</span>
-<span class="code-line code-added">    startswith(image, <span class="tok-str">"artifactory.corp.io/artifactory-prod/"</span>)<span class="tok-com">  # was: artifactory.corp.io/</span></span>
+<span class="code-line code-added">    startswith(image, <span class="tok-str">"artifactory.com/"</span>)<span class="tok-com">  # was: any artifactory host</span></span>
 <span class="code-line">}</span></pre>
 
     <div class="spacer-lg"></div>
@@ -636,10 +637,10 @@ footer a:hover{color:var(--accent)}
         <span class="counter">2 of 5 outcomes change</span>
       </div>
       <div class="blast-list">
-        <div class="blast-row"><span class="id">artifactory.corp.io/artifactory-prod/web:1.4</span><span class="diff"><span class="chip-ok chip">allow</span><span class="diff-arrow">→</span><span class="chip-ok chip">allow</span></span></div>
-        <div class="blast-row"><span class="id">artifactory.corp.io/artifactory-prod/api:2.0</span><span class="diff"><span class="chip-ok chip">allow</span><span class="diff-arrow">→</span><span class="chip-ok chip">allow</span></span></div>
-        <div class="blast-row flipped"><span class="id">artifactory.corp.io/artifactory-dev/worker:1.0</span><span class="diff"><span class="chip-ok chip">allow</span><span class="diff-arrow">→</span><span class="chip-bad chip">deny</span><span class="tag">changed</span></span></div>
-        <div class="blast-row flipped"><span class="id">artifactory.corp.io/artifactory-staging/db:2.1</span><span class="diff"><span class="chip-ok chip">allow</span><span class="diff-arrow">→</span><span class="chip-bad chip">deny</span><span class="tag">changed</span></span></div>
+        <div class="blast-row"><span class="id">artifactory.com/web:1.4</span><span class="diff"><span class="chip-ok chip">allow</span><span class="diff-arrow">→</span><span class="chip-ok chip">allow</span></span></div>
+        <div class="blast-row"><span class="id">artifactory.com/api:2.0</span><span class="diff"><span class="chip-ok chip">allow</span><span class="diff-arrow">→</span><span class="chip-ok chip">allow</span></span></div>
+        <div class="blast-row flipped"><span class="id">artifactory-uat.com/worker:1.0</span><span class="diff"><span class="chip-ok chip">allow</span><span class="diff-arrow">→</span><span class="chip-bad chip">deny</span><span class="tag">changed</span></span></div>
+        <div class="blast-row flipped"><span class="id">artifactory-dev.com/db:2.1</span><span class="diff"><span class="chip-ok chip">allow</span><span class="diff-arrow">→</span><span class="chip-bad chip">deny</span><span class="tag">changed</span></span></div>
         <div class="blast-row"><span class="id">docker.io/library/postgres:14</span><span class="diff"><span class="chip-bad chip">deny</span><span class="diff-arrow">→</span><span class="chip-bad chip">deny</span></span></div>
       </div>
     </div>
