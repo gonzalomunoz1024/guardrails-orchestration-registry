@@ -25,6 +25,25 @@ export function versionSuffix(version: string | undefined | null): string {
 }
 
 /**
+ * Inverse of appendVersionToRegoPackage: strip a trailing `.vN_M` segment
+ * from the first `package …` directive. The publish flow adds the suffix
+ * so each version lives at its own bundle path; the studio's *edit* flow
+ * doesn't want to display it — authors think in terms of the bare package
+ * name, OPA linters flag the suffix as "package should match the guardrail
+ * slug", and any manual fix-up the author makes to delete the suffix
+ * registers as a contract change and forces a spurious version bump.
+ * Strip on load, append on publish — the suffix stays an artifact of the
+ * published file, not of the in-editor source.
+ */
+export function stripVersionFromRegoPackage(rego: string): string {
+  // Lazy `+?` plus the lookahead anchor means we only peel off a `.vN_M`
+  // that's the LAST segment of the package directive — not one buried in
+  // the middle of a chained path like `foo.v1_0.bar` (unlikely, but we
+  // shouldn't silently mangle it).
+  return rego.replace(/^(package\s+[\w.]+?)\.v\d+_\d+(?=\s|$)/m, '$1');
+}
+
+/**
  * Rewrite the first `package …` directive in `rego` so its trailing segment
  * is the version suffix derived from `version`. If the directive already has
  * a `.vX_Y` suffix it gets replaced; otherwise it's appended. If there's no

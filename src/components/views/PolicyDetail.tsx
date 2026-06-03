@@ -27,6 +27,7 @@ import { defaultEditorOptions } from '@/monaco/config';
 import { cn } from '@/utils';
 import type { PolicyTestCase, PolicyVersion } from '@/types';
 import { RESOURCE_KIND_LABELS } from '@/types';
+import { stripVersionFromRegoPackage } from '@/utils';
 import { PolicyInputDiagram } from './PolicyInputDiagram';
 
 type Tab = 'overview' | 'code' | 'tests' | 'versions' | 'config';
@@ -283,7 +284,14 @@ export function PolicyDetail() {
     const inputExamples = contract.examples ?? [];
     const configJson = policy.configJson || '{}';
     const configEnabled = configJson.trim() !== '' && configJson.trim() !== '{}';
-    const regoCode = regoSource || policy.regoCode || '';
+    // Strip the .vMAJOR_MINOR suffix the publish flow appended so the studio
+    // shows the bare package name. Without this the author sees
+    // `package foo.v1_0` in the editor, OPA linters flag it, and any fix-up
+    // gets detected as a regoCode change by the bump effect — silently
+    // bumping the version without the user intending a contract change.
+    // The suffix is re-applied at publish time by appendVersionToRegoPackage.
+    const rawRego = regoSource || policy.regoCode || '';
+    const regoCode = stripVersionFromRegoPackage(rawRego);
     loadForEdit({
       regoCode,
       configJson,
