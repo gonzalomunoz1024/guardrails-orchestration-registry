@@ -16,7 +16,15 @@ import { applyReservedFields, stripOptionalReservedFields } from './reservedFiel
 function schemaForValue(value: unknown): Record<string, unknown> {
   if (value === null) return { type: 'null' };
   if (Array.isArray(value)) {
-    return { type: 'array', items: value.length > 0 ? schemaForValue(value[0]) : {} };
+    // For non-empty arrays we infer the element schema from the first item.
+    // Empty arrays carry no information about element shape, so we emit the
+    // bare `{ type: "array" }` rather than an `items: {}` placeholder — that
+    // placeholder used to perpetually drift against schemas published before
+    // it was added, causing every Edit to look like a contract change even
+    // for pure config edits.
+    return value.length > 0
+      ? { type: 'array', items: schemaForValue(value[0]) }
+      : { type: 'array' };
   }
   if (typeof value === 'object') {
     const properties: Record<string, unknown> = {};
@@ -86,6 +94,15 @@ export function schemasAreStructurallyEqual(a: unknown, b: unknown): boolean {
   return compare(stripOptionalReservedFields(a), stripOptionalReservedFields(b), '');
 }
 
+function isEmptyPlainObject(v: unknown): boolean {
+  return (
+    typeof v === 'object' &&
+    v !== null &&
+    !Array.isArray(v) &&
+    Object.keys(v as Record<string, unknown>).length === 0
+  );
+}
+
 function compare(a: unknown, b: unknown, key: string): boolean {
   // Both arrays of strings under `required` (or `enum`) are sets, not lists.
   if (Array.isArray(a) && Array.isArray(b)) {
@@ -126,6 +143,16 @@ function compare(a: unknown, b: unknown, key: string): boolean {
     if (k === 'required') {
       if (av === undefined && Array.isArray(bv) && bv.length === 0) continue;
       if (bv === undefined && Array.isArray(av) && av.length === 0) continue;
+    }
+    // Tolerate `items: {}` (empty placeholder) on either side against a missing
+    // `items` on the other. `{ type: "array" }` and `{ type: "array", items: {} }`
+    // mean the same thing in JSON Schema — both leave element shape unconstrained.
+    // The auto-derive used to emit the empty placeholder; older publishes (and
+    // the new derive) don't. Treat them as equivalent so an Edit doesn't get
+    // tagged as a contract change just because of this drift.
+    if (k === 'items') {
+      if (av === undefined && isEmptyPlainObject(bv)) continue;
+      if (bv === undefined && isEmptyPlainObject(av)) continue;
     }
     if (!compare(av, bv, k)) return false;
   }
