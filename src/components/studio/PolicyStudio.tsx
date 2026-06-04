@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Panel, Group, Separator } from 'react-resizable-panels';
-import { Play, Loader2, Sliders, Radius, Send, Check, Shield, FileCode2, FileJson, X } from 'lucide-react';
+import { Play, Loader2, Sliders, Radius, Send, Check, Shield, FileJson, X } from 'lucide-react';
 import { InputModule } from '@/components/sandbox';
 import { OutputPanel } from '@/components/panels';
 import { EditorModal, NewGuardrailDetailsModal, SubmitPolicyModal } from '@/components/modals';
@@ -315,19 +315,6 @@ export function PolicyStudio() {
             )}
           </button>
           <button
-            onClick={openBlast}
-            className="relative flex items-center gap-1.5 px-3 py-1.5 rounded-[var(--radius-md)] text-sm font-medium text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-surface-secondary)] transition-colors"
-          >
-            <Radius className="w-4 h-4" />
-            Blast radius
-            {showBlastDot && (
-              <span className="absolute top-0.5 right-0.5 w-2 h-2 rounded-full bg-[var(--color-error)]" />
-            )}
-            {blastStatus === 'running' && (
-              <Loader2 className="w-3 h-3 animate-spin text-[var(--color-info)]" />
-            )}
-          </button>
-          <button
             onClick={() => setSchemaOpen(true)}
             title="Edit the document schema + examples"
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-[var(--radius-md)] text-sm font-medium text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-surface-secondary)] transition-colors"
@@ -336,12 +323,17 @@ export function PolicyStudio() {
             Document Schema
           </button>
           <button
-            onClick={() => setExpandedEditor('manifest')}
-            title="View the Guardrail manifest the backend will register"
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-[var(--radius-md)] text-sm font-medium text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-surface-secondary)] transition-colors"
+            onClick={openBlast}
+            className="relative flex items-center gap-1.5 px-3 py-1.5 rounded-[var(--radius-md)] text-sm font-medium text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-surface-secondary)] transition-colors"
           >
-            <FileCode2 className="w-4 h-4" />
-            Manifest
+            <Radius className="w-4 h-4" />
+            Blast Radius
+            {showBlastDot && (
+              <span className="absolute top-0.5 right-0.5 w-2 h-2 rounded-full bg-[var(--color-error)]" />
+            )}
+            {blastStatus === 'running' && (
+              <Loader2 className="w-3 h-3 animate-spin text-[var(--color-info)]" />
+            )}
           </button>
 
           <div className="h-5 w-px bg-[var(--color-border-light)] mx-1" />
