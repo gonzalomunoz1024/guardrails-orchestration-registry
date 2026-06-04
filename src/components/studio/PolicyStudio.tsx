@@ -329,11 +329,11 @@ export function PolicyStudio() {
           </button>
           <button
             onClick={() => setSchemaOpen(true)}
-            title="Author the input schema contract + examples"
+            title="Edit the document schema + examples"
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-[var(--radius-md)] text-sm font-medium text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-surface-secondary)] transition-colors"
           >
             <FileJson className="w-4 h-4" />
-            Input contract
+            Document Schema
           </button>
           <button
             onClick={() => setExpandedEditor('manifest')}

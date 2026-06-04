@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import { ChevronDown, ChevronRight, Lock, Plus, Trash2 } from 'lucide-react';
 import { cn } from '@/utils';
 import { RESERVED_FIELDS } from '@/utils';
@@ -179,10 +179,10 @@ interface SchemaFieldEditorProps {
 }
 
 export function SchemaFieldEditor({ schema, onChange }: SchemaFieldEditorProps) {
-  // Default-expand object/array nodes that have content. Authors land on a
-  // tree they can scan without first hunting for the disclosure triangles.
-  const initiallyExpanded = useMemo(() => collectExpandable(schema), [schema]);
-  const [expanded, setExpanded] = useState<Set<string>>(initiallyExpanded);
+  // Start with every node collapsed so the root row reads at a glance — the
+  // author sees the top-level shape (metadata, spec, …) and opens what they
+  // care about. Fully-expanded trees were overwhelming on rich documents.
+  const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
   const [openTypeFor, setOpenTypeFor] = useState<string | null>(null);
   const [adderForParent, setAdderForParent] = useState<string | null>(null);
 
@@ -728,24 +728,3 @@ function FieldAdder({ depth, existingNames, onCancel, onAdd }: FieldAdderProps) 
   );
 }
 
-/** Pre-expand every object/array under the root so the tree opens fully on
- *  first render. The author scans the whole shape immediately and can collapse
- *  branches afterward if it gets noisy. */
-function collectExpandable(schema: SchemaNode): Set<string> {
-  const out = new Set<string>();
-  function walk(node: SchemaNode, path: PathSegment[]) {
-    const kind = getKind(node);
-    if (kind === 'object') {
-      out.add(pathKey(path));
-      const props = isPlainObject(node.properties) ? node.properties : {};
-      for (const [name, child] of Object.entries(props)) {
-        if (isPlainObject(child)) walk(child, [...path, { kind: 'prop', name }]);
-      }
-    } else if (kind === 'array') {
-      out.add(pathKey(path));
-      if (isPlainObject(node.items)) walk(node.items, [...path, { kind: 'item' }]);
-    }
-  }
-  walk(schema, []);
-  return out;
-}

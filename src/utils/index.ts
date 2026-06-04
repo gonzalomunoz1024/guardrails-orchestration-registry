@@ -15,3 +15,4 @@ export * from './reservedFields';
 export * from './regoPackage';
 export * from './fetchDepsForDocument';
 export * from './buildGuardrailArtifacts';
+export * from './schemaConflicts';

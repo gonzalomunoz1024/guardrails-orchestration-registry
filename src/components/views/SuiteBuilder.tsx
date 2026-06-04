@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useQueries } from '@tanstack/react-query';
 import {
   ArrowLeft,
   Plus,
@@ -10,6 +11,7 @@ import {
   FileJson,
   CheckCircle2,
   AlertCircle,
+  AlertTriangle,
   Filter,
 } from 'lucide-react';
 import { useRegistryStore } from '@/store/registryStore';
@@ -21,7 +23,11 @@ import {
   useUpdateSuite,
   useGuardrailVersions,
   useMemberContract,
+  suiteKeys,
 } from '@/hooks/useSuites';
+import { suitesApi } from '@/services/api/suitesApi';
+import { detectSuiteSchemaConflicts } from '@/utils';
+import type { MemberSchemaInput, ResourceKindReport } from '@/utils';
 import { cn } from '@/utils';
 import { slugifyName } from '@/utils/slugify';
 import { RESOURCE_KIND_LABELS, STAGE_LABELS } from '@/types';
@@ -129,6 +135,79 @@ function MemberPin({
   );
 }
 
+/**
+ * Warning surfaced when two or more members of the same resource kind declare
+ * contradictory schemas. The orchestrator feeds every applicable member the
+ * same input — if one expects `spec.size` as a string and another as an
+ * integer, one of them will deny every request the other accepts. Catching
+ * it at build time beats triaging in production.
+ */
+function SchemaConflictCard({ report }: { report: ResourceKindReport }) {
+  return (
+    <div className="rounded-[var(--radius-lg)] border border-[var(--color-warning)]/40 bg-[var(--color-warning-bg)] p-4">
+      <div className="flex items-start gap-3">
+        <AlertTriangle className="w-5 h-5 text-[var(--color-warning)] shrink-0 mt-0.5" />
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-semibold text-[var(--color-text-primary)]">
+            Schema conflict · {report.resourceKind}
+          </p>
+          <p className="mt-1 text-xs text-[var(--color-text-secondary)]">
+            {report.comparedMembers.length} members in this suite target{' '}
+            <span className="font-medium text-[var(--color-text-primary)]">
+              {report.resourceKind}
+            </span>{' '}
+            but declare contradictory types for the same field. The orchestrator
+            sends one input to all of them — one will deny what the other allows.
+          </p>
+
+          {report.conflicts.length > 0 && (
+            <ul className="mt-3 space-y-2">
+              {report.conflicts.map((c) => (
+                <li
+                  key={c.path}
+                  className="rounded-[var(--radius-md)] bg-[var(--color-surface)] border border-[var(--color-border-light)] px-3 py-2"
+                >
+                  <div className="flex items-center gap-2">
+                    <code className="font-mono text-[12px] text-[var(--color-text-primary)]">
+                      {c.path}
+                    </code>
+                  </div>
+                  <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-[var(--color-text-secondary)]">
+                    {c.bindings.map((b, i) => (
+                      <span key={`${b.guardrailId}-${i}`} className="inline-flex items-center gap-1.5">
+                        <span className="font-medium text-[var(--color-text-primary)]">
+                          {b.displayName}
+                        </span>
+                        <span className="text-[var(--color-text-tertiary)]">·</span>
+                        <span className="px-1.5 py-0.5 rounded-full bg-[var(--color-surface-secondary)] font-mono">
+                          {b.type}
+                        </span>
+                      </span>
+                    ))}
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+
+          {report.unschemaedMembers.length > 0 && (
+            <p className="mt-3 text-[11px] text-[var(--color-text-tertiary)]">
+              {report.unschemaedMembers.length === 1
+                ? `${report.unschemaedMembers[0].displayName} hasn't published an input schema yet; it's excluded from this comparison.`
+                : `${report.unschemaedMembers.length} members in this group have no published schema and are excluded from the comparison.`}
+            </p>
+          )}
+
+          <p className="mt-3 text-[11px] text-[var(--color-text-tertiary)]">
+            Align the affected fields on each guardrail's Document Schema, or
+            split them into separate suites.
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function SuiteBuilder() {
   const { selectedSuiteId, setView, navigateToSuite } = useRegistryStore();
   const owner = useAuthStore((s) => s.user?.login || s.user?.name || 'unknown');
@@ -198,6 +277,38 @@ export function SuiteBuilder() {
     setMembers((prev) => prev.map((m) => (m.guardrailId === guardrailId ? { ...m, exclusions } : m)));
     setExclusionsForId(null);
   };
+
+  // Fetch every pinned member's input contract in parallel so we can scan
+  // for cross-member schema conflicts. Shares cache with MemberPin's own
+  // useMemberContract — same query keys mean no duplicate fetches.
+  const contractQueries = useQueries({
+    queries: members.map((m) => ({
+      queryKey: suiteKeys.contract({ guardrailId: m.guardrailId, version: m.version }),
+      queryFn: () =>
+        suitesApi.resolveMemberContract({ guardrailId: m.guardrailId, version: m.version }),
+      enabled: !!m.guardrailId && !!m.version,
+      staleTime: 5 * 60 * 1000,
+    })),
+  });
+
+  const conflictReports: ResourceKindReport[] = useMemo(() => {
+    if (members.length < 2) return [];
+    // Only consider members for which the resource-kind label is known —
+    // detection groups by resource kind and a missing label can't be paired
+    // meaningfully.
+    const inputs: MemberSchemaInput[] = members
+      .filter((m) => !!m.resourceKind)
+      .map((m, i) => ({
+        guardrailId: m.guardrailId,
+        displayName: m.displayName,
+        resourceKind: RESOURCE_KIND_LABELS[m.resourceKind!] ?? m.resourceKind!,
+        contract: contractQueries[i]?.data,
+      }));
+    return detectSuiteSchemaConflicts(inputs);
+    // contractQueries identity changes per render; we want fresh detection
+    // on each contract-data delivery.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [members, contractQueries.map((q) => q.dataUpdatedAt).join('|')]);
 
   const canSave = name.trim().length > 0 && members.length > 0;
   const isSaving = createSuite.isPending || updateSuite.isPending;
@@ -356,7 +467,15 @@ export function SuiteBuilder() {
         </div>
 
         {/* Right: pinned members */}
-        <div className="rounded-[var(--radius-lg)] border border-[var(--color-border-light)] bg-[var(--color-surface)] p-4">
+        <div className="space-y-4">
+          {conflictReports.length > 0 && (
+            <div className="space-y-3">
+              {conflictReports.map((report) => (
+                <SchemaConflictCard key={report.resourceKind} report={report} />
+              ))}
+            </div>
+          )}
+          <div className="rounded-[var(--radius-lg)] border border-[var(--color-border-light)] bg-[var(--color-surface)] p-4">
           <div className="flex items-center gap-2 mb-3 text-sm font-medium text-[var(--color-text-secondary)]">
             <Package className="w-4 h-4" />
             Suite members ({members.length})
@@ -382,6 +501,7 @@ export function SuiteBuilder() {
           <p className="mt-4 text-xs text-[var(--color-text-tertiary)]">
             Each member is pinned to a specific immutable version. Later guardrail updates won't change this suite.
           </p>
+          </div>
         </div>
       </div>
 

@@ -118,9 +118,9 @@ export function InputSchemaDrawer({ isOpen, onClose }: InputSchemaDrawerProps) {
           <div className="flex items-center gap-2 min-w-0">
             <FileJson className="w-4 h-4 text-[var(--color-text-secondary)]" />
             <div className="min-w-0">
-              <h2 className="text-base font-semibold text-[var(--color-text-primary)]">Input contract</h2>
+              <h2 className="text-base font-semibold text-[var(--color-text-primary)]">Document Schema</h2>
               <p className="text-xs text-[var(--color-text-tertiary)]">
-                The schema of the document this guardrail evaluates, with examples.
+                The shape of the document this guardrail evaluates, with examples.
               </p>
             </div>
           </div>
