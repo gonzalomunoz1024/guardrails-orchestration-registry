@@ -1,5 +1,16 @@
 import Editor from '@monaco-editor/react';
-import { X, Plus, Trash2, FileJson, Sparkles, ShieldAlert, ShieldCheck, Wand2 } from 'lucide-react';
+import {
+  X,
+  Plus,
+  Trash2,
+  FileJson,
+  Sparkles,
+  ShieldAlert,
+  ShieldCheck,
+  Wand2,
+  ChevronDown,
+  ChevronRight,
+} from 'lucide-react';
 import { usePolicyStore } from '@/store';
 import { useUIStore } from '@/store';
 import { defaultEditorOptions } from '@/monaco/config';
@@ -10,7 +21,8 @@ import {
   applyReservedFields,
   findReservedFieldCollisions,
 } from '@/utils';
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { SchemaFieldEditor } from './SchemaFieldEditor';
 
 interface InputSchemaDrawerProps {
   isOpen: boolean;
@@ -63,9 +75,19 @@ export function InputSchemaDrawer({ isOpen, onClose }: InputSchemaDrawerProps) {
     if (inputSchemaAuto) setInputSchemaAuto(false);
   };
 
+  const [rawOpen, setRawOpen] = useState(false);
+
   if (!isOpen) return null;
 
   const regenerate = () => setInputSchemaJson(deriveSchemaFromJson(inputJson));
+
+  // Hand a tree-editor change back to the store. Any tree mutation flips us
+  // out of Auto so a subsequent doc edit doesn't clobber the author's
+  // refinements (required-toggles, abstract types, etc.).
+  const applyTreeChange = (next: Record<string, unknown>) => {
+    setInputSchemaJson(JSON.stringify(next, null, 2));
+    if (inputSchemaAuto) setInputSchemaAuto(false);
+  };
 
   const addExample = () => {
     setInputExamples([
@@ -157,8 +179,8 @@ export function InputSchemaDrawer({ isOpen, onClose }: InputSchemaDrawerProps) {
             </div>
             <p className="mb-2 text-[11px] text-[var(--color-text-tertiary)]">
               {inputSchemaAuto
-                ? 'Auto mode tracks the Document as you edit it. Switch to Manual to refine types, descriptions, and required fields.'
-                : 'Manual mode — your edits are preserved. "Derive" overwrites from the current Document.'}
+                ? 'Auto mode tracks the Document as you edit it. Switch to Manual to mark fields required, set types (including "any" for shapes that vary between callers), or add new ones.'
+                : 'Manual mode — your refinements are preserved. "Derive" overwrites from the current Document.'}
             </p>
 
             {/* Orchestrator-reserved fields panel. The platform reads these on
@@ -224,19 +246,49 @@ export function InputSchemaDrawer({ isOpen, onClose }: InputSchemaDrawerProps) {
               </details>
             )}
 
-            <div className="h-[60vh] min-h-[420px] rounded-[var(--radius-md)] overflow-hidden border border-[var(--color-border-light)]">
-              <Editor
-                height="100%"
-                language="json"
-                theme={editorTheme}
-                value={inputSchemaJson}
-                onChange={(v) => {
-                  setInputSchemaJson(v || '{}');
-                  if (inputSchemaAuto) setInputSchemaAuto(false);
-                }}
-                options={{ ...defaultEditorOptions, readOnly: inputSchemaAuto }}
-              />
-            </div>
+            {/* Tree editor — primary surface. Mark fields required, set
+                types (including "any" for abstract metadata blobs), nest
+                objects. Reserved fields show a lock badge. */}
+            {parsedSchema ? (
+              <SchemaFieldEditor schema={parsedSchema} onChange={applyTreeChange} />
+            ) : (
+              <div className="rounded-[var(--radius-md)] border border-[var(--color-error)]/40 bg-[var(--color-error-bg)] px-4 py-3 text-xs text-[var(--color-error)]">
+                The schema isn't valid JSON. Open the raw view below to fix it.
+              </div>
+            )}
+
+            {/* Raw JSON — collapsible secondary surface for power users.
+                Edits here flow back into the tree on next render. */}
+            <details
+              className="mt-4 rounded-[var(--radius-md)] border border-[var(--color-border-light)]"
+              open={rawOpen}
+              onToggle={(e) => setRawOpen((e.currentTarget as HTMLDetailsElement).open)}
+            >
+              <summary className="cursor-pointer flex items-center gap-2 px-3 py-2 text-[11px] font-medium text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-secondary)]/60 transition-colors rounded-[var(--radius-md)]">
+                {rawOpen ? (
+                  <ChevronDown className="w-3.5 h-3.5" />
+                ) : (
+                  <ChevronRight className="w-3.5 h-3.5" />
+                )}
+                Raw JSON
+                <span className="ml-auto text-[var(--color-text-tertiary)] font-normal">
+                  Power-user view. Edits flow back into the tree.
+                </span>
+              </summary>
+              <div className="h-[40vh] min-h-[280px] border-t border-[var(--color-border-light)]">
+                <Editor
+                  height="100%"
+                  language="json"
+                  theme={editorTheme}
+                  value={inputSchemaJson}
+                  onChange={(v) => {
+                    setInputSchemaJson(v || '{}');
+                    if (inputSchemaAuto) setInputSchemaAuto(false);
+                  }}
+                  options={{ ...defaultEditorOptions, readOnly: inputSchemaAuto }}
+                />
+              </div>
+            </details>
           </div>
 
           {/* Examples */}
