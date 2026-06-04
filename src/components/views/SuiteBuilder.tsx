@@ -199,8 +199,8 @@ function SchemaConflictCard({ report }: { report: ResourceKindReport }) {
           )}
 
           <p className="mt-3 text-[11px] text-[var(--color-text-tertiary)]">
-            Align the affected fields on each guardrail's Document Schema, or
-            split them into separate suites.
+            Align the affected fields on each guardrail's Schema, or split
+            them into separate suites.
           </p>
         </div>
       </div>

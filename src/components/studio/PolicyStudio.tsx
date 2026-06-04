@@ -320,7 +320,7 @@ export function PolicyStudio() {
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-[var(--radius-md)] text-sm font-medium text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-surface-secondary)] transition-colors"
           >
             <FileJson className="w-4 h-4" />
-            Document Schema
+            Schema
           </button>
           <button
             onClick={openBlast}
