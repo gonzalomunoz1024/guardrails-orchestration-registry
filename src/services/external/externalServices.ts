@@ -216,6 +216,15 @@ export function parseSpec(doc: JsonObject, specUrl: string): ParsedSpec {
  * names the likely upstream causes and points the user away from suspecting
  * our app.
  */
+/**
+ * Route external URLs through the dev server in development so the browser
+ * doesn't get blocked by CORS on hosts that don't allowlist our origin.
+ * Production needs the same redirect on whatever serves the built app.
+ */
+function viaProxy(url: string): string {
+  return import.meta.env.DEV ? `/__external?url=${encodeURIComponent(url)}` : url;
+}
+
 function describeNetworkFailure(url: string): string {
   let host = url;
   try {
@@ -236,7 +245,7 @@ function describeNetworkFailure(url: string): string {
 export async function fetchSpec(specUrl: string): Promise<ParsedSpec> {
   let res: Response;
   try {
-    res = await fetch(specUrl, { headers: { Accept: 'application/json' } });
+    res = await fetch(viaProxy(specUrl), { headers: { Accept: 'application/json' } });
   } catch {
     throw new Error(describeNetworkFailure(specUrl));
   }
@@ -367,7 +376,7 @@ export function flattenLeafPaths(
 export async function fetchExternalData(url: string): Promise<unknown> {
   let res: Response;
   try {
-    res = await fetch(url, { headers: { Accept: 'application/json' } });
+    res = await fetch(viaProxy(url), { headers: { Accept: 'application/json' } });
   } catch {
     throw new Error(describeNetworkFailure(url));
   }
