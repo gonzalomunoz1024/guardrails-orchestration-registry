@@ -3,41 +3,8 @@ import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react-swc';
 import tailwindcss from '@tailwindcss/vite';
 
-// Dev-only middleware: fetch an arbitrary external URL server-side so the
-// browser sidesteps CORS on hosts that don't advertise our origin (e.g. the
-// OpenShift swagger routes the API Explorer points at). Production needs an
-// equivalent proxy on whatever serves the built app.
-const externalProxyPlugin = {
-  name: 'external-url-proxy',
-  configureServer(server: import('vite').ViteDevServer) {
-    server.middlewares.use('/__external', async (req, res) => {
-      try {
-        const target = new URL(req.url ?? '', 'http://localhost').searchParams.get('url');
-        if (!target) {
-          res.statusCode = 400;
-          res.end('Missing url parameter');
-          return;
-        }
-        const upstream = await fetch(target, {
-          headers: { Accept: String(req.headers.accept ?? 'application/json') },
-        });
-        res.statusCode = upstream.status;
-        upstream.headers.forEach((value, key) => {
-          // content-encoding is stripped because Node's fetch already decoded the body.
-          if (key.toLowerCase() !== 'content-encoding') res.setHeader(key, value);
-        });
-        const body = Buffer.from(await upstream.arrayBuffer());
-        res.end(body);
-      } catch (err) {
-        res.statusCode = 502;
-        res.end(`Upstream fetch failed: ${(err as Error).message}`);
-      }
-    });
-  },
-};
-
 export default defineConfig({
-  plugins: [tailwindcss(), react(), externalProxyPlugin],
+  plugins: [tailwindcss(), react()],
   resolve: {
     alias: {
       '@': '/src',

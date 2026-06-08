@@ -187,18 +187,9 @@ export function parseSpec(doc: JsonObject, fallbackBaseUrl: string): ParsedSpec 
   };
 }
 
-/**
- * Route external URLs through the dev server in development so the browser
- * doesn't get blocked by CORS on hosts that don't allowlist our origin.
- * Production needs the same redirect on whatever serves the built app.
- */
-function viaProxy(url: string): string {
-  return import.meta.env.DEV ? `/__external?url=${encodeURIComponent(url)}` : url;
-}
-
 /** Fetch and parse an OpenAPI spec from a URL. */
 export async function fetchSpec(specUrl: string, fallbackBaseUrl: string): Promise<ParsedSpec> {
-  const res = await fetch(viaProxy(specUrl), { headers: { Accept: 'application/json' } });
+  const res = await fetch(specUrl, { headers: { Accept: 'application/json' } });
   if (!res.ok) throw new Error(`Failed to load spec (${res.status})`);
   const doc = (await res.json()) as JsonObject;
   return parseSpec(doc, fallbackBaseUrl);
@@ -319,7 +310,7 @@ export function flattenLeafPaths(
 
 /** Fetch data for a configured external dependency. */
 export async function fetchExternalData(url: string): Promise<unknown> {
-  const res = await fetch(viaProxy(url), { headers: { Accept: 'application/json' } });
+  const res = await fetch(url, { headers: { Accept: 'application/json' } });
   if (!res.ok) {
     throw new Error(`Request failed (${res.status} ${res.statusText})`);
   }
