@@ -217,12 +217,12 @@ export function parseSpec(doc: JsonObject, specUrl: string): ParsedSpec {
  * our app.
  */
 /**
- * Route external URLs through the dev server in development so the browser
- * doesn't get blocked by CORS on hosts that don't allowlist our origin.
- * Production needs the same redirect on whatever serves the built app.
+ * Route external URLs through our own server (Vite dev plugin in development,
+ * the equivalent route in serve.cjs in production) so the browser doesn't get
+ * blocked by CORS on hosts that don't allowlist our origin.
  */
 function viaProxy(url: string): string {
-  return import.meta.env.DEV ? `/__external?url=${encodeURIComponent(url)}` : url;
+  return `/__external?url=${encodeURIComponent(url)}`;
 }
 
 function describeNetworkFailure(url: string): string {

@@ -95,6 +95,45 @@ function proxyToBackend(backendUrl, targetPath, req, res) {
 }
 
 /**
+ * Proxy a GET request to an arbitrary external URL the client passes in
+ * `?url=`. Mirrors the /__external middleware in vite.config.ts so the API
+ * Explorer's spec fetch (which goes cross-origin to OpenShift swagger routes
+ * the host doesn't CORS-allow) works the same under `npm run serve` as under
+ * `npm run dev`. Open by design — see security note in the README.
+ */
+function proxyToExternal(targetUrl, req, res) {
+  let parsed;
+  try {
+    parsed = new URL(targetUrl);
+  } catch {
+    res.writeHead(400, { 'Content-Type': 'text/plain' });
+    res.end('Invalid url parameter');
+    return;
+  }
+  const httpModule = parsed.protocol === 'https:' ? https : http;
+  const options = {
+    hostname: parsed.hostname,
+    port: parsed.port || (parsed.protocol === 'https:' ? 443 : 80),
+    path: parsed.pathname + parsed.search,
+    method: 'GET',
+    headers: { Accept: req.headers['accept'] || 'application/json' },
+    rejectUnauthorized: false,
+  };
+  const proxyReq = httpModule.request(options, (proxyRes) => {
+    // content-encoding is dropped because we forward decoded bytes verbatim.
+    const headers = { ...proxyRes.headers };
+    delete headers['content-encoding'];
+    res.writeHead(proxyRes.statusCode, headers);
+    proxyRes.pipe(res);
+  });
+  proxyReq.on('error', (err) => {
+    res.writeHead(502, { 'Content-Type': 'text/plain' });
+    res.end(`Upstream fetch failed: ${err.message}`);
+  });
+  proxyReq.end();
+}
+
+/**
  * Proxy POST requests to GitHub API (bypasses CORS)
  */
 function proxyToGitHub(githubPath, req, res) {
@@ -235,6 +274,19 @@ window.__RUNTIME_CONFIG__ = ${JSON.stringify({ API_BASE_URL: frontendApiUrl }, n
         'Access-Control-Allow-Headers': 'Content-Type',
       });
       res.end();
+      return;
+    }
+
+    // External URL proxy — sidesteps CORS for the API Explorer spec fetch.
+    if (req.method === 'GET' && urlPath === '/__external') {
+      const queryString = req.url.includes('?') ? req.url.substring(req.url.indexOf('?') + 1) : '';
+      const target = new URLSearchParams(queryString).get('url');
+      if (!target) {
+        res.writeHead(400, { 'Content-Type': 'text/plain' });
+        res.end('Missing url parameter');
+        return;
+      }
+      proxyToExternal(target, req, res);
       return;
     }
 
