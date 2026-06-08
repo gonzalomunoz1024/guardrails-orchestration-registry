@@ -880,14 +880,17 @@ export function ExternalDependencyModal({ dep, isOpen, onClose }: ExternalDepend
           <div className="shrink-0 flex items-center gap-1">
             {dep.specUrl && (
               <a
-                href={dep.specUrl.replace(/\/openapi\.json$/, '/docs')}
+                // Prefer the spec's own externalDocs.url; fall back to the raw
+                // spec URL — a literal but-correct link beats guessing a docs
+                // path that won't exist for half the services we point at.
+                href={spec?.docsUrl || dep.specUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                title="Open original Swagger docs"
+                title={spec?.docsUrl ? 'Open API docs' : 'Open OpenAPI spec'}
                 className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-[var(--radius-md)] text-xs text-[var(--color-text-secondary)] hover:text-[var(--color-info)] hover:bg-[var(--color-surface-secondary)] transition-colors"
               >
                 <ExternalLink className="w-3.5 h-3.5" />
-                Swagger
+                {spec?.docsUrl ? 'Docs' : 'Spec'}
               </a>
             )}
             <button

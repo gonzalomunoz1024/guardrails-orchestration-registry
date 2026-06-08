@@ -68,6 +68,8 @@ export interface ParsedSpec {
   version: string;
   description?: string;
   baseUrl: string;
+  /** Docs URL declared by the spec (OpenAPI `externalDocs.url`), if any. */
+  docsUrl?: string;
   operations: SwaggerOperation[];
 }
 

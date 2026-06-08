@@ -134,6 +134,16 @@ export function parseSpec(doc: JsonObject, specUrl: string): ParsedSpec {
   const info = (doc.info as JsonObject) || {};
   const servers = (doc.servers as JsonObject[]) || [];
   const baseUrl = resolveBaseUrl(servers[0]?.url as string | undefined, specUrl);
+  const externalDocs = doc.externalDocs as JsonObject | undefined;
+  const rawDocsUrl = externalDocs?.url as string | undefined;
+  let docsUrl: string | undefined;
+  if (rawDocsUrl) {
+    try {
+      docsUrl = new URL(rawDocsUrl, specUrl).toString();
+    } catch {
+      docsUrl = rawDocsUrl;
+    }
+  }
   const paths = (doc.paths as JsonObject) || {};
 
   // Top-level fields of an operation's JSON request body (POST/PUT).
@@ -204,6 +214,7 @@ export function parseSpec(doc: JsonObject, specUrl: string): ParsedSpec {
     version: (info.version as string) || '',
     description: info.description as string,
     baseUrl,
+    docsUrl,
     operations,
   };
 }
