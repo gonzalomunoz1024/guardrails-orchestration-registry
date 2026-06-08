@@ -6,7 +6,11 @@ import tailwindcss from '@tailwindcss/vite';
 // Dev-only middleware: fetch an arbitrary external URL server-side so the
 // browser sidesteps CORS on hosts that don't advertise our origin (e.g. the
 // OpenShift swagger routes the API Explorer points at). Production needs an
-// equivalent proxy on whatever serves the built app.
+// equivalent proxy on whatever serves the built app (see serve.cjs).
+//
+// Method, content-type, and body are forwarded so the same path serves both
+// the spec load (GET /openapi.json) and the Execute button's runtime calls
+// (POST/PUT with JSON bodies).
 const externalProxyPlugin = {
   name: 'external-url-proxy',
   configureServer(server: import('vite').ViteDevServer) {
@@ -18,8 +22,21 @@ const externalProxyPlugin = {
           res.end('Missing url parameter');
           return;
         }
+        const chunks: Buffer[] = [];
+        for await (const chunk of req as unknown as AsyncIterable<Buffer>) {
+          chunks.push(chunk);
+        }
+        const requestBody = chunks.length > 0 ? Buffer.concat(chunks) : undefined;
+        const fetchHeaders: Record<string, string> = {
+          Accept: String(req.headers.accept ?? 'application/json'),
+        };
+        if (req.headers['content-type']) {
+          fetchHeaders['Content-Type'] = String(req.headers['content-type']);
+        }
         const upstream = await fetch(target, {
-          headers: { Accept: String(req.headers.accept ?? 'application/json') },
+          method: req.method,
+          headers: fetchHeaders,
+          body: requestBody,
         });
         res.statusCode = upstream.status;
         upstream.headers.forEach((value, key) => {

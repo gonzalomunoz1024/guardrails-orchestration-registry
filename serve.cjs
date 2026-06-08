@@ -95,11 +95,12 @@ function proxyToBackend(backendUrl, targetPath, req, res) {
 }
 
 /**
- * Proxy a GET request to an arbitrary external URL the client passes in
- * `?url=`. Mirrors the /__external middleware in vite.config.ts so the API
- * Explorer's spec fetch (which goes cross-origin to OpenShift swagger routes
- * the host doesn't CORS-allow) works the same under `npm run serve` as under
- * `npm run dev`. Open by design — see security note in the README.
+ * Proxy a request to an arbitrary external URL the client passes in `?url=`.
+ * Mirrors the /__external middleware in vite.config.ts so the API Explorer's
+ * spec fetch (which goes cross-origin to OpenShift swagger routes the host
+ * doesn't CORS-allow) works the same under `npm run serve` as under
+ * `npm run dev`. Forwards method/content-type/body so the same route serves
+ * both the spec GET and the Execute button's POST/PUT calls. Open by design.
  */
 function proxyToExternal(targetUrl, req, res) {
   let parsed;
@@ -110,27 +111,39 @@ function proxyToExternal(targetUrl, req, res) {
     res.end('Invalid url parameter');
     return;
   }
-  const httpModule = parsed.protocol === 'https:' ? https : http;
-  const options = {
-    hostname: parsed.hostname,
-    port: parsed.port || (parsed.protocol === 'https:' ? 443 : 80),
-    path: parsed.pathname + parsed.search,
-    method: 'GET',
-    headers: { Accept: req.headers['accept'] || 'application/json' },
-    rejectUnauthorized: false,
-  };
-  const proxyReq = httpModule.request(options, (proxyRes) => {
-    // content-encoding is dropped because we forward decoded bytes verbatim.
-    const headers = { ...proxyRes.headers };
-    delete headers['content-encoding'];
-    res.writeHead(proxyRes.statusCode, headers);
-    proxyRes.pipe(res);
+  const chunks = [];
+  req.on('data', (chunk) => chunks.push(chunk));
+  req.on('end', () => {
+    const body = chunks.length > 0 ? Buffer.concat(chunks) : null;
+    const httpModule = parsed.protocol === 'https:' ? https : http;
+    const headers = {
+      Accept: String(req.headers['accept'] || 'application/json'),
+    };
+    if (req.headers['content-type']) headers['Content-Type'] = String(req.headers['content-type']);
+    if (body) headers['Content-Length'] = body.length;
+    const options = {
+      hostname: parsed.hostname,
+      port: parsed.port || (parsed.protocol === 'https:' ? 443 : 80),
+      path: parsed.pathname + parsed.search,
+      method: req.method,
+      headers,
+      rejectUnauthorized: false,
+    };
+    const proxyReq = httpModule.request(options, (proxyRes) => {
+      // Forward content-encoding intact — http.request does NOT auto-decode,
+      // so we pipe the raw bytes and let the browser decompress per the
+      // upstream's header. (Vite's middleware uses node fetch, which auto-
+      // decodes, so it strips the header; the divergence is intentional.)
+      res.writeHead(proxyRes.statusCode, proxyRes.headers);
+      proxyRes.pipe(res);
+    });
+    proxyReq.on('error', (err) => {
+      res.writeHead(502, { 'Content-Type': 'text/plain' });
+      res.end(`Upstream fetch failed: ${err.message}`);
+    });
+    if (body) proxyReq.write(body);
+    proxyReq.end();
   });
-  proxyReq.on('error', (err) => {
-    res.writeHead(502, { 'Content-Type': 'text/plain' });
-    res.end(`Upstream fetch failed: ${err.message}`);
-  });
-  proxyReq.end();
 }
 
 /**
@@ -277,8 +290,9 @@ window.__RUNTIME_CONFIG__ = ${JSON.stringify({ API_BASE_URL: frontendApiUrl }, n
       return;
     }
 
-    // External URL proxy — sidesteps CORS for the API Explorer spec fetch.
-    if (req.method === 'GET' && urlPath === '/__external') {
+    // External URL proxy — sidesteps CORS for the API Explorer's spec load
+    // and Execute button (any HTTP method).
+    if (urlPath === '/__external') {
       const queryString = req.url.includes('?') ? req.url.substring(req.url.indexOf('?') + 1) : '';
       const target = new URLSearchParams(queryString).get('url');
       if (!target) {

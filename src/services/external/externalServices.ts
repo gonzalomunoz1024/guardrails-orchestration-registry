@@ -230,9 +230,11 @@ export function parseSpec(doc: JsonObject, specUrl: string): ParsedSpec {
 /**
  * Route external URLs through our own server (Vite dev plugin in development,
  * the equivalent route in serve.cjs in production) so the browser doesn't get
- * blocked by CORS on hosts that don't allowlist our origin.
+ * blocked by CORS on hosts that don't allowlist our origin. Used for the spec
+ * load, the Execute-button runtime fetch, and the blast-radius dep fetch —
+ * any browser→external request belongs here.
  */
-function viaProxy(url: string): string {
+export function viaProxy(url: string): string {
   return `/__external?url=${encodeURIComponent(url)}`;
 }
 

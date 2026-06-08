@@ -1,6 +1,7 @@
 import {
   buildRequestUrlFromBindings,
   getByPath,
+  viaProxy,
 } from '@/services/external/externalServices';
 import type { ExternalDependency, ExternalParam } from '@/types';
 
@@ -109,7 +110,9 @@ export async function fetchOneDep(
   const method = (dep.method || 'GET').toUpperCase();
 
   try {
-    const res = await fetch(url, {
+    // viaProxy keeps the call same-origin so CORS doesn't block this in the
+    // browser; the proxy forwards method + headers + body verbatim.
+    const res = await fetch(viaProxy(url), {
       method,
       headers:
         body !== null

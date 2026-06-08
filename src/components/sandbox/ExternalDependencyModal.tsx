@@ -24,6 +24,7 @@ import {
   fetchSpec,
   getByPath,
   flattenLeafPaths,
+  viaProxy,
 } from '@/services/external/externalServices';
 import { cn, parseJson } from '@/utils';
 import type {
@@ -648,7 +649,10 @@ export function ExternalDependencyModal({ dep, isOpen, onClose }: ExternalDepend
       setExecuting(op.id);
       const start = performance.now();
       try {
-        const res = await fetch(url, {
+        // viaProxy keeps the call same-origin so CORS doesn't block the
+        // browser. `url` (the real upstream) is still what's shown in the UI
+        // (line ~1128) — the proxy is a transport detail.
+        const res = await fetch(viaProxy(url), {
           method: op.method,
           headers: hasBody
             ? { Accept: 'application/json', 'Content-Type': 'application/json' }
