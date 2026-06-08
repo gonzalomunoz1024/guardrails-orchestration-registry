@@ -52,9 +52,17 @@ export function Sidebar() {
           expanded ? 'w-64 shadow-[var(--shadow-lg)]' : 'w-16'
         )}
       >
-        {/* Logo */}
+        {/* Logo — doubles as the home button. */}
         <div className="h-14 flex items-center px-4 border-b border-[var(--color-border-light)]">
-          <div className={cn('flex items-center gap-3', !expanded && 'justify-center w-full')}>
+          <button
+            onClick={() => setView('dashboard')}
+            aria-label="Go to dashboard"
+            className={cn(
+              'flex items-center gap-3 rounded-[var(--radius-md)] outline-none',
+              'focus-visible:ring-2 focus-visible:ring-[var(--color-info)]',
+              !expanded && 'justify-center w-full'
+            )}
+          >
             <div className="w-8 h-8 shrink-0 rounded-[var(--radius-md)] bg-gradient-to-br from-[var(--color-info)] to-purple-600 flex items-center justify-center">
               <Shield className="w-5 h-5 text-white" />
             </div>
@@ -63,7 +71,7 @@ export function Sidebar() {
                 Guardrail Registry
               </span>
             )}
-          </div>
+          </button>
         </div>
 
         {/* Navigation */}
