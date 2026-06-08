@@ -108,11 +108,32 @@ function extractSample(responses: JsonObject, doc: JsonObject): unknown {
   return undefined;
 }
 
+/**
+ * Resolve the spec's declared server URL against the spec URL. OpenAPI lets
+ * `servers[].url` be absolute or relative (e.g. just `/api/v1`); if no servers
+ * are declared we fall back to the spec URL's origin. Either way the caller
+ * doesn't need to supply a separate base URL.
+ */
+function resolveBaseUrl(declared: string | undefined, specUrl: string): string {
+  if (declared) {
+    try {
+      return new URL(declared, specUrl).toString().replace(/\/$/, '');
+    } catch {
+      /* fall through */
+    }
+  }
+  try {
+    return new URL(specUrl).origin;
+  } catch {
+    return specUrl;
+  }
+}
+
 /** Parse a raw OpenAPI document into the reduced shape the sandbox uses. */
-export function parseSpec(doc: JsonObject, fallbackBaseUrl: string): ParsedSpec {
+export function parseSpec(doc: JsonObject, specUrl: string): ParsedSpec {
   const info = (doc.info as JsonObject) || {};
   const servers = (doc.servers as JsonObject[]) || [];
-  const baseUrl = (servers[0]?.url as string) || fallbackBaseUrl;
+  const baseUrl = resolveBaseUrl(servers[0]?.url as string | undefined, specUrl);
   const paths = (doc.paths as JsonObject) || {};
 
   // Top-level fields of an operation's JSON request body (POST/PUT).
@@ -187,12 +208,46 @@ export function parseSpec(doc: JsonObject, fallbackBaseUrl: string): ParsedSpec 
   };
 }
 
+/**
+ * `fetch()` throws `TypeError: Failed to fetch` for any network-layer failure
+ * — CORS rejection, DNS failure, TLS error, offline, blocked by extension. The
+ * browser refuses to disambiguate (the lack of detail is itself a CORS
+ * protection), so the best we can do is replace the bare message with one that
+ * names the likely upstream causes and points the user away from suspecting
+ * our app.
+ */
+function describeNetworkFailure(url: string): string {
+  let host = url;
+  try {
+    host = new URL(url).host;
+  } catch {
+    /* keep raw url */
+  }
+  return (
+    `Couldn't reach ${host}. The server is unreachable or its response was ` +
+    `blocked by the browser (commonly: CORS not allowed for this site, ` +
+    `untrusted TLS certificate, or the host is offline / behind a VPN you ` +
+    `aren't on). Opening the URL directly in a new browser tab will confirm ` +
+    `whether the host itself is reachable.`
+  );
+}
+
 /** Fetch and parse an OpenAPI spec from a URL. */
-export async function fetchSpec(specUrl: string, fallbackBaseUrl: string): Promise<ParsedSpec> {
-  const res = await fetch(specUrl, { headers: { Accept: 'application/json' } });
-  if (!res.ok) throw new Error(`Failed to load spec (${res.status})`);
-  const doc = (await res.json()) as JsonObject;
-  return parseSpec(doc, fallbackBaseUrl);
+export async function fetchSpec(specUrl: string): Promise<ParsedSpec> {
+  let res: Response;
+  try {
+    res = await fetch(specUrl, { headers: { Accept: 'application/json' } });
+  } catch {
+    throw new Error(describeNetworkFailure(specUrl));
+  }
+  if (!res.ok) throw new Error(`Spec request returned HTTP ${res.status} ${res.statusText}`);
+  let doc: JsonObject;
+  try {
+    doc = (await res.json()) as JsonObject;
+  } catch {
+    throw new Error(`Response from ${specUrl} wasn't valid JSON — is this an OpenAPI spec URL?`);
+  }
+  return parseSpec(doc, specUrl);
 }
 
 /**
@@ -310,7 +365,12 @@ export function flattenLeafPaths(
 
 /** Fetch data for a configured external dependency. */
 export async function fetchExternalData(url: string): Promise<unknown> {
-  const res = await fetch(url, { headers: { Accept: 'application/json' } });
+  let res: Response;
+  try {
+    res = await fetch(url, { headers: { Accept: 'application/json' } });
+  } catch {
+    throw new Error(describeNetworkFailure(url));
+  }
   if (!res.ok) {
     throw new Error(`Request failed (${res.status} ${res.statusText})`);
   }

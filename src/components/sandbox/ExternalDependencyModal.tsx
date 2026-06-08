@@ -451,7 +451,6 @@ export function ExternalDependencyModal({ dep, isOpen, onClose }: ExternalDepend
   const [responses, setResponses] = useState<Record<string, ExecResult>>({});
   const [executing, setExecuting] = useState<string | null>(null);
   const [copiedUrl, setCopiedUrl] = useState<string | null>(null);
-  const [customBaseUrl, setCustomBaseUrl] = useState(dep.baseUrl);
   const [customSpecUrl, setCustomSpecUrl] = useState(dep.specUrl);
   // Local-state mirror of the dep name while the author types — committed on
   // blur with sanitization + uniqueness so they can use real characters
@@ -472,7 +471,6 @@ export function ExternalDependencyModal({ dep, isOpen, onClose }: ExternalDepend
 
   const handleServiceChange = (serviceId: string) => {
     if (serviceId === CUSTOM_SERVICE_ID) {
-      setCustomBaseUrl('');
       setCustomSpecUrl('');
       updateExternalDep(dep.id, {
         serviceId: CUSTOM_SERVICE_ID,
@@ -513,20 +511,27 @@ export function ExternalDependencyModal({ dep, isOpen, onClose }: ExternalDepend
   const docPaths = useMemo(() => flattenLeafPaths(parseJson(inputJson) ?? {}), [inputJson]);
   const configPaths = useMemo(() => flattenLeafPaths(parseJson(configJson) ?? {}), [configJson]);
 
-  const loadSpec = useCallback(async (specUrl: string, baseUrl: string) => {
+  // baseUrl is derived from the spec itself (servers[0].url, resolved against
+  // the spec URL — see resolveBaseUrl in externalServices). We persist it onto
+  // the dep so request-build at fetch time can reach the API without re-loading
+  // the spec.
+  const loadSpec = useCallback(async (specUrl: string) => {
     if (!specUrl) return;
     setSpecStatus('loading');
     setSpecError(null);
     try {
-      const parsed = await fetchSpec(specUrl, baseUrl);
+      const parsed = await fetchSpec(specUrl);
       setSpec(parsed);
       setSpecStatus('idle');
+      if (parsed.baseUrl !== dep.baseUrl) {
+        updateExternalDep(dep.id, { baseUrl: parsed.baseUrl });
+      }
     } catch (e) {
       setSpec(null);
       setSpecStatus('error');
       setSpecError(e instanceof Error ? e.message : 'Failed to load spec');
     }
-  }, []);
+  }, [dep.id, dep.baseUrl, updateExternalDep]);
 
   // Seed parameter config for an operation from its examples (static by default).
   const seedParams = useCallback((op: SwaggerOperation): Record<string, ExternalParam> => {
@@ -757,9 +762,9 @@ export function ExternalDependencyModal({ dep, isOpen, onClose }: ExternalDepend
   // Load the spec when the modal opens.
   useEffect(() => {
     if (isOpen && dep.specUrl) {
-      loadSpec(dep.specUrl, dep.baseUrl);
+      loadSpec(dep.specUrl);
     }
-  }, [isOpen, dep.specUrl, dep.baseUrl, loadSpec]);
+  }, [isOpen, dep.specUrl, loadSpec]);
 
   // Resolve which spec operation this dep is pinned to.
   //
@@ -956,13 +961,9 @@ export function ExternalDependencyModal({ dep, isOpen, onClose }: ExternalDepend
                   input.external.<span className="text-[var(--color-text-secondary)]">{dep.name || '…'}</span>
                 </span>
               </div>
+              {/* Base URL is derived from the spec (servers[0].url, or the
+                  spec URL's origin) at load time — no separate input needed. */}
               <div className="flex flex-wrap items-center gap-2">
-                <input
-                  value={customBaseUrl}
-                  onChange={(e) => setCustomBaseUrl(e.target.value)}
-                  placeholder="Base URL (https://api.example.com)"
-                  className="flex-1 min-w-[160px] px-2 py-1.5 rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-[var(--color-surface)] text-xs font-mono text-[var(--color-text-primary)] outline-none focus:border-[var(--color-info)]"
-                />
                 <input
                   value={customSpecUrl}
                   onChange={(e) => setCustomSpecUrl(e.target.value)}
@@ -970,7 +971,7 @@ export function ExternalDependencyModal({ dep, isOpen, onClose }: ExternalDepend
                   className="flex-1 min-w-[160px] px-2 py-1.5 rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-[var(--color-surface)] text-xs font-mono text-[var(--color-text-primary)] outline-none focus:border-[var(--color-info)]"
                 />
                 <button
-                  onClick={() => updateExternalDep(dep.id, { baseUrl: customBaseUrl, specUrl: customSpecUrl })}
+                  onClick={() => updateExternalDep(dep.id, { specUrl: customSpecUrl })}
                   disabled={!customSpecUrl}
                   className="px-3 py-1.5 rounded-[var(--radius-sm)] bg-[var(--color-info)] text-white text-xs font-medium disabled:opacity-50"
                 >
