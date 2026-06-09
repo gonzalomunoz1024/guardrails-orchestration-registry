@@ -143,7 +143,7 @@ export function BlastRadius() {
               'border border-transparent focus:border-[var(--color-info)] focus:outline-none'
             )}
           >
-            <option value="">Choose a policy...</option>
+            <option value="">Choose a guardrail...</option>
             {activePolicies.map((policy) => (
               <option key={policy.id} value={policy.id}>
                 {policy.name}
