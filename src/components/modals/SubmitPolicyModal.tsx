@@ -42,6 +42,7 @@ import { useShallow } from 'zustand/react/shallow';
 import { snapshotCurrentDraft } from '@/store/draftActions';
 import { defaultEditorOptions } from '@/monaco/config';
 import { useGuardrailConfig } from '@/hooks/useGuardrailConfig';
+import { useValidateRego } from '@/hooks/useValidateRego';
 import { ComingSoonBanner } from '@/components/common/ComingSoonBanner';
 import type { EnforcementType, Stage, ResourceKind, GuardrailStatus } from '@/types/guardrail.types';
 import { STAGE_LABELS, ENFORCEMENT_LABELS, RESOURCE_KIND_LABELS } from '@/types';
@@ -248,6 +249,32 @@ export function SubmitPolicyModal({
   const metadataOnly = baseVersion !== null && metadata.version === baseVersion;
   const { config, prCreationEnabled, prCreationDisabledMessage } = useGuardrailConfig();
 
+  // Rego validity gate — blocks PR + ZIP until the backend OPA validator
+  // confirms the policy parses and type-checks. Broken Rego shipping into
+  // the orchestrator's tarball would silently brick enforcement, so this is
+  // a hard gate on every submit path.
+  const regoValidation = useValidateRego(regoCode, isOpen);
+  const trimmedRego = regoCode.trim();
+  const regoBlockReason = useMemo<string | null>(() => {
+    if (!trimmedRego) return 'Rego is empty — cannot submit.';
+    if (regoValidation.isPending) return null; // loading, not blocking the banner content
+    if (regoValidation.isError) {
+      return `Could not verify Rego syntax (${regoValidation.error?.message ?? 'validator unreachable'}). Try again.`;
+    }
+    const data = regoValidation.data;
+    if (data && !data.valid) {
+      const errs = data.errors?.filter(Boolean) ?? [];
+      return errs.length > 0
+        ? `Rego has errors:\n${errs.join('\n')}`
+        : 'Rego has syntax errors.';
+    }
+    return null;
+  }, [trimmedRego, regoValidation.isPending, regoValidation.isError, regoValidation.error, regoValidation.data]);
+  const regoIsValid =
+    trimmedRego.length > 0 &&
+    regoValidation.isSuccess &&
+    regoValidation.data?.valid === true;
+
   // Global GitHub publish target.
   const UPSTREAM_OWNER = config.github.owner;
   const UPSTREAM_REPO = config.github.repo;
@@ -437,6 +464,10 @@ export function SubmitPolicyModal({
 
   // Download as ZIP (mirrors the published versioned layout)
   const handleDownloadZip = async () => {
+    // Hard gate — never produce an artifact from un-validated Rego, even if
+    // the UI somehow allowed the click. A broken .rego in the tar bricks
+    // enforcement downstream.
+    if (!regoIsValid) return;
     const zip = new JSZip();
     for (const f of buildArtifactFiles()) {
       zip.file(f.path, f.content);
@@ -448,6 +479,18 @@ export function SubmitPolicyModal({
   // Create GitHub PR using shared PAT (bypasses OAuth App restrictions)
   // User OAuth is still used for identity/attribution in the PR
   const handleCreatePR = async () => {
+    // Hard gate — refuse to open a PR with un-validated Rego. The UI also
+    // disables the button, but a stale click / programmatic invocation must
+    // never reach the GitHub API: a merged broken policy would brick the
+    // orchestrator tarball.
+    if (!regoIsValid) {
+      setGithubError(
+        regoBlockReason ?? 'Rego must pass validation before a PR can be opened.'
+      );
+      setGithubStatus('error');
+      return;
+    }
+
     // Check if user is logged in (for attribution)
     if (!user) {
       setGithubError('Not authenticated. Please log in with GitHub first.');
@@ -1014,6 +1057,42 @@ ${blastSection ? '\n' + blastSection + '\n' : ''}
             </section>
           </div>
 
+          {/* Rego validation status — hard gate on both action paths below.
+              Broken Rego in the artifact tarball would brick downstream
+              enforcement, so we surface the validator's verdict prominently. */}
+          {regoValidation.isPending && trimmedRego.length > 0 ? (
+            <div className="rounded-xl border-2 border-[var(--color-border-light)] bg-[var(--color-surface)] p-4 flex items-center gap-3">
+              <Loader2 className="w-5 h-5 text-[var(--color-info)] animate-spin shrink-0" />
+              <div className="text-sm text-[var(--color-text-secondary)]">
+                Validating Rego with OPA…
+              </div>
+            </div>
+          ) : regoBlockReason ? (
+            <div className="rounded-xl border-2 border-[var(--color-error)] bg-[var(--color-error-bg)] p-4">
+              <div className="flex items-start gap-3">
+                <AlertCircle className="w-5 h-5 text-[var(--color-error)] shrink-0 mt-0.5" />
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold text-[var(--color-error)]">
+                    Submission blocked — Rego validation failed
+                  </p>
+                  <pre className="mt-1 text-xs text-[var(--color-text-secondary)] whitespace-pre-wrap break-all font-mono">
+                    {regoBlockReason}
+                  </pre>
+                  <p className="mt-2 text-xs text-[var(--color-text-tertiary)]">
+                    Fix the policy in the editor; this dialog will revalidate when you reopen it.
+                  </p>
+                </div>
+              </div>
+            </div>
+          ) : regoIsValid ? (
+            <div className="rounded-xl border border-[var(--color-success)]/30 bg-[var(--color-success-bg)] p-3 flex items-center gap-2">
+              <CheckCircle className="w-4 h-4 text-[var(--color-success)] shrink-0" />
+              <span className="text-xs font-medium text-[var(--color-success)]">
+                Rego validated by OPA — safe to submit
+              </span>
+            </div>
+          ) : null}
+
           {/* Action Cards */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {/* GitHub PR Card */}
@@ -1153,11 +1232,14 @@ ${blastSection ? '\n' + blastSection + '\n' : ''}
                   )}
                   <button
                     onClick={handleCreatePR}
+                    disabled={!regoIsValid}
+                    title={!regoIsValid ? (regoBlockReason ?? 'Rego must validate before opening a PR.') : undefined}
                     className={cn(
                       'w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg',
                       'bg-[var(--color-surface-secondary)] text-[var(--color-text-primary)]',
                       'font-medium text-sm border border-[var(--color-border-light)]',
-                      'hover:bg-[var(--color-border-light)] transition-all'
+                      'hover:bg-[var(--color-border-light)] transition-all',
+                      'disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-[var(--color-surface-secondary)]'
                     )}
                   >
                     Try Again
@@ -1202,10 +1284,13 @@ ${blastSection ? '\n' + blastSection + '\n' : ''}
               ) : (
                 <button
                   onClick={handleCreatePR}
+                  disabled={!regoIsValid}
+                  title={!regoIsValid ? (regoBlockReason ?? 'Rego must validate before opening a PR.') : undefined}
                   className={cn(
                     'w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg',
                     'bg-[#24292f] text-white font-medium text-sm',
-                    'hover:bg-[#32383f] transition-all'
+                    'hover:bg-[#32383f] transition-all',
+                    'disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-[#24292f]'
                   )}
                 >
                   <GitFork className="w-4 h-4" />
@@ -1232,10 +1317,13 @@ ${blastSection ? '\n' + blastSection + '\n' : ''}
 
               <button
                 onClick={handleDownloadZip}
+                disabled={!regoIsValid}
+                title={!regoIsValid ? (regoBlockReason ?? 'Rego must validate before downloading the artifact.') : undefined}
                 className={cn(
                   'w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg',
                   'bg-[var(--color-info)] text-white font-medium text-sm',
-                  'hover:opacity-90 transition-all'
+                  'hover:opacity-90 transition-all',
+                  'disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:opacity-50'
                 )}
               >
                 <Download className="w-4 h-4" />
