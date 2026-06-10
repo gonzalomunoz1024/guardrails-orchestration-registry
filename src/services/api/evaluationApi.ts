@@ -41,44 +41,35 @@ export const evaluationApi = {
   },
 
   /**
-   * Validate policy syntax without evaluation
-   * Uses backend passthrough: POST /v1/utilities/opa/validate
+   * Validate a Rego policy by piggybacking on /evaluate. There is no
+   * dedicated `/v1/utilities/opa/validate` endpoint on the backend (an
+   * earlier version of this code assumed one and 404'd every time, which
+   * made the submit modal show a stuck "Submission blocked" banner).
    *
-   * IMPORTANT: a `{ valid: false }` return value MUST mean "the validator
-   * received the policy and judged it invalid". Transport / 5xx / network
-   * failures throw instead, so callers (and React Query) can distinguish
-   * "the validator said no" from "we couldn't reach the validator". The
-   * previous implementation swallowed every thrown error into a fake
-   * `{ valid: false, errors: ['Validation failed'] }`, which TanStack then
-   * cached as legitimate-but-invalid data — a transient backend blip got
-   * stuck in the cache and the submit modal stayed in the "Submission
-   * blocked" state even after the user fixed the Rego.
+   * OPA parses and compiles the policy before evaluating, so a successful
+   * evaluate response means the rego is syntactically and type-correct.
+   * A response containing OPA's structured error body (formatOpaError
+   * recognizes the shape) means the rego itself is bad — return
+   * `{ valid: false }` with the formatted message. Anything else
+   * (transport failure, 5xx with non-OPA body, etc.) throws so React
+   * Query treats it as `isError` instead of caching a fake invalid
+   * verdict that survives until the user changes the rego text.
    */
   validatePolicy: async (
-    policy: string
+    policy: string,
+    input: Record<string, unknown> = {}
   ): Promise<{ valid: boolean; errors?: string[] }> => {
-    let response;
     try {
-      response = await apiClient.post<{ valid: boolean; errors?: Array<{ message: string }> }>(
-        '/v1/utilities/opa/validate',
-        { policy }
-      );
-    } catch (error: unknown) {
-      const err = error as { response?: { data?: { message?: string } }; message?: string };
-      throw new Error(
-        err.response?.data?.message ||
-          err.message ||
-          'Could not reach the OPA validator'
-      );
-    }
-
-    if (response.data.valid) {
+      await apiClient.post('/v1/utilities/opa/evaluate', { policy, input });
       return { valid: true };
+    } catch (error: unknown) {
+      const data = (error as { response?: { data?: unknown } }).response?.data;
+      const formatted = formatOpaError(data);
+      if (formatted) {
+        return { valid: false, errors: [formatted] };
+      }
+      const err = error as { message?: string };
+      throw new Error(err.message || 'Could not reach the OPA evaluator');
     }
-
-    return {
-      valid: false,
-      errors: response.data.errors?.map((e) => e.message) || ['Invalid policy'],
-    };
   },
 };

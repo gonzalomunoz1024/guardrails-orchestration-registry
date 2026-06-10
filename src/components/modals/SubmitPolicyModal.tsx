@@ -35,6 +35,8 @@ import {
   toGuardrailConfigurationYaml,
   appendVersionToRegoPackage,
   deriveSchemaFromJson,
+  assembleInput,
+  parseJson,
 } from '@/utils';
 import { useAuthStore } from '@/store/authStore';
 import { usePolicyStore, useUIStore, useDraftStore, useBlastRunStore } from '@/store';
@@ -251,11 +253,30 @@ export function SubmitPolicyModal({
   const metadataOnly = baseVersion !== null && metadata.version === baseVersion;
   const { config, prCreationEnabled, prCreationDisabledMessage } = useGuardrailConfig();
 
-  // Rego validity gate — blocks PR + ZIP until the backend OPA validator
-  // confirms the policy parses and type-checks. Broken Rego shipping into
-  // the orchestrator's tarball would silently brick enforcement, so this is
-  // a hard gate on every submit path.
-  const regoValidation = useValidateRego(regoCode, isOpen);
+  // Rego validity gate — blocks PR + ZIP until OPA can parse + compile the
+  // policy (we piggyback on /evaluate since there's no dedicated validate
+  // endpoint). Broken Rego shipping into the orchestrator's tarball would
+  // silently brick enforcement, so this is a hard gate on every submit path.
+  // The input bundle mirrors what useEvaluate sends so the backend sees the
+  // same shape it will at enforcement time.
+  const validationInput = useMemo(() => {
+    const resource = (parseJson(inputJson) || {}) as Record<string, unknown>;
+    const configuration = configEnabled
+      ? ((parseJson(configJson) || {}) as Record<string, unknown>)
+      : undefined;
+    return assembleInput({
+      resource,
+      configuration,
+      externalDeps,
+      guardrail: {
+        id: policyId,
+        name: metadata.name,
+        version: metadata.version,
+        enforcementType: metadata.enforcementType || 'MANDATORY',
+      },
+    });
+  }, [inputJson, configEnabled, configJson, externalDeps, policyId, metadata.name, metadata.version, metadata.enforcementType]);
+  const regoValidation = useValidateRego(regoCode, validationInput, isOpen);
   const trimmedRego = regoCode.trim();
   const regoBlockReason = useMemo<string | null>(() => {
     if (!trimmedRego) return 'Rego is empty — cannot submit.';
