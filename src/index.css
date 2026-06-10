@@ -150,15 +150,21 @@ code {
   -webkit-backdrop-filter: saturate(180%) blur(var(--glass-blur));
 }
 
-/* Monaco hover/tooltip overlays — make click-through.
-   The editor uses fixedOverflowWidgets: true (see src/monaco/config.ts) which
-   mounts hover popups + button tooltips at document.body. The find widget's
-   "Close (Escape)" tooltip lands directly on top of its own X close button,
-   so the click ends up on the tooltip and the user can't close the widget.
-   These overlays are informational only — the text still renders, the cursor
-   still tracks the underlying button, and clicks now pass through. */
-.monaco-editor .monaco-hover,
-.monaco-editor-hover,
-body > .monaco-hover {
-  pointer-events: none;
+/* Monaco action-button tooltips — fully hidden.
+   The find widget's Close button (and every other Monaco action-bar button)
+   gets a "Close (Escape)"-style tooltip routed through Monaco's platform
+   HoverService. That service mounts the tooltip as
+     div.workbench-hover-container > div.monaco-hover.workbench-hover
+   via layoutService.getContainer(), NOT inside .monaco-editor and NOT as a
+   direct child of body. fixedOverflowWidgets: true (src/monaco/config.ts:47)
+   only affects content widgets — it doesn't change where the platform hover
+   mounts. So the tooltip lands directly over its own button and the user
+   sees AND can't click past the "(Escape)" hint.
+   Hiding the wrapper outright is safe: code-hover popups (rego diagnostics,
+   marker messages) use a different widget — ContentHoverWidget with class
+   .monaco-hover-content-widget / .monaco-editor-hover — which is not
+   affected by this rule. Buttons still expose their label via aria-label,
+   so screen readers continue to announce them. */
+.workbench-hover-container {
+  display: none !important;
 }
