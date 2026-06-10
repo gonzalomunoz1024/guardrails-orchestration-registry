@@ -345,6 +345,15 @@ export function SubmitPolicyModal({
     }
   };
 
+  // An enabled-but-empty configuration is treated as not-published: if the
+  // user toggled configuration on but never added any keys, shipping a `{}`
+  // configuration.yaml has historically broken downstream consumers that
+  // read it as an intentional empty lookup table. The configEnabled toggle
+  // stays as user intent; this is the gate for actually emitting the file
+  // and referencing it from the manifest / submit preview.
+  const configHasContent =
+    configEnabled && Object.keys(getConfigObject()).length > 0;
+
   // Generate the kube-like Guardrail manifest (guardrails/<id>.yaml). This is the
   // registration spec the backend reads to assemble the OPA input at enforcement
   // time (config lookup + external dependency fetches). See docs/guardrail-manifest.md.
@@ -405,7 +414,7 @@ export function SubmitPolicyModal({
       stage: metadata.stage,
       status: metadata.status,
       tags: metadata.tags,
-      configEnabled,
+      configEnabled: configHasContent,
       externalDeps,
       policyFile: 'policy.rego',
       configFile: 'configuration.yaml',
@@ -414,7 +423,7 @@ export function SubmitPolicyModal({
         content: parseInputSchema(),
         examples: exampleArtifacts.map((e) => e.file),
       },
-      configuration: configEnabled
+      configuration: configHasContent
         ? { file: 'configuration.yaml', content: getConfigObject() }
         : undefined,
     });
@@ -437,7 +446,7 @@ export function SubmitPolicyModal({
       const files: { path: string; content: string }[] = [
         { path: `${versionDir}/guardrail.yaml`, content: generateManifestYaml() },
       ];
-      if (configEnabled) {
+      if (configHasContent) {
         files.push({ path: `${versionDir}/configuration.yaml`, content: generateConfigYaml() });
       }
       return files;
@@ -453,7 +462,7 @@ export function SubmitPolicyModal({
       { path: `${versionDir}/guardrail.yaml`, content: generateManifestYaml() },
       { path: `${versionDir}/input-schema.json`, content: inputSchemaJson || '{}' },
     ];
-    if (configEnabled) {
+    if (configHasContent) {
       files.push({ path: `${versionDir}/configuration.yaml`, content: generateConfigYaml() });
     }
     for (const ex of exampleArtifacts) {

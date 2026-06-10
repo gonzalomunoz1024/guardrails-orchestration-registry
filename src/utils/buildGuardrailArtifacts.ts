@@ -64,6 +64,12 @@ export function buildGuardrailArtifactFiles(
     .map((e, i) => ({ file: `examples/${slugExample(e.name, i)}.json`, payload: e.payload }));
 
   const configObject = safeParseJson(args.configJson);
+  // Treat an enabled-but-empty configuration as not-published: customers who
+  // toggle the configuration tab on but never type anything would otherwise
+  // ship a `{}` configuration.yaml that downstream consumers read as an
+  // intentional empty lookup table and fail enforcement on. The toggle stays
+  // as user intent in the store; emission is gated on actual content.
+  const configHasContent = args.configEnabled && Object.keys(configObject).length > 0;
 
   const manifestYaml = toGuardrailYaml({
     metadata: {
@@ -78,7 +84,7 @@ export function buildGuardrailArtifactFiles(
     stage: args.stage,
     status: args.status,
     tags: args.tags,
-    configEnabled: args.configEnabled,
+    configEnabled: configHasContent,
     externalDeps: args.externalDeps,
     policyFile: 'policy.rego',
     configFile: 'configuration.yaml',
@@ -87,7 +93,7 @@ export function buildGuardrailArtifactFiles(
       content: safeParseSchema(args.inputSchemaJson),
       examples: examples.map((e) => e.file),
     },
-    configuration: args.configEnabled
+    configuration: configHasContent
       ? { file: 'configuration.yaml', content: configObject }
       : undefined,
   });
@@ -97,7 +103,7 @@ export function buildGuardrailArtifactFiles(
     'guardrail.yaml': manifestYaml,
     'input-schema.json': args.inputSchemaJson || '{}',
   };
-  if (args.configEnabled) {
+  if (configHasContent) {
     files['configuration.yaml'] = toGuardrailConfigurationYaml(configObject);
   }
   for (const ex of examples) {
