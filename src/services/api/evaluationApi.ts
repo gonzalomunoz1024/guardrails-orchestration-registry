@@ -43,30 +43,42 @@ export const evaluationApi = {
   /**
    * Validate policy syntax without evaluation
    * Uses backend passthrough: POST /v1/utilities/opa/validate
+   *
+   * IMPORTANT: a `{ valid: false }` return value MUST mean "the validator
+   * received the policy and judged it invalid". Transport / 5xx / network
+   * failures throw instead, so callers (and React Query) can distinguish
+   * "the validator said no" from "we couldn't reach the validator". The
+   * previous implementation swallowed every thrown error into a fake
+   * `{ valid: false, errors: ['Validation failed'] }`, which TanStack then
+   * cached as legitimate-but-invalid data — a transient backend blip got
+   * stuck in the cache and the submit modal stayed in the "Submission
+   * blocked" state even after the user fixed the Rego.
    */
   validatePolicy: async (
     policy: string
   ): Promise<{ valid: boolean; errors?: string[] }> => {
+    let response;
     try {
-      const response = await apiClient.post<{ valid: boolean; errors?: Array<{ message: string }> }>(
+      response = await apiClient.post<{ valid: boolean; errors?: Array<{ message: string }> }>(
         '/v1/utilities/opa/validate',
         { policy }
       );
-
-      if (response.data.valid) {
-        return { valid: true };
-      }
-
-      return {
-        valid: false,
-        errors: response.data.errors?.map(e => e.message) || ['Invalid policy'],
-      };
     } catch (error: unknown) {
-      const err = error as { response?: { data?: { message?: string } } };
-      return {
-        valid: false,
-        errors: [err.response?.data?.message || 'Validation failed'],
-      };
+      const err = error as { response?: { data?: { message?: string } }; message?: string };
+      throw new Error(
+        err.response?.data?.message ||
+          err.message ||
+          'Could not reach the OPA validator'
+      );
     }
+
+    if (response.data.valid) {
+      return { valid: true };
+    }
+
+    return {
+      valid: false,
+      errors: response.data.errors?.map((e) => e.message) || ['Invalid policy'],
+    };
   },
 };
