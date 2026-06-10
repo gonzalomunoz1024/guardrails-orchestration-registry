@@ -8,6 +8,7 @@ import type {
 import type { InputExample } from '@/store/policyStore';
 import { toGuardrailYaml, toGuardrailConfigurationYaml } from './guardrailManifest';
 import { appendVersionToRegoPackage } from './regoPackage';
+import { isDependencyConfigured } from '@/services/external/externalServices';
 
 export interface BuildGuardrailArtifactsArgs {
   regoCode: string;
@@ -70,6 +71,10 @@ export function buildGuardrailArtifactFiles(
   // intentional empty lookup table and fail enforcement on. The toggle stays
   // as user intent in the store; emission is gated on actual content.
   const configHasContent = args.configEnabled && Object.keys(configObject).length > 0;
+  // Same idea for external deps: drop rows the user added but never finished
+  // wiring up (no operation, no host). isDependencyConfigured is the single
+  // source of truth for "actually shippable" — see externalServices.
+  const configuredExternalDeps = args.externalDeps.filter(isDependencyConfigured);
 
   const manifestYaml = toGuardrailYaml({
     metadata: {
@@ -85,7 +90,7 @@ export function buildGuardrailArtifactFiles(
     status: args.status,
     tags: args.tags,
     configEnabled: configHasContent,
-    externalDeps: args.externalDeps,
+    externalDeps: configuredExternalDeps,
     policyFile: 'policy.rego',
     configFile: 'configuration.yaml',
     inputSchema: {

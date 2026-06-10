@@ -1,4 +1,5 @@
 import type {
+  ExternalDependency,
   ExternalService,
   ParsedSpec,
   SwaggerBodyField,
@@ -15,6 +16,27 @@ import type {
 export const EXTERNAL_SERVICES: ExternalService[] = [];
 
 export const CUSTOM_SERVICE_ID = 'custom';
+
+/**
+ * Is a dep fully wired-up enough to actually be hit at runtime?
+ *
+ * The studio lets authors add a row and walk away — the dep then has a name
+ * but no operation/host. Shipping that row produces an `externalDependencies`
+ * entry the orchestrator can't dispatch, which historically surfaced as a
+ * broken policy at enforcement time. Use this anywhere a dep is about to be
+ * persisted or embedded in the manifest, so half-built rows are silently
+ * dropped instead of poisoning the artifact.
+ */
+export function isDependencyConfigured(
+  dep: Pick<ExternalDependency, 'name' | 'path' | 'method' | 'baseUrl'>
+): boolean {
+  return Boolean(
+    dep.name?.trim() &&
+      dep.path?.trim() &&
+      dep.method?.trim() &&
+      dep.baseUrl?.trim()
+  );
+}
 
 /** The single, org-wide HashiCorp Vault address (override via VITE_VAULT_ADDR). */
 export const VAULT_ADDRESS =

@@ -43,6 +43,8 @@ import { snapshotCurrentDraft } from '@/store/draftActions';
 import { defaultEditorOptions } from '@/monaco/config';
 import { useGuardrailConfig } from '@/hooks/useGuardrailConfig';
 import { useValidateRego } from '@/hooks/useValidateRego';
+import { useOpenPRsForGuardrail } from '@/hooks/useOpenPRsForGuardrail';
+import { isDependencyConfigured } from '@/services/external/externalServices';
 import { ComingSoonBanner } from '@/components/common/ComingSoonBanner';
 import type { EnforcementType, Stage, ResourceKind, GuardrailStatus } from '@/types/guardrail.types';
 import { STAGE_LABELS, ENFORCEMENT_LABELS, RESOURCE_KIND_LABELS } from '@/types';
@@ -292,6 +294,21 @@ export function SubmitPolicyModal({
   // baseline to compare against (brand-new guardrail).
   const [previewMode, setPreviewMode] = useState<'diff' | 'raw'>('diff');
 
+  // Surface any open PRs already in flight for this guardrail so authors
+  // don't accidentally open a second PR for the same change. Per the plan
+  // agents' review: detect-and-warn only — never auto-update, since silent
+  // pushes to an existing branch can dismiss approvals and clobber a
+  // teammate's in-progress work. Stop polling once a PR creation is in
+  // flight or succeeded so the banner doesn't flicker mid-submit.
+  const openPRsQuery = useOpenPRsForGuardrail({
+    owner: UPSTREAM_OWNER,
+    repo: UPSTREAM_REPO,
+    policyId,
+    baseBranch: TARGET_BRANCH,
+    enabled: isOpen && githubStatus === 'idle',
+  });
+  const openPRs = openPRsQuery.data ?? [];
+
   // Helper to update step log
   const updateStep = (step: string, status: StepLog['status'], message?: string) => {
     setStepLogs(prev => {
@@ -354,6 +371,15 @@ export function SubmitPolicyModal({
   const configHasContent =
     configEnabled && Object.keys(getConfigObject()).length > 0;
 
+  // Same rule for external deps — half-built rows (added but never wired up
+  // to an operation/host) shouldn't reach the manifest. isDependencyConfigured
+  // is the shared definition; the manifest builder applies the same filter as
+  // a backstop. Filter here so the preview reflects exactly what ships.
+  const configuredExternalDeps = useMemo(
+    () => externalDeps.filter(isDependencyConfigured),
+    [externalDeps]
+  );
+
   // Generate the kube-like Guardrail manifest (guardrails/<id>.yaml). This is the
   // registration spec the backend reads to assemble the OPA input at enforcement
   // time (config lookup + external dependency fetches). See docs/guardrail-manifest.md.
@@ -415,7 +441,7 @@ export function SubmitPolicyModal({
       status: metadata.status,
       tags: metadata.tags,
       configEnabled: configHasContent,
-      externalDeps,
+      externalDeps: configuredExternalDeps,
       policyFile: 'policy.rego',
       configFile: 'configuration.yaml',
       inputSchema: {
@@ -1101,6 +1127,51 @@ ${blastSection ? '\n' + blastSection + '\n' : ''}
               </span>
             </div>
           ) : null}
+
+          {/* Existing-PR banner — informational, non-blocking. Surfaces any
+              open PR already in flight for this guardrail so the author
+              doesn't ship a duplicate. */}
+          {openPRs.length > 0 && (
+            <div className="rounded-xl border border-[var(--color-warning)]/40 bg-[var(--color-warning-bg)] p-4">
+              <div className="flex items-start gap-3">
+                <AlertTriangle className="w-5 h-5 text-[var(--color-warning)] shrink-0 mt-0.5" />
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-semibold text-[var(--color-warning)]">
+                    {openPRs.length === 1
+                      ? 'There is already an open PR for this guardrail'
+                      : `There are ${openPRs.length} open PRs for this guardrail`}
+                  </p>
+                  <p className="mt-0.5 text-xs text-[var(--color-text-secondary)]">
+                    Submitting will create an additional PR alongside the ones below. Consider closing or merging the existing PR first if it covers the same change.
+                  </p>
+                  <ul className="mt-2 space-y-1">
+                    {openPRs.map((pr) => (
+                      <li key={pr.number} className="flex items-center gap-2 text-xs">
+                        <GitBranch className="w-3.5 h-3.5 text-[var(--color-text-tertiary)] shrink-0" />
+                        <a
+                          href={pr.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="font-mono text-[var(--color-info)] hover:underline"
+                        >
+                          #{pr.number}
+                        </a>
+                        <span className="text-[var(--color-text-secondary)] truncate" title={pr.title}>
+                          {pr.title}
+                        </span>
+                        <span className="text-[var(--color-text-tertiary)] shrink-0">
+                          by @{pr.author}
+                        </span>
+                        <span className="text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded bg-[var(--color-surface-secondary)] text-[var(--color-text-tertiary)] shrink-0">
+                          {pr.mode}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Action Cards */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

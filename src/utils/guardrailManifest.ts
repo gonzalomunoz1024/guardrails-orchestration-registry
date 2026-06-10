@@ -1,5 +1,9 @@
 import yaml from 'js-yaml';
-import { VAULT_ADDRESS, CUSTOM_SERVICE_ID } from '@/services/external/externalServices';
+import {
+  VAULT_ADDRESS,
+  CUSTOM_SERVICE_ID,
+  isDependencyConfigured,
+} from '@/services/external/externalServices';
 import type {
   ExternalAuth,
   ExternalDependency,
@@ -193,7 +197,10 @@ export function buildGuardrailManifest(args: GuardrailManifestArgs): Record<stri
     };
   }
 
-  const configuredDeps = externalDeps.filter((d) => d.name && d.path);
+  // Strip half-built deps (no operation picked, missing host, etc.). The
+  // criteria live in isDependencyConfigured so the call sites can use the
+  // same gate; this filter is defense-in-depth in case a caller forgets.
+  const configuredDeps = externalDeps.filter(isDependencyConfigured);
   if (configuredDeps.length > 0) {
     spec.externalDependencies = configuredDeps.map(encodeDependency);
   }

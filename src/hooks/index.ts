@@ -2,6 +2,8 @@ export { useTheme } from './useTheme';
 export { useDebounce } from './useDebounce';
 export { useEvaluate } from './useEvaluate';
 export { useValidateRego } from './useValidateRego';
+export { useOpenPRsForGuardrail } from './useOpenPRsForGuardrail';
+export type { OpenGuardrailPR } from './useOpenPRsForGuardrail';
 export { useInputShape } from './useInputShape';
 export { useAutoRefetchDeps } from './useAutoRefetchDeps';
 export { useGitHubAuth } from './useGitHubAuth';
