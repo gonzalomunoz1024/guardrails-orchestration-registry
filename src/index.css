@@ -149,3 +149,16 @@ code {
   backdrop-filter: saturate(180%) blur(var(--glass-blur));
   -webkit-backdrop-filter: saturate(180%) blur(var(--glass-blur));
 }
+
+/* Monaco hover/tooltip overlays — make click-through.
+   The editor uses fixedOverflowWidgets: true (see src/monaco/config.ts) which
+   mounts hover popups + button tooltips at document.body. The find widget's
+   "Close (Escape)" tooltip lands directly on top of its own X close button,
+   so the click ends up on the tooltip and the user can't close the widget.
+   These overlays are informational only — the text still renders, the cursor
+   still tracks the underlying button, and clicks now pass through. */
+.monaco-editor .monaco-hover,
+.monaco-editor-hover,
+body > .monaco-hover {
+  pointer-events: none;
+}
